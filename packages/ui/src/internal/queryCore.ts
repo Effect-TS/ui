@@ -165,6 +165,10 @@ export const addListener = <A>(listeners: Set<A>, listener: A): () => void => {
   }
 }
 
+interface Subscriber {
+  readonly listener: (value: boolean) => void
+}
+
 /**
  * A settable signal, for tests and for host Layers.
  *
@@ -172,14 +176,28 @@ export const addListener = <A>(listeners: Set<A>, listener: A): () => void => {
  */
 export const makeSignal = (initial = true): SettableSignal => {
   let current = initial
-  const listeners = new Set<(value: boolean) => void>()
+  const listeners = new Set<Subscriber>()
+  // The changes being delivered, each with the listeners subscribed when it
+  // was set. A `set` made by a listener waits here for the ones before it.
+  let queue: Array<readonly [boolean, ReadonlyArray<Subscriber>]> | undefined
   return {
     get: () => current,
-    subscribe: (listener) => addListener(listeners, listener),
+    subscribe: (listener) => addListener(listeners, { listener }),
     set: (value) => {
       if (value === current) return
       current = value
-      for (const listener of Array.from(listeners)) listener(value)
+      const change = [value, Array.from(listeners)] as const
+      if (queue !== undefined) return void queue.push(change)
+      queue = [change]
+      try {
+        for (const [next, subscribed] of queue) {
+          for (const sub of subscribed) {
+            if (listeners.has(sub)) sub.listener(next)
+          }
+        }
+      } finally {
+        queue = undefined
+      }
     }
   }
 }

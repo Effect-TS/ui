@@ -3,13 +3,17 @@
  * `onDocument` for a game's arrow keys or a press outside a popup,
  * `shortcuts` for a table of keyboard shortcuts, `onCustomEvent` for a
  * `CustomEvent` dispatched on the document, `onWindow` for the window's
- * focus, `onAnimationFrame` for animation, and `onMediaQuery` for CSS media
- * queries.
+ * focus, `onAnimationFrame` for animation, `onMediaQuery` for CSS media
+ * queries, `onVisibility` for tab visibility, and `onConnectivity` for
+ * network connectivity.
  *
- * Their sources are the `GlobalEvents`, `AnimationFrames` and `MediaQueries`
- * services, which `BrowserHost.layer` provides. Nothing listens on the server,
- * and a test drives them with `HtmlScene`, or with `TestGlobalEvents`,
- * `TestAnimationFrames` and `TestMediaQueries` from `@effect/ui/html/testing`.
+ * Their sources are `GlobalEvents`, `AnimationFrames`, `MediaQueries`,
+ * `Query.Visibility`, and `Query.Connectivity`, which `BrowserHost.layer`
+ * provides. Nothing listens on the server. A test drives them with
+ * `HtmlScene`, with `TestGlobalEvents`, `TestAnimationFrames` and
+ * `TestMediaQueries` from `@effect/ui/html/testing`, or with
+ * `TestHost.setVisible` and `TestHost.setOnline` (which `TestHost.layer()`
+ * always provides, starting `true`).
  *
  * @stability experimental
  * @since 0.1.0
@@ -19,7 +23,9 @@ import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Stream from "effect/Stream"
 import { handle } from "../internal/handler.ts"
+import * as queryCore from "../internal/queryCore.ts"
 import * as services from "../internal/services.ts"
+import type * as Query from "../Query.ts"
 import * as Subscription from "../Subscription.ts"
 import type * as View from "../View.ts"
 import type * as Html from "./Html.ts"
@@ -27,6 +33,7 @@ import * as HtmlKeyboard from "./HtmlKeyboard.ts"
 import * as frames from "./internal/frames.ts"
 import * as globalEvents from "./internal/globalEvents.ts"
 import * as mediaQueries from "./internal/mediaQueries.ts"
+import * as signals from "./internal/signals.ts"
 
 /**
  * The events `onDocument` listens for, with their payloads: the same ones
@@ -629,6 +636,35 @@ export interface MediaQueries {
 export const MediaQueries: Context.Reference<MediaQueries> =
   mediaQueries.MediaQueries
 
+const attachValue = (
+  initial: boolean | undefined,
+  listen: (listener: (value: boolean) => void) => () => void,
+  send: (value: boolean) => void
+) => {
+  // Deliver the captured value before changes, even if they arrive before
+  // the `initial` effect runs. Queue changes triggered by handlers to
+  // preserve delivery order.
+  const queue: Array<boolean> = initial === undefined ? [] : [initial]
+  let draining = false
+  const drain = () => {
+    if (draining) return
+    draining = true
+    try {
+      for (const value of queue) send(value)
+    } finally {
+      queue.length = 0
+      draining = false
+    }
+  }
+  return {
+    initial: Effect.sync(drain),
+    close: listen((value) => {
+      queue.push(value)
+      drain()
+    })
+  }
+}
+
 /**
  * A Subscription that tracks a CSS media query: it sends the current `matches`
  * value when it starts, then each `change`.
@@ -694,38 +730,179 @@ export const onMediaQuery = <Msg>(
   const declared: mediaQueries.Listener = { query, handler }
   const direct: Direct = (context, emit, fail, enter) => {
     const source = Context.get(context, MediaQueries)
-    const send = sendLatest(
-      emit,
-      fail,
-      enter,
-      (latest) => (mediaQueries.listenerOf(latest) ?? declared).handler
-    )
-    // A change that fires while a handler runs is queued, so messages
-    // dispatch in the order the values arrived.
-    let queue: Array<boolean> | undefined
-    const deliver = (values: Array<boolean>) => {
-      if (queue !== undefined) return void queue.push(...values)
-      queue = values
-      for (let i = 0; i < queue.length; i++) send(queue[i])
-      queue = undefined
-    }
-    // Deliver the captured match before changes, even if they precede `initial`.
-    let first = source.matches(query)
-    const takeFirst = (): Array<boolean> => {
-      const initial = first
-      first = undefined
-      return initial === undefined ? [] : [initial]
-    }
-    return {
-      initial: Effect.sync(() => deliver(takeFirst())),
-      close: source.listen(
-        query,
-        (matches) => deliver([...takeFirst(), matches])
+    return attachValue(
+      source.matches(query),
+      (listener) => source.listen(query, listener),
+      sendLatest(
+        emit,
+        fail,
+        enter,
+        (latest) => (mediaQueries.listenerOf(latest) ?? declared).handler
       )
-    }
+    )
   }
   return Object.assign(
     Subscription.make("@effect/ui/html/mediaQuery", query, () => Stream.never),
     { [mediaQueries.mediaQuery]: declared, [services.direct]: direct }
   )
 }
+
+const makeAttachSignal = (
+  reference: Context.Reference<Query.Signal>,
+  handlerOf: (
+    subscription: object
+  ) => View.Handler<unknown, boolean> | undefined
+): Direct =>
+(context, emit, fail, enter) => {
+  const source = Context.get(context, reference)
+  return attachValue(
+    source.get(),
+    (listener) => source.subscribe(listener),
+    sendLatest(emit, fail, enter, handlerOf)
+  )
+}
+
+const attachVisibility = makeAttachSignal(
+  queryCore.Visibility,
+  signals.visibilityHandlerOf
+)
+
+const attachConnectivity = makeAttachSignal(
+  queryCore.Connectivity,
+  signals.connectivityHandlerOf
+)
+
+/**
+ * A Subscription that tracks whether the tab is visible: it sends the current
+ * `visible` value when it starts, then each change.
+ *
+ * **When to use**
+ *
+ * Use to pause timers, media playback, or animations while the tab is hidden,
+ * or to react when the user returns to the tab.
+ *
+ * **Details**
+ *
+ * `handler` is a message or a function of `visible: boolean`. The source is
+ * `Query.Visibility`, which `BrowserHost.layer` provides from
+ * `document.visibilityState` and `visibilitychange`. The server never runs
+ * Subscriptions, so `init` chooses the initial state and the first browser
+ * emission updates it after hydration. Without a host, `Query.Visibility`
+ * defaults to always `true`, so it emits `true` once.
+ *
+ * In tests, `HtmlScene.visibility` drives the handler directly, and
+ * `TestHost.setVisible` drives the shared signal on `TestHost` and `Play`
+ * (starting `true`).
+ *
+ * The key is `@effect/ui/html/visibility`, and an instance has one.
+ *
+ * **Example** (Pausing while the tab is hidden)
+ *
+ * ```ts import.meta.vitest
+ * import { UiSchema } from "@effect/ui"
+ * import { Html, HtmlSubscription } from "@effect/ui/html"
+ * import { HtmlScene } from "@effect/ui/html/testing"
+ * import { Locator } from "@effect/ui/testing"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Message = UiSchema.TaggedEnum({ ChangedVisibility: { visible: Schema.Boolean } })
+ *
+ * const Player = Html.component({
+ *   name: "Player",
+ *   model: Schema.Boolean,
+ *   message: Message
+ * }).make({
+ *   init: () => true,
+ *   update: { ChangedVisibility: (_, { visible }) => visible },
+ *   view: (h, visible) => h.p(visible ? "playing" : "paused"),
+ *   subscriptions: () => [
+ *     HtmlSubscription.onVisibility((visible) => Message.ChangedVisibility({ visible }))
+ *   ]
+ * })
+ *
+ * Effect.gen(function*() {
+ *   const s = yield* HtmlScene.make(Player, {})
+ *   s.visibility(false)
+ *     .expect(Locator.text("paused")).toExist()
+ * }).pipe(Effect.scoped, Effect.runSync)
+ * ```
+ *
+ * @stability experimental
+ * @category subscriptions
+ * @since 0.1.0
+ */
+export const onVisibility = <Msg>(
+  handler: View.Handler<Msg, boolean>
+): Subscription.Subscription<Msg> =>
+  Object.assign(
+    Subscription.make("@effect/ui/html/visibility", Stream.never),
+    { [signals.visibility]: handler, [services.direct]: attachVisibility }
+  )
+
+/**
+ * A Subscription that tracks whether the browser is online: it sends the
+ * current `online` value when it starts, then each change.
+ *
+ * **When to use**
+ *
+ * Use to show an offline banner, disable actions that require a network
+ * connection, or trigger UI state changes when connectivity returns.
+ *
+ * **Details**
+ *
+ * `handler` is a message or a function of `online: boolean`. The source is
+ * `Query.Connectivity`, which `BrowserHost.layer` provides from
+ * `defaultView.navigator.onLine` and the window's `online` and `offline`
+ * events. The server never runs Subscriptions, so `init` chooses the initial
+ * state and the first browser emission updates it after hydration. Without a
+ * host, `Query.Connectivity` defaults to always `true`, so it emits `true`
+ * once.
+ *
+ * In tests, `HtmlScene.connectivity` drives the handler directly, and
+ * `TestHost.setOnline` drives the shared signal on `TestHost` and `Play`
+ * (starting `true`).
+ *
+ * The key is `@effect/ui/html/connectivity`, and an instance has one.
+ *
+ * **Example** (Showing an offline banner)
+ *
+ * ```ts import.meta.vitest
+ * import { UiSchema } from "@effect/ui"
+ * import { Html, HtmlSubscription } from "@effect/ui/html"
+ * import { HtmlScene } from "@effect/ui/html/testing"
+ * import { Locator } from "@effect/ui/testing"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Message = UiSchema.TaggedEnum({ ChangedConnectivity: { online: Schema.Boolean } })
+ *
+ * const Banner = Html.component({
+ *   name: "Banner",
+ *   model: Schema.Boolean,
+ *   message: Message
+ * }).make({
+ *   init: () => true,
+ *   update: { ChangedConnectivity: (_, { online }) => online },
+ *   view: (h, online) => h.p(online ? "online" : "offline"),
+ *   subscriptions: () => [
+ *     HtmlSubscription.onConnectivity((online) => Message.ChangedConnectivity({ online }))
+ *   ]
+ * })
+ *
+ * Effect.gen(function*() {
+ *   const s = yield* HtmlScene.make(Banner, {})
+ *   s.connectivity(false)
+ *     .expect(Locator.text("offline")).toExist()
+ * }).pipe(Effect.scoped, Effect.runSync)
+ * ```
+ *
+ * @stability experimental
+ * @category subscriptions
+ * @since 0.1.0
+ */
+export const onConnectivity = <Msg>(
+  handler: View.Handler<Msg, boolean>
+): Subscription.Subscription<Msg> =>
+  Object.assign(
+    Subscription.make("@effect/ui/html/connectivity", Stream.never),
+    { [signals.connectivity]: handler, [services.direct]: attachConnectivity }
+  )
