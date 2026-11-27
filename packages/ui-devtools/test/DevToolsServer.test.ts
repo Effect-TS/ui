@@ -14,10 +14,12 @@ import { assert, describe, it } from "@effect/vitest"
 import {
   Context,
   Effect,
+  Exit,
   Layer,
   Schedule,
   Schema,
   SchemaGetter,
+  Scope,
   Stream
 } from "effect"
 import { McpClient, McpProtocol } from "effect/ai"
@@ -245,6 +247,7 @@ const fakePage = Effect.fnUntraced(function*(
     resume: Effect.void,
     notRecording: () => [],
     setRecording: () => {},
+    picks: () => [],
     changes: Stream.never
   }).pipe(Effect.provide(Socket.layerWebSocketConstructorGlobal))
   yield* wait(100)
@@ -275,6 +278,8 @@ describe("DevToolsServer", { concurrent: false }, () => {
           "resume",
           "set_recording",
           "get_message_schema",
+          "find_instances",
+          "get_picked",
           "dispatch",
           "wait"
         ])
@@ -978,6 +983,47 @@ describe("DevToolsServer", { concurrent: false }, () => {
   )
 
   it.live(
+    "keeps a pick the page reports before the session's first log frame",
+    () =>
+      Effect.gen(function*() {
+        const { agent, url } = yield* serveFast(300)
+        const control = yield* connectSocket(
+          url.replace("http", "ws") + "/control"
+        )
+        const pick = {
+          session: "s",
+          tag: "button",
+          instance: 1,
+          path: "/App",
+          component: "App"
+        }
+        control.send(
+          JSON.stringify({
+            _tag: "State",
+            sessions: ["s"],
+            paused: null,
+            notRecording: [],
+            picks: [pick]
+          })
+        )
+        yield* wait(100)
+        const log = yield* connectSocket(url.replace("http", "ws") + "/log")
+        log.send(JSON.stringify({ _tag: "Hello", version: 1, host: "test" }))
+        log.send(
+          JSON.stringify({ _tag: "SessionStarted", ...at, seq: 0, app: "App" })
+        )
+        yield* wait(100)
+        assert.deepStrictEqual(
+          yield* agent.call("get_picked", { session: "s" }),
+          pick
+        )
+        log.close()
+        control.close()
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
     "adds no meta tag when the plugin's port is taken, and injects overlay and hot modules unless disabled",
     () =>
       Effect.gen(function*() {
@@ -1149,7 +1195,8 @@ describe("DevToolsServer", { concurrent: false }, () => {
             _tag: "State",
             sessions: ["s"],
             paused: null,
-            notRecording: []
+            notRecording: [],
+            picks: []
           })
         )
         yield* wait(100)
@@ -1188,7 +1235,8 @@ describe("DevToolsServer", { concurrent: false }, () => {
             _tag: "State",
             sessions: ["s"],
             paused: { session: "s", seq: 0, fellBack: [], fallbacks: [] },
-            notRecording: []
+            notRecording: [],
+            picks: []
           })
         )
         yield* wait(100)
@@ -1333,6 +1381,94 @@ describe("DevToolsServer", { concurrent: false }, () => {
           JSON.parse(page.querySelector("meta")!.content).fields,
           fields
         )
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
+    "finds owning instances by CSS selector without exposing element text, and returns the last picked element after the tab closes",
+    () =>
+      Effect.gen(function*() {
+        const { agent, url } = yield* serve()
+        for (const name of ["find_instances", "get_picked"]) {
+          assert.isTrue(
+            agent.tools.find((tool) => tool.name === name)?.annotations
+              ?.readOnlyHint
+          )
+        }
+
+        const decoy = document.body.insertBefore(
+          document.createElement("button"),
+          document.body.firstChild
+        )
+        yield* Effect.addFinalizer(() => Effect.sync(() => decoy.remove()))
+
+        const scope = yield* Scope.make()
+        const app = yield* open(url, "open").pipe(Scope.provide(scope))
+        const [session] = yield* agent.call<ReadonlyArray<any>>("list_sessions")
+        const instances: ReadonlyArray<any> = yield* agent.call(
+          "list_instances"
+        )
+        const n1 = instances.find((instance) =>
+          instance.path === "/Workspace/Editor[n1]"
+        )
+
+        // find_instances keeps only matches in the root, reports their
+        // document.querySelectorAll index, and omits DOM text.
+        const buttons = yield* agent.call("find_instances", {
+          selector: "button"
+        })
+        assert.strictEqual(buttons.total, 4)
+        assert.deepStrictEqual(buttons.matches[0], {
+          tag: "button",
+          instance: n1.instance,
+          path: "/Workspace/Editor[n1]",
+          component: "Editor",
+          index: 1
+        })
+        assert.notInclude(JSON.stringify(buttons), "Save n1")
+        assert.notInclude(JSON.stringify(buttons), token)
+
+        yield* agent.fails("find_instances", { selector: "[invalid" })
+
+        const extra = document.createElement("div")
+        for (let i = 0; i < 25; i++) {
+          extra.appendChild(document.createElement("span")).className = "many"
+        }
+        app.querySelector("section")!.appendChild(extra)
+        const capped = yield* agent.call("find_instances", {
+          selector: ".many"
+        })
+        assert.strictEqual(capped.total, 25)
+        assert.lengthOf(capped.matches, 20)
+
+        // get_picked returns null before picking, then the picked metadata,
+        // and still answers after the tab closes.
+        assert.isNull(yield* agent.call("get_picked"))
+        const root = overlay()
+        HtmlLocator.click(
+          HtmlLocator.getByRole(root, "button", { name: /pick/i })
+        )
+        yield* wait(20)
+        HtmlLocator.click(
+          HtmlLocator.getByRole(app, "button", { name: "Save n1" })
+        )
+        yield* wait(100)
+        const picked = yield* agent.call("get_picked")
+        assert.deepInclude(picked, {
+          tag: "button",
+          instance: n1.instance,
+          path: "/Workspace/Editor[n1]",
+          component: "Editor"
+        })
+        assert.notInclude(JSON.stringify(picked), "Save n1")
+
+        yield* Scope.close(scope, Exit.void)
+        yield* wait(100)
+        const afterClose = yield* agent.call("get_picked", {
+          session: session.session
+        })
+        assert.deepStrictEqual(afterClose, picked)
       }).pipe(Effect.scoped),
     30_000
   )

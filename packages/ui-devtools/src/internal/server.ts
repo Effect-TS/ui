@@ -45,6 +45,8 @@ export const make = (options: Options) => {
   const inspector = InspectorInternal.make({ size: options.size })
   const history = History.make(options.size)
   const meta = new Map<string, Meta>()
+  // Apart from `meta`, so a pick doesn't wait for the session's first log frame.
+  const picks = new Map<string, Control.Picked>()
   const pages = new Set<Page>()
   const watchers = new Set<Queue.Queue<string>>()
   const { notify, until } = Tools.makeWaiters()
@@ -68,6 +70,7 @@ export const make = (options: Options) => {
     const dropped = gone.slice(0, Math.max(0, gone.length - options.keep))
     for (const [session] of dropped) {
       meta.delete(session)
+      picks.delete(session)
       inspector.remove(session)
       history.drop(session)
     }
@@ -214,6 +217,7 @@ export const make = (options: Options) => {
               }
               page.paused = message.paused
               page.notRecording = message.notRecording
+              for (const pick of message.picks) picks.set(pick.session, pick)
               notify()
               return Effect.void
             }
@@ -266,6 +270,7 @@ export const make = (options: Options) => {
     inspector,
     history,
     meta: (session) => meta.get(session),
+    picked: (session) => picks.get(session),
     pageOf: (session) =>
       Array.from(pages).reverse().find((page) => page.sessions.has(session)),
     until,

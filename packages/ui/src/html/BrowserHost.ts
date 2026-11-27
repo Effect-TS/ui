@@ -136,7 +136,7 @@ import * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
 import * as domHost from "../internal/domHost.ts"
 import type * as hydrateRun from "../internal/hydrateRun.ts"
-import type * as Kernel from "../internal/kernel.ts"
+import * as Kernel from "../internal/kernel.ts"
 import * as messageLog from "../internal/messageLog.ts"
 import * as runtime from "../internal/runtime.ts"
 import * as Renderer from "../Renderer.ts"
@@ -633,6 +633,8 @@ export const mountRoot = (
       () => hold(container, true),
       () => hold(container, false)
     )
+    mounted.set(controlled, [root, container])
+    containers.add(container)
     const currentControllables = Context.get(outer, Controllables)
     const activeControllables =
       attached !== undefined && currentControllables === defaultControllables
@@ -640,7 +642,13 @@ export const mountRoot = (
         : currentControllables
     const unregister = activeControllables.register(controlled)
     yield* Effect.addFinalizer(() =>
-      Effect.andThen(Effect.sync(unregister), controlled.resume)
+      Effect.andThen(
+        Effect.sync(() => {
+          unregister()
+          containers.delete(container)
+        }),
+        controlled.resume
+      )
     )
     return root
   })
@@ -930,6 +938,7 @@ const controllable = (
         const copy = container.cloneNode(false) as HTMLElement
         show(copy.style, hide())
         copy.setAttribute("inert", "")
+        copies.add(copy)
         ;(painted?.copy ?? container).after(copy)
         const result = yield* runtime.paintDom(
           component,
@@ -954,15 +963,146 @@ const controllable = (
         return result
       })),
     resume,
-    instance: (born) => {
-      const inst = root.find(born)
-      return inst === undefined ? undefined : {
-        instance: born,
-        path: inst.path,
-        component: inst.component.definition.name,
-        message: inst.component.definition.message,
-        dispatch: (message) => root.dispatch(inst, message)
-      }
-    }
+    instance: (born) => controlledInstance(root, root.find(born), born)
   }
+}
+
+const controlledInstance = (
+  root: runtime.Root,
+  inst: runtime.Instance | undefined,
+  born: number | undefined
+): ControlledInstance | undefined =>
+  inst === undefined || born === undefined ? undefined : {
+    instance: born,
+    path: inst.path,
+    component: inst.component.definition.name,
+    message: inst.component.definition.message,
+    dispatch: (message) => root.dispatch(inst, message)
+  }
+
+const mounted = new WeakMap<
+  Controllable,
+  readonly [runtime.Root, globalThis.Node]
+>()
+const containers = new WeakSet<globalThis.Node>()
+const copies = new WeakSet<globalThis.Node>()
+
+/**
+ * Returns the owning instance for each node in a mounted `Controllable` root,
+ * in input order, or `undefined` for nodes with no owner in that root.
+ *
+ * **Details**
+ *
+ * Slot content belongs to the instance that passed it. An element with a
+ * headless component's part belongs to that component, or the outermost owner
+ * when parts are composed. Other rendered nodes belong to the instance whose
+ * view wrote them. A node the renderer did not create uses the nearest
+ * rendered ancestor's owner.
+ *
+ * Returns `undefined` for the root's container, nodes outside it, nodes
+ * rendered by a nested root, nodes in `pause`'s painted copy, and nodes of
+ * parked `keepAlive` children.
+ *
+ * The lookup walks the root's render records when called. Nodes looked up
+ * together share an index of each sibling list.
+ *
+ * @stability experimental
+ * @category inspection
+ * @since 0.1.0
+ */
+export const instancesAt = (
+  root: Controllable,
+  nodes: Iterable<globalThis.Node>
+): Array<ControlledInstance | undefined> => {
+  const [live, container] = mounted.get(root) ?? []
+  const top = (live?.instance as Kernel.Instance | undefined)?.rendered
+  const levels = new Map<unknown, Map<unknown, Kernel.Rec>>()
+  const level = (recs: unknown) => {
+    let byNode = levels.get(recs)
+    if (byNode === undefined) {
+      levels.set(recs, byNode = new Map())
+      byNodeOf(recs as Kernel.Rec | ReadonlyArray<Kernel.Rec>, byNode)
+    }
+    return byNode
+  }
+  return Array.from(nodes, (node) => {
+    if (live === undefined || top === undefined) return undefined
+    const path: Array<globalThis.Node> = []
+    for (
+      let at: globalThis.Node | null = node;
+      at !== container;
+      at = at.parentNode
+    ) {
+      if (at === null) return undefined
+      path.push(at)
+    }
+    let found: Kernel.Rec | undefined
+    for (let recs: unknown = top; recs !== undefined; recs = found!.kids) {
+      const byNode = level(recs)
+      const hit = path.find((at) => byNode.has(at))
+      if (hit === undefined) break
+      found = byNode.get(hit)!
+    }
+    if (found === undefined) return undefined
+    for (const at of path) {
+      if (at === found.node) break
+      // Another root's nodes, and painted copies, don't fall back to this root's elements.
+      if (copies.has(at) || containers.has(at.parentNode!)) return undefined
+    }
+    // Composed parts each add a layer; the outermost owner is the one the view used.
+    const layers = (found.v as View.Element<any, any>).owned
+    const owner = (layers?.length
+      ? layers.reduce(
+        (outer, layer) =>
+          layer.owner.path.length < outer.path.length ? layer.owner : outer,
+        layers[0]!.owner
+      )
+      : found.inst) as unknown as runtime.Instance
+    return controlledInstance(live, owner, live.numberOf(owner))
+  })
+}
+
+/**
+ * Returns a node's owning instance in a mounted `Controllable` root, or
+ * `undefined` if none exists. Uses the ownership rules of `instancesAt`.
+ *
+ * @stability experimental
+ * @category inspection
+ * @since 0.1.0
+ */
+export const instanceAt = (
+  root: Controllable,
+  node: globalThis.Node
+): ControlledInstance | undefined => instancesAt(root, [node])[0]
+
+const byNodeOf = (
+  recs: Kernel.Rec | ReadonlyArray<Kernel.Rec>,
+  byNode: Map<unknown, Kernel.Rec>
+): void => {
+  for (const rec of Array.isArray(recs) ? recs : [recs]) {
+    const inner = rec.kids ?? rec.inst?.rendered
+    if (rec.node !== undefined) byNode.set(rec.node, rec)
+    else if (inner !== undefined) byNodeOf(inner, byNode)
+  }
+}
+
+/**
+ * Returns an instance's top-level rendered nodes that are connected to a
+ * document, in render order. Returns an empty array if the instance number
+ * is unknown or none of its nodes are connected.
+ *
+ * @stability experimental
+ * @category inspection
+ * @since 0.1.0
+ */
+export const nodesOf = (
+  root: Controllable,
+  instance: number
+): ReadonlyArray<globalThis.Node> => {
+  const rendered = (mounted.get(root)?.[0].find(instance) as
+    | Kernel.Instance
+    | undefined)?.rendered
+  return rendered === undefined ? [] : (Kernel.nodesOf(rendered, []) as Array<
+    globalThis.Node
+  >).filter((node) => node.isConnected)
 }

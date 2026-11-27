@@ -34,6 +34,7 @@ export interface Backend {
     readonly host: MessageLog.WireHost | undefined
     readonly connected: boolean
   } | undefined
+  readonly picked: (session: string) => Control.Picked | undefined
   readonly pageOf: (session: string) => Page | undefined
   readonly until: <A>(check: () => A | undefined) => Effect.Effect<A>
   readonly within: number
@@ -263,6 +264,29 @@ const GetMessageSchema = read(Tool.make("get_message_schema", {
   failure: ToolError
 }))
 
+const FindInstances = read(Tool.make("find_instances", {
+  description:
+    "Finds the instances that rendered the page's elements matching a CSS selector, in document order: " +
+    "each match's tag, instance, path, component and index in document.querySelectorAll(selector). " +
+    "Elements outside the session's root are left out. Returns the first 20 matches and the total. " +
+    "Returns no element text.",
+  parameters: Schema.Struct({
+    session: SessionParam,
+    selector: Schema.String.annotate({ description: "A CSS selector." })
+  }),
+  success: Result,
+  failure: ToolError
+}))
+
+const GetPicked = read(Tool.make("get_picked", {
+  description:
+    "Returns the element last picked with the DevTools Pick button in the session: its tag and the instance, " +
+    "path and component that rendered it, or null before any pick. Returns no element text.",
+  parameters: Schema.Struct({ session: SessionParam }),
+  success: Result,
+  failure: ToolError
+}))
+
 const Dispatch = write(Tool.make("dispatch", {
   description:
     "Sends messages to an instance, in order, as if the app had. Each runs update and its real Commands. " +
@@ -322,6 +346,8 @@ export const Tools = Toolkit.make(
   Resume,
   SetRecording,
   GetMessageSchema,
+  FindInstances,
+  GetPicked,
   Dispatch,
   Wait
 )
@@ -330,7 +356,8 @@ export const instructions =
   "Inspects a running Effect UI app in development. Start with list_sessions and list_instances. " +
   "list_entries and get_chain explain what happened and why; get_state and diff_state show state at any entry. " +
   "show_entry paints the page at an entry, resume returns to the live page. set_recording stops or resumes " +
-  "recording a message _tag. dispatch sends messages when " +
+  "recording a message _tag. find_instances and get_picked find the instance that rendered an element. " +
+  "dispatch sends messages when " +
   "enabled, and wait lets the Commands they start finish."
 
 const select = (
@@ -736,6 +763,15 @@ export const handlers = (server: Backend) => {
         )
       }
     ),
+    find_instances: Effect.fnUntraced(function*({ selector, session }) {
+      const s = yield* sessionOf(session)
+      return ok(yield* ask(s, { _tag: "Find", session: s.id, selector }))
+    }),
+    get_picked: ({ session }) =>
+      Effect.map(
+        sessionOf(session),
+        (s) => ok(server.picked(s.id) ?? null)
+      ),
     dispatch: Effect.fnUntraced(function*({ instance, messages, session }) {
       if (!options.dispatch) {
         return yield* fail(

@@ -19,6 +19,10 @@ export const Request = Schema.Union([
     instance: Schema.Number,
     messages: Schema.Array(Schema.Json),
     within: Schema.Number
+  }),
+  Schema.TaggedStruct("Find", {
+    session: Schema.String,
+    selector: Schema.String
   })
 ])
 
@@ -41,11 +45,24 @@ export const Paused = Schema.Struct({
 
 export type Paused = typeof Paused.Type
 
+// What an element picked on the page resolved to, without its text.
+export const Picked = Schema.Struct({
+  session: Schema.String,
+  tag: Schema.String,
+  instance: Schema.Number,
+  path: Schema.String,
+  component: Schema.String
+})
+
+export type Picked = typeof Picked.Type
+
 export const ToServer = Schema.Union([
   Schema.TaggedStruct("State", {
     sessions: Schema.Array(Schema.String),
     paused: Schema.NullOr(Paused),
-    notRecording: Schema.Array(Schema.String)
+    notRecording: Schema.Array(Schema.String),
+    // The last pick of each session.
+    picks: Schema.Array(Picked)
   }),
   Schema.TaggedStruct("Reply", {
     id: Schema.Number,

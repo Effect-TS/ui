@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect"
 import * as Fiber from "effect/Fiber"
 import * as Layer from "effect/Layer"
 import * as PubSub from "effect/PubSub"
+import * as Queue from "effect/Queue"
 import * as Semaphore from "effect/Semaphore"
 import * as Socket from "effect/socket/Socket"
 import * as Stream from "effect/Stream"
@@ -66,7 +67,7 @@ const corners: { readonly [P in Position]: string } = {
 // A painted copy's dialogs and popovers sit in the top layer, above any z-index. While paused the frame
 // joins the top layer after them, so the copy never covers the panel. Leaving the top layer takes the frame
 // out of the page for a moment, so it only re-joins when something opened since it last joined.
-const raise = (frame: HTMLIFrameElement | undefined, covered: boolean) => {
+const raise = (frame: HTMLElement | undefined, covered: boolean) => {
   if (typeof frame?.showPopover !== "function") return
   if (frame.matches(":popover-open")) {
     if (!covered) return
@@ -81,6 +82,69 @@ const lower = (frame: HTMLIFrameElement | undefined) => {
   if (frame.matches(":popover-open")) frame.hidePopover()
   frame.removeAttribute("popover")
 }
+
+const boxStyle =
+  "position:fixed;z-index:2147483001;pointer-events:none;box-sizing:border-box;margin:0;padding:0;" +
+  "overflow:visible;border:2px solid #3b82f6;border-radius:2px;background:rgb(59 130 246 / .15);"
+const labelStyle =
+  "position:absolute;left:-2px;white-space:nowrap;padding:1px 6px;border-radius:2px;" +
+  "font:12px/18px ui-monospace,SFMono-Regular,Menlo,monospace;background:#3b82f6;color:#fff;"
+
+const rectOf = (node: Node): DOMRect | undefined => {
+  if (node.nodeType === Node.ELEMENT_NODE) {
+    return (node as Element).getBoundingClientRect()
+  }
+  const range = node.ownerDocument?.createRange()
+  range?.selectNode(node)
+  return range?.getBoundingClientRect?.()
+}
+
+// One box over the page, in the top layer when it can be, so it shows above modal dialogs.
+const makeHighlight = (document: Document) => {
+  const box = document.createElement("div")
+  box.setAttribute("data-effect-ui-devtools-highlight", "")
+  box.setAttribute("aria-hidden", "true")
+  const label = box.appendChild(document.createElement("span"))
+  const clear = () => box.remove()
+  const show = (nodes: ReadonlyArray<Node>, text: string) => {
+    let top = Infinity, left = Infinity, bottom = -Infinity, right = -Infinity
+    for (const node of nodes) {
+      const rect = rectOf(node)
+      if (rect === undefined || (rect.width === 0 && rect.height === 0)) {
+        continue
+      }
+      top = Math.min(top, rect.top)
+      left = Math.min(left, rect.left)
+      bottom = Math.max(bottom, rect.bottom)
+      right = Math.max(right, rect.right)
+    }
+    if (top === Infinity) return clear()
+    box.setAttribute(
+      "style",
+      boxStyle + "top:" + top + "px;left:" + left + "px;width:" +
+        (right - left) + "px;height:" + (bottom - top) + "px"
+    )
+    label.setAttribute(
+      "style",
+      labelStyle + (top < 20 ? "top:100%" : "bottom:100%")
+    )
+    label.textContent = text
+    if (box.isConnected) return
+    document.body.appendChild(box)
+    raise(box, false)
+  }
+  return { box, show, clear }
+}
+
+// Input the page must not see while picking: the press and release before the click too.
+const pickBlocked = [
+  "pointerdown",
+  "pointerup",
+  "mousedown",
+  "mouseup",
+  "dblclick",
+  "contextmenu"
+]
 
 let explicit = 0
 
@@ -120,6 +184,7 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         readonly root: BrowserHost.Controllable
         readonly at: Control.Paused
       } | undefined
+      const picks = new Map<string, Control.Picked>()
       const lock = Semaphore.makeUnsafe(1)
       const origins = new Map<string, number>()
       const latest = new Map<string, number>()
@@ -237,6 +302,16 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         let position: Position = isPosition(savedPosition)
           ? savedPosition
           : (options.position ?? "BottomRight")
+        const highlight = makeHighlight(document)
+        yield* Effect.addFinalizer(() => Effect.sync(highlight.clear))
+        const owning = (target: EventTarget | null) => {
+          if (!(target instanceof Node)) return undefined
+          for (const root of roots.values()) {
+            const found = BrowserHost.instanceAt(root, target)
+            if (found !== undefined) return { root, found }
+          }
+          return undefined
+        }
         const feed: Feed = {
           inspector,
           origin: (session) => origins.get(session),
@@ -256,7 +331,73 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
               ? tagOf(entry.message)
               : undefined
             return tag === undefined || stopped.has(tag) ? undefined : tag
-          }
+          },
+          mounted: (session) => roots.has(session),
+          pick: Stream.callback<Control.Picked | undefined>((queue) =>
+            Effect.acquireRelease(
+              Effect.sync(() => {
+                const controller = new AbortController()
+                const options = { capture: true, signal: controller.signal }
+                const stop = (event: Event) => {
+                  event.preventDefault()
+                  event.stopImmediatePropagation()
+                }
+                let over: EventTarget | null = null
+                let owner: ReturnType<typeof owning>
+                let x: number | undefined, y = 0
+                const outline = (target: EventTarget | null) => {
+                  if (target !== over) owner = owning(over = target)
+                  if (owner === undefined) highlight.clear()
+                  else highlight.show([target as Node], owner.found.path)
+                }
+                view?.addEventListener("pointermove", (event) => {
+                  x = event.clientX
+                  y = event.clientY
+                  outline(event.target)
+                }, options)
+                // Scrolling moves the page under a still pointer, so outline what a click there would pick.
+                view?.addEventListener(
+                  "scroll",
+                  () => {
+                    if (x !== undefined) {
+                      outline(document.elementFromPoint?.(x, y) ?? null)
+                    }
+                  },
+                  options
+                )
+                for (const name of pickBlocked) {
+                  view?.addEventListener(name, stop, options)
+                }
+                view?.addEventListener("click", (event) => {
+                  stop(event)
+                  const owner = owning(event.target)
+                  if (owner === undefined) return
+                  const picked = {
+                    session: owner.root.session,
+                    ...Remote.matchOf(event.target as Element, owner.found)
+                  }
+                  picks.set(picked.session, picked)
+                  PubSub.publishUnsafe(states, undefined)
+                  Queue.offerUnsafe(queue, picked)
+                }, options)
+                const escape = (event: KeyboardEvent) => {
+                  if (event.key !== "Escape") return
+                  stop(event)
+                  Queue.offerUnsafe(queue, undefined)
+                }
+                // Focus is in the frame after clicking Pick, so Escape is heard there too.
+                for (const target of [view, inner.defaultView]) {
+                  target?.addEventListener("keydown", escape, options)
+                }
+                return controller
+              }),
+              (controller) =>
+                Effect.sync(() => {
+                  controller.abort()
+                  highlight.clear()
+                })
+            )
+          )
         }
         const pages = Pages.of({
           paint,
@@ -274,7 +415,19 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
           setOpen: (open) => Effect.sync(() => save(openKey, open)),
           setRecording: (tag, recording) =>
             Effect.sync(() => setRecording(tag, recording)),
-          setPosition: (next) => Effect.sync(() => setPosition(next))
+          setPosition: (next) => Effect.sync(() => setPosition(next)),
+          highlight: (session, instance) =>
+            Effect.sync(() => {
+              const root = paused === undefined ? roots.get(session) : undefined
+              const found = instance === null
+                ? undefined
+                : root?.instance(instance)
+              if (root === undefined || found === undefined) highlight.clear()
+              else {highlight.show(
+                  BrowserHost.nodesOf(root, found.instance),
+                  found.path
+                )}
+            })
         })
         const frame = document.createElement("iframe")
         frame.setAttribute("data-effect-ui-devtools", "")
@@ -300,7 +453,8 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         })
         const opened = (event: Event) => {
           if (
-            event.target !== frame && (event as ToggleEvent).newState === "open"
+            event.target !== frame && event.target !== highlight.box &&
+            (event as ToggleEvent).newState === "open"
           ) {
             covered = true
           }
@@ -509,7 +663,8 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         paint,
         resume,
         notRecording,
-        setRecording
+        setRecording,
+        picks: () => Array.from(picks.values())
       }
       if (server !== undefined) {
         const sent = yield* Layer.build(
@@ -541,6 +696,7 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
             host: "browser",
             connected: roots.has(session)
           }),
+          picked: (session) => picks.get(session),
           pageOf: (session) =>
             roots.has(session)
               ? {

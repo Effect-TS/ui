@@ -124,12 +124,17 @@ ${markRules}
 .follow { display: flex; align-items: center; gap: 6px; }
 .follow .dot { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid currentColor; }
 .follow.on .dot { background: currentColor; }
-.follow:hover, .follow.on, .clear:hover:not(:disabled), .close:hover, .back:hover { background: var(--sel); color: var(--ink); }
-.clear:disabled { opacity: .5; cursor: default; }
+.follow:hover, .follow.on, .clear:hover:not(:disabled), .close:hover, .back:hover, .pick:hover:not(:disabled), .pick.on { background: var(--sel); color: var(--ink); }
+.clear:disabled, .pick:disabled { opacity: .5; cursor: default; }
 .close { width: 28px; height: 28px; border-radius: 6px; color: var(--muted); text-align: center; }
 .corner-wrap { position: relative; flex: none; }
-.corner { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 6px; color: var(--muted); }
+.corner, .pick { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 6px; color: var(--muted); }
 .corner:hover, .corner.on { background: var(--sel); color: var(--ink); }
+.pick { flex: none; }
+.launch .pick { align-self: stretch; width: 34px; height: auto; border-radius: 0; border-left: 1px solid var(--line); }
+.launch .pick:last-child { border-radius: 0 999px 999px 0; }
+.pick-icon { position: relative; width: 12px; height: 12px; border: 1.5px dashed currentColor; border-radius: 2px; }
+.pick-icon::after { content: ""; position: absolute; right: -4px; bottom: -4px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .corner-icon { display: grid; grid-template-columns: repeat(2, 4px); gap: 3px; }
 .corner-icon i { display: block; width: 4px; height: 4px; border-radius: 1px; background: currentColor; opacity: .32; }
 .corner-icon i.here { opacity: 1; background: var(--ink); }

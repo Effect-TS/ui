@@ -65,6 +65,7 @@ export interface Root {
   readonly send: (message: unknown) => void
   readonly setProps: (props: unknown) => void
   readonly find: (born: number) => Instance | undefined
+  readonly numberOf: (inst: Instance) => number | undefined
   readonly dispatch: (
     inst: Instance,
     message: unknown
@@ -755,6 +756,7 @@ const start = (
     setProps: (props: unknown) => recording.step(() => mounted.setProps(props)),
     find: (born: number) =>
       findIn(instance, born, recording.numberOf) as Instance | undefined,
+    numberOf: recording.numberOf as unknown as Root["numberOf"],
     dispatch: (inst: Instance, message: unknown) =>
       Effect.callback<Dispatched>((resume) => {
         const target = inst as unknown as Kernel.Instance
