@@ -1154,7 +1154,8 @@ Known limits:
 - **[Custom elements](./ai-docs/src/10_ui/24_custom-elements.ts)**:
   Use web components from other libraries in an HTML view: bind each tag
   with its properties and events once, set them with typed methods, and fire
-  an element's event in a scene.
+  an element's event in a scene. Then publish a component as a web
+  component of its own.
 - **[Mounts](./ai-docs/src/10_ui/24_mounts.ts)**:
   Start work with an element's host node: a mount that measures a box once,
   a mount that attaches a third-party editor and reports each change, and a

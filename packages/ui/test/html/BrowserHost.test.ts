@@ -3,6 +3,7 @@ import {
   Command,
   Component,
   Feature,
+  Head,
   MessageLog,
   Mount,
   Query,
@@ -5103,6 +5104,231 @@ describe("BrowserHost", { concurrent: false }, () => {
       yield* tick
       expect(root.model()).toBe(1)
     }).pipe(Effect.scoped))
+
+  describe("defineElement", () => {
+    it.effect("updates props from attributes and properties without resetting the Model", () =>
+      Effect.gen(function*() {
+        const TourForm = Html.component({
+          name: "TourForm",
+          props: Schema.Struct({
+            unitId: Schema.String,
+            compact: Schema.Boolean
+          }),
+          model: Schema.Number,
+          message: Schema.Literal("Bump")
+        }).make({
+          init: () => 0,
+          update: ($) => $.model + 1,
+          head: () => [Head.title("Widget title")],
+          view: (h, count) =>
+            h.div(
+              h.span(`${h.props.unitId}:${h.props.compact}:${count}`),
+              h.button.on("click", "Bump").children("Bump")
+            )
+        })
+        const titleBefore = document.title
+        const app = yield* container
+        app.innerHTML = `<ce-tour-form unit-id="u1">Loading</ce-tour-form>`
+        const element = app.querySelector("ce-tour-form") as HTMLElement & {
+          unitId: string
+          compact: boolean
+        }
+        element.compact = true
+
+        yield* Layer.build(
+          BrowserHost.defineElement("ce-tour-form", TourForm, {
+            props: { unitId: "", compact: false },
+            attributes: { unitId: Schema.String }
+          })
+        )
+
+        expect(element.querySelector("span")!.textContent).toBe("u1:true:0")
+        expect(element.textContent).not.toContain("Loading")
+
+        element.querySelector("button")!.click()
+        yield* tick
+        expect(element.querySelector("span")!.textContent).toBe("u1:true:1")
+
+        element.setAttribute("unit-id", "u2")
+        yield* tick
+        expect(element.querySelector("span")!.textContent).toBe("u2:true:1")
+
+        element.compact = false
+        yield* tick
+        expect(element.querySelector("span")!.textContent).toBe("u2:false:1")
+
+        element.removeAttribute("unit-id")
+        yield* tick
+        expect(element.querySelector("span")!.textContent).toBe(":false:1")
+        expect(document.title).toBe(titleBefore)
+      }).pipe(Effect.scoped))
+
+    it.effect("dispatches tagged emissions as bubbling composed CustomEvents from a shadow root with styles", () =>
+      Effect.gen(function*() {
+        const Events = UiSchema.TaggedEnum({
+          TourBooked: { unitId: Schema.String }
+        })
+        const ShadowTour = Html.component({
+          name: "ShadowTour",
+          props: Schema.Struct({ unitId: Schema.String }),
+          model: Schema.Null,
+          message: Schema.Literal("Book"),
+          events: Events
+        }).make({
+          init: () => null,
+          update: ($) => $.emit(Events.TourBooked({ unitId: $.props.unitId })),
+          view: (h) => h.button.on("click", "Book").children("Book")
+        })
+
+        yield* Layer.build(
+          BrowserHost.defineElement("ce-shadow-tour", ShadowTour, {
+            props: { unitId: "" },
+            attributes: { unitId: Schema.String },
+            shadow: { mode: "open", styles: [".tour { color: red; }"] }
+          })
+        )
+
+        const app = yield* container
+        const received: Array<CustomEvent> = []
+        app.addEventListener("tourbooked", (event) => {
+          received.push(event as CustomEvent)
+        })
+        const element = document.createElement("ce-shadow-tour")
+        element.setAttribute("unit-id", "u9")
+        app.appendChild(element)
+
+        expect(element.shadowRoot!.adoptedStyleSheets).toHaveLength(1)
+
+        element.shadowRoot!.querySelector("button")!.click()
+        expect(received).toHaveLength(1)
+        expect(received[0]!.composed).toBe(true)
+        expect(received[0]!.detail).toEqual(Events.TourBooked({ unitId: "u9" }))
+      }).pipe(Effect.scoped))
+
+    it.effect("keeps Model across a synchronous move and closes its scope on removal or layer release", () =>
+      Effect.gen(function*() {
+        class Prefix extends Context.Service<Prefix, string>()("CePrefix") {}
+        let prefix: string | undefined
+        let closed = 0
+        const Track = Mount.make(
+          "CeTrack",
+          { args: {} },
+          () =>
+            Effect.gen(function*() {
+              prefix = yield* Prefix
+              return yield* Effect.onExit(Effect.never, () =>
+                Effect.sync(() => {
+                  closed++
+                }))
+            })
+        )
+        const Counter = Html.component({
+          name: "CeCounter",
+          model: Schema.Number,
+          message: Schema.Literal("Bump")
+        }).make({
+          init: () => 0,
+          update: ($) => $.model + 1,
+          view: (h, count) =>
+            h.div.onMount(Track()).children(
+              h.span(String(count)),
+              h.button.on("click", "Bump").children("Bump")
+            )
+        })
+
+        const layerScope = yield* Scope.make()
+        yield* Layer.buildWithScope(
+          BrowserHost.defineElement("ce-counter", Counter, {
+            props: {}
+          }).pipe(Layer.provide(Layer.succeed(Prefix, "ok"))),
+          layerScope
+        )
+
+        const firstParent = yield* container
+        const secondParent = yield* container
+        const first = document.createElement("ce-counter")
+        firstParent.appendChild(first)
+        yield* tick
+
+        expect(prefix).toBe("ok")
+        first.querySelector("button")!.click()
+        yield* tick
+
+        secondParent.appendChild(first)
+        yield* tick
+        expect(first.querySelector("span")!.textContent).toBe("1")
+        expect(closed).toBe(0)
+
+        first.remove()
+        yield* tick
+        expect(closed).toBe(1)
+
+        const second = document.createElement("ce-counter")
+        secondParent.appendChild(second)
+        yield* tick
+        yield* Scope.close(layerScope, Exit.void)
+        expect(closed).toBe(2)
+      }).pipe(Effect.scoped))
+
+    it.effect.skipIf(
+      process.versions.bun !== undefined || process.versions.deno !== undefined
+    )(
+      "a released element keeps neither its Model nor the Layer's services, and decodes nothing",
+      () =>
+        Effect.gen(function*() {
+          class Api extends Context.Service<Api, object>()("CeApi") {}
+          let model: WeakRef<object> | undefined
+          let api: WeakRef<object> | undefined
+          let decoded = 0
+          const Label = Html.component({
+            name: "CeLabel",
+            props: Schema.Struct({ text: Schema.String }),
+            model: Schema.Struct({}),
+            message: Schema.Never
+          }).make({
+            init: () => {
+              const value = {}
+              model = new WeakRef(value)
+              return value
+            },
+            update: ($) => $.model,
+            view: (h) => h.label.id(h.id("label")).children(h.props.text)
+          })
+          const text = Schema.String.check(
+            Schema.makeFilter(() => (decoded++, true))
+          )
+          const define = (tag: string) =>
+            BrowserHost.defineElement(tag, Label, {
+              props: { text: "" },
+              attributes: { text }
+            })
+          const layerScope = yield* Scope.make()
+          yield* Layer.buildWithScope(
+            Layer.mergeAll(define("ce-label-a"), define("ce-label-b")).pipe(
+              Layer.provide(
+                Layer.sync(Api)(() => {
+                  const value = {}
+                  api = new WeakRef(value)
+                  return value
+                })
+              )
+            ),
+            layerScope
+          )
+          const app = yield* container
+          app.innerHTML = "<ce-label-a></ce-label-a><ce-label-b></ce-label-b>"
+          const [a, b] = app.querySelectorAll("label")
+          expect(a!.id).not.toBe(b!.id)
+
+          yield* Scope.close(layerScope, Exit.void)
+          app.firstElementChild!.setAttribute("text", "x")
+          expect(decoded).toBe(0)
+          yield* collectGarbage
+          expect(model!.deref()).toBeUndefined()
+          expect(api!.deref()).toBeUndefined()
+        }).pipe(Effect.scoped)
+    )
+  })
 })
 
 describe("BrowserCase", { concurrent: false }, () => {

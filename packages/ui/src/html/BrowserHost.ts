@@ -131,7 +131,7 @@ import * as Exit from "effect/Exit"
 import * as Layer from "effect/Layer"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Scheduler from "effect/Scheduler"
-import type * as Schema from "effect/Schema"
+import * as Schema from "effect/Schema"
 import * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
 import * as domHost from "../internal/domHost.ts"
@@ -378,16 +378,24 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
 export const layer = (options?: {
   readonly document?: Document | undefined
 }): Layer.Layer<Renderer.Renderer | Html.Host> =>
-  Layer.effectContext(Effect.gen(function*() {
-    const document = options?.document ?? globalThis.document
-    const { host, held } = build(document)
-    yield* Effect.addFinalizer(() => Effect.sync(host.dispose))
-    return Context.add(
-      yield* documentServices.make(document, htmlHost, held),
-      Renderer.Renderer,
-      { host }
+  Layer.effectContext(
+    Effect.map(
+      documentOf(options?.document ?? globalThis.document),
+      ([, context]) => context
     )
-  }))
+  )
+
+// The host and document services that every mount on a document can share.
+const documentOf = Effect.fnUntraced(function*(document: Document) {
+  const built = build(document)
+  yield* Effect.addFinalizer(() => Effect.sync(built.host.dispose))
+  const context = Context.add(
+    yield* documentServices.make(document, htmlHost, built.held),
+    Renderer.Renderer,
+    { host: built.host }
+  )
+  return [built, context] as const
+})
 
 /**
  * Passes when a root shows HTML or is host-neutral, and otherwise names the
@@ -577,16 +585,12 @@ export const mountRoot = (
   props: unknown,
   container: globalThis.Element,
   options: MountOptions<any, any, any> | undefined,
-  hydrate: hydrateRun.Hydrating | undefined
+  hydrate: hydrateRun.Hydrating | undefined,
+  shared?: Effect.Success<ReturnType<typeof documentOf>>
 ): Effect.Effect<Renderer.Root<any, any, any>, never, Scope.Scope> =>
   Effect.gen(function*() {
-    const { host, raw, make, held, hold } = build(container.ownerDocument)
-    yield* Effect.addFinalizer(() => Effect.sync(host.dispose))
-    const context = Context.add(
-      yield* documentServices.make(container.ownerDocument, htmlHost, held),
-      Renderer.Renderer,
-      { host }
-    )
+    const [{ raw, make, hold }, context] = shared ??
+      (yield* documentOf(container.ownerDocument))
     const outer = yield* Effect.context<Scope.Scope>()
     const attached = hot.devTools(container)
     const mountContext = attached !== undefined &&
@@ -624,6 +628,8 @@ export const mountRoot = (
       ),
       mountContext
     )
+    // `defineElement` instances skip `Controllables`: a paused copy of the element would mount itself.
+    if (shared !== undefined) return root
     const controlled = controllable(
       component,
       root,
@@ -652,6 +658,301 @@ export const mountRoot = (
     )
     return root
   })
+
+/**
+ * The options of `defineElement`.
+ *
+ * **Details**
+ *
+ * `props` is every instance's starting props. Each key of `props` and
+ * `attributes` becomes a property of the element. `attributes` maps a prop
+ * to the Schema that decodes its kebab-case attribute, so `unitId` reads
+ * `unit-id`. `shadow` mounts each instance in a shadow root, `"open"` by
+ * default, that adopts `styles`. `fallback` and `query` are as for
+ * `mount`. `document` defaults to the global one and also selects its
+ * window's `customElements`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface DefineElementOptions<
+  Props,
+  V extends View.Elements,
+  RF = never
+> {
+  readonly props: Props
+  readonly attributes?:
+    | {
+      readonly [K in keyof Props]?: Schema.Codec<
+        Props[K],
+        string,
+        never,
+        unknown
+      >
+    }
+    | undefined
+  readonly shadow?:
+    | boolean
+    | {
+      readonly mode?: ShadowRootMode | undefined
+      /** CSS text, adopted by every instance's shadow root. */
+      readonly styles?: ReadonlyArray<string> | undefined
+    }
+    | undefined
+  readonly fallback?: MountOptions<V, RF>["fallback"]
+  readonly query?: Renderer.QueryOptions | undefined
+  readonly document?: Document | undefined
+}
+
+/**
+ * A Layer that defines `tag` as a custom element rendering `component`
+ * while the Layer is built. It provides no service.
+ *
+ * **When to use**
+ *
+ * Use to publish a component as a web component, for a page Effect UI
+ * doesn't own or for another framework. `Html.customElement` does the
+ * reverse: it uses a web component in a view.
+ *
+ * **Details**
+ *
+ * Each instance mounts its own root, with its own Scope and query cache,
+ * when it connects. The root replaces the element's children and never
+ * writes the document head. Instances share the Layer's services, and their
+ * generated element ids don't collide, even across tags.
+ *
+ * Setting an attribute or property updates the props in place and keeps the
+ * Model. The last write wins, and properties are never reflected to
+ * attributes. An attribute is decoded by its Schema in `attributes`: a
+ * rejected value is logged with `console.error` and leaves the prop as it
+ * was, and removing the attribute restores the prop's value in `props`.
+ * Properties set before the tag was defined are applied on connect, after
+ * the attributes.
+ *
+ * Each emission is dispatched on the element as a bubbling, composed
+ * `CustomEvent` named by its lowercased `_tag`, with the emission as
+ * `detail`, so `TourBooked` arrives as `tourbooked`.
+ *
+ * Moving an element keeps its root, and removing it closes its Scope a
+ * microtask later. Releasing the Layer closes every instance's Scope. The
+ * tag stays defined, as `customElements` can't undefine it, but its elements
+ * render nothing from then on. Building the Layer for a tag that is already
+ * defined is a defect. DevTools can't pause an instance.
+ *
+ * **Example** (Publishing a form as a web component)
+ *
+ * ```ts
+ * import { BrowserHost, Html } from "@effect/ui/html"
+ * import { Effect, Layer, Schema } from "effect"
+ *
+ * const TourForm = Html.component({
+ *   name: "TourForm",
+ *   props: Schema.Struct({ unitId: Schema.String }),
+ *   model: Schema.Struct({}),
+ *   message: Schema.Never
+ * }).make({
+ *   init: () => ({}),
+ *   update: ($) => $.model,
+ *   view: (h) => h.p(`Tour of ${h.props.unitId}`)
+ * })
+ *
+ * // <unit-tour-form unit-id="u1"></unit-tour-form>
+ * const main = BrowserHost.defineElement("unit-tour-form", TourForm, {
+ *   props: { unitId: "" },
+ *   attributes: { unitId: Schema.String }
+ * })
+ *
+ * Effect.runFork(Layer.launch(main))
+ * ```
+ *
+ * @stability experimental
+ * @category layers
+ * @since 0.1.0
+ */
+export const defineElement = <
+  Name extends string,
+  Props,
+  Model,
+  Msg,
+  Events extends { readonly _tag: string },
+  R,
+  V extends View.Elements,
+  RF = never
+>(
+  tag: string,
+  component:
+    & Component.Members<Name, Props, Model, Msg, Events, R, V, any>
+    & HtmlRoot<V>,
+  options: DefineElementOptions<Props, V, RF>
+): Layer.Layer<never, never, Exclude<R | RF, Html.Host>> =>
+  Layer.effectDiscard(Effect.gen(function*() {
+    const document = options.document ?? globalThis.document
+    const view = document.defaultView!
+    if (view.customElements.get(tag) !== undefined) {
+      return yield* Effect.die(
+        new Error(`BrowserHost.defineElement: <${tag}> is already defined`)
+      )
+    }
+    const attributes = (options.attributes ?? {}) as Record<
+      string,
+      Schema.Codec<unknown, string>
+    >
+    const decoders = new Map<
+      string,
+      readonly [string, ReturnType<typeof Schema.decodeUnknownExit>]
+    >()
+    for (const key in attributes) {
+      decoders.set(
+        key.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase()),
+        [key, Schema.decodeUnknownExit(attributes[key])]
+      )
+    }
+    const observed = [...decoders.keys()]
+    const props = options.props as Record<string, unknown>
+    const keys = new Set([...Object.keys(props), ...Object.keys(attributes)])
+    // Cleared on release, so elements left on the page don't retain the Layer's services.
+    let live:
+      | {
+        readonly shared: Effect.Success<ReturnType<typeof documentOf>>
+        readonly context: Context.Context<Scope.Scope>
+      }
+      | undefined = {
+        shared: yield* documentOf(document),
+        context: yield* Effect.context<Scope.Scope>()
+      }
+    yield* Effect.addFinalizer(() => Effect.sync(() => live = undefined))
+    const shadow = options.shadow === true ? {} : options.shadow || undefined
+    const sheets = (shadow?.styles ?? []).map((css) => {
+      const sheet = new view.CSSStyleSheet()
+      sheet.replaceSync(css)
+      return sheet
+    })
+    let mounts = 0
+    class Defined extends (view.HTMLElement as typeof HTMLElement) {
+      static observedAttributes = observed
+      "~set": Record<string, unknown> = {}
+      "~seen": Record<string, string | null> = {}
+      "~root": Renderer.Root<any, any, any> | undefined
+      "~scope": Scope.Closeable | undefined
+      readonly "~shadow" = shadow &&
+        Object.assign(this.attachShadow({ mode: shadow.mode ?? "open" }), {
+          adoptedStyleSheets: sheets
+        })
+      "~props"() {
+        return { ...props, ...this["~set"] }
+      }
+      "~update"() {
+        this["~root"]?.setProps(this["~props"]())
+      }
+      connectedCallback() {
+        if (this["~root"] !== undefined || live === undefined) return
+        const { context, shared } = live
+        // happy-dom's upgrade doesn't report the attributes an element already has, which browsers do.
+        for (const name of observed) {
+          const value = this.getAttribute(name)
+          if (value !== (this["~seen"][name] ?? null)) {
+            this.attributeChangedCallback(name, null, value)
+          }
+        }
+        // Properties set before the upgrade shadow the accessors, and are applied after the attributes.
+        for (const key of keys) {
+          if (!Object.hasOwn(this, key)) continue
+          const value = (this as any)[key]
+          delete (this as any)[key]
+          ;(this as any)[key] = value
+        }
+        const container = this["~shadow"] || this
+        container.textContent = ""
+        const instance = this["~scope"] = Scope.forkUnsafe(
+          Context.get(context, Scope.Scope),
+          "sequential"
+        )
+        this["~root"] = Effect.runSyncWith(
+          Context.add(context, Scope.Scope, instance)
+        )(
+          Effect.andThen(
+            Scope.addFinalizer(
+              instance,
+              Effect.sync(() => {
+                if (this["~scope"] === instance) {
+                  this["~root"] = this["~scope"] = undefined
+                }
+              })
+            ),
+            mountRoot(
+              component as unknown as Component.Any,
+              this["~props"](),
+              container as globalThis.Element,
+              {
+                head: false,
+                key: `${tag}:${mounts++}`,
+                fallback: options.fallback,
+                query: options.query,
+                onEmit: (event: Events) =>
+                  this.dispatchEvent(
+                    new view.CustomEvent(event._tag.toLowerCase(), {
+                      detail: event,
+                      bubbles: true,
+                      composed: true
+                    })
+                  )
+              },
+              undefined,
+              shared
+            )
+          )
+        )
+      }
+      // With `moveBefore()`, a move calls only this, so the root stays.
+      connectedMoveCallback() {}
+      disconnectedCallback() {
+        queueMicrotask(() => {
+          const instance = this["~scope"]
+          if (this.isConnected || instance === undefined) return
+          this["~root"] = this["~scope"] = undefined
+          Effect.runFork(Scope.close(instance, Exit.void))
+        })
+      }
+      attributeChangedCallback(
+        name: string,
+        _: unknown,
+        value: string | null
+      ) {
+        if (live === undefined) return
+        const [key, decode] = decoders.get(name)!
+        this["~seen"][name] = value
+        if (value === null) delete this["~set"][key]
+        else {
+          const exit = decode(value)
+          if (exit._tag === "Failure") {
+            // oxlint-disable-next-line no-console
+            console.error(
+              `[@effect/ui/html/BrowserHost] <${tag}> has a "${name}" attribute its Schema rejects, so ${key} keeps its value. ${exit.cause}`
+            )
+            return
+          }
+          this["~set"][key] = exit.value
+        }
+        this["~update"]()
+      }
+    }
+    for (const key of keys) {
+      Object.defineProperty(Defined.prototype, key, {
+        configurable: true,
+        get(this: Defined) {
+          return Object.hasOwn(this["~set"], key)
+            ? this["~set"][key]
+            : props[key]
+        },
+        set(this: Defined, value: unknown) {
+          this["~set"][key] = value
+          this["~update"]()
+        }
+      })
+    }
+    view.customElements.define(tag, Defined)
+  })) as any
 
 /**
  * An instance's state as a tool recorded it from the `MessageLog`: the

@@ -3,13 +3,14 @@
  *
  * Use web components from other libraries in an HTML view: bind each tag
  * with its properties and events once, set them with typed methods, and fire
- * an element's event in a scene.
+ * an element's event in a scene. Then publish a component as a web
+ * component of its own.
  */
 import { UiSchema } from "@effect/ui"
-import { Html } from "@effect/ui/html"
+import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
-import { Effect, Schema } from "effect"
+import { Effect, Layer, Schema } from "effect"
 
 // ---------------------------------------------------------------------------
 // Bindings: a tag, its properties and its events
@@ -110,3 +111,45 @@ export const picked = Effect.gen(function*() {
     .expect(Locator.tag("output"))
     .toHaveText("#db2777")
 })
+
+// ---------------------------------------------------------------------------
+// Publishing a component as a custom element
+// ---------------------------------------------------------------------------
+
+// Emissions must be tagged. Each is dispatched on the element as a bubbling,
+// composed `CustomEvent` named by its lowercased `_tag`, with the emission as
+// `detail`, so this one arrives as `tourbooked`.
+const TourEvents = UiSchema.TaggedEnum({
+  TourBooked: { unitId: Schema.String }
+})
+
+export const TourForm = Html.component({
+  name: "TourForm",
+  props: Schema.Struct({ unitId: Schema.String, compact: Schema.Boolean }),
+  model: Schema.Null,
+  message: Schema.Literal("Book"),
+  events: TourEvents
+}).make({
+  init: () => null,
+  update: ($) => $.emit(TourEvents.TourBooked({ unitId: $.props.unitId })),
+  view: (h) => h.button.on("click", "Book").children("Book a tour")
+})
+
+// Defines `<unit-tour-form>` while the Layer is built. Each key of `props` is
+// also an element property, and `attributes` decodes kebab-case attributes,
+// so `unit-id="u1"` sets `unitId`. Either write updates the props and keeps
+// the Model. An instance unmounts when it's removed from the page, not when
+// it's moved.
+export const TourFormElement = BrowserHost.defineElement(
+  "unit-tour-form",
+  TourForm,
+  {
+    props: { unitId: "", compact: false },
+    attributes: { unitId: Schema.String },
+    // Optional: a shadow root, with styles page CSS can't reach.
+    shadow: { styles: ["button { font: inherit; }"] }
+  }
+)
+
+// In the entry module of the page that uses the element.
+Layer.launch(TourFormElement).pipe(Effect.runFork)
