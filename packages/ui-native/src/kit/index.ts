@@ -30,6 +30,12 @@ export * as Animation from "./Animation.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as AppState from "./AppState.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as Appearance from "./Appearance.ts"
 
 /**
