@@ -129,13 +129,9 @@ describe("Menu", () => {
         expect(
           menu.linkItem({ element: h.a.attr("href", "/copy"), value: "copy" })
         ).type.toBe<A>()
-        expect(
-          menu.checkboxItem({
-            element: h.div,
-            value: "copy",
-            closeOnClick: true
-          })
-        ).type.toBe<Div>()
+        expect(menu.checkboxItem({ element: h.div, value: "copy" })).type.toBe<
+          Div
+        >()
         expect(menu.checkboxItemIndicator({ element: h.span, value: "copy" }))
           .type.toBe<Span | undefined>()
         expect(
@@ -202,11 +198,6 @@ describe("Menu", () => {
         expect(menu.checkboxItem).type.not.toBeCallableWith({
           element: h.span,
           value: "copy"
-        })
-        expect(menu.checkboxItem).type.not.toBeCallableWith({
-          element: h.div,
-          value: "copy",
-          checked: true
         })
         expect(menu.checkboxItemIndicator).type.not.toBeCallableWith({
           element: h.div,
