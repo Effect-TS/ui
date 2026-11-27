@@ -243,6 +243,8 @@ interface Ran {
   readonly child: View.Child<any, any>
   readonly model: unknown
   readonly shared: Component.SharedLookup
+  // The same object for as long as the runtime keeps the instance.
+  readonly instance: object
 }
 // The children an expansion replaced, by the expanded root: `childEmit` and `childFailure` still find them.
 const expandedChildren = new WeakMap<
@@ -607,6 +609,9 @@ const expandRoot = <Msg>(
 ): View.Node<Msg, any> => {
   const replaced: Array<View.Child<any, any>> = []
   const ran = new Map<string, Ran>()
+  const ranBefore = previous === undefined
+    ? undefined
+    : ranChildren.get(previous)
   const placed: Array<Occurrence> = []
   // As the runtime does: two children at one path fail the view or the closure that holds them, and the
   // view and the closures it gives its headless children can't place one slot twice between them.
@@ -769,7 +774,13 @@ const expandRoot = <Msg>(
           ? given.get(childPath)
           : component.init(node.props).model
         const lookup = sharedLookup(shared, owners)
-        ran.set(childPath, { child: node, model, shared: lookup })
+        ran.set(childPath, {
+          child: node,
+          model,
+          shared: lookup,
+          instance: (kept ? ranBefore?.get(childPath)?.instance : undefined) ??
+            {}
+        })
         const parts = component.parts(model, node.props, {
           owner: { path: childPath, depth: depth + 1 },
           shared: lookup
@@ -1940,30 +1951,37 @@ export const dispatch = <Props, Model, Msg, Events>(
 
 /**
  * Sends `message` to the instance at `path`: the story's component for `undefined` or its own path,
- * else an expanded headless child.
+ * else an expanded headless child, and only to `instance` when it's given.
  *
  * @internal
  */
 export const deliver = <Props, Model, Msg, Events>(
   story: State<Props, Model, Msg, Events>,
   path: string | undefined,
-  message: unknown
+  message: unknown,
+  instance?: object
 ): State<Props, Model, Msg, Events> =>
   path === undefined || path === "/" + story.component.definition.name
     ? dispatch(story, message as Msg)
-    : dispatchChild(story, path, message)
+    : dispatchChild(story, path, message, instance)
 
-// As the runtime does, a child the view no longer places takes nothing, and its update's sends go before
-// its events. Its Commands don't run, and a send to an owner above the story is dropped with them.
+// As the runtime does, a closed instance takes nothing, even when a new one has its path, and a child's
+// sends go before its events. Its Commands don't run, and a send to an owner above the story is dropped
+// with them.
 const dispatchChild = <Props, Model, Msg, Events>(
   story: State<Props, Model, Msg, Events>,
   path: string,
-  message: unknown
+  message: unknown,
+  instance: object | undefined
 ): State<Props, Model, Msg, Events> => {
   if (message === undefined || isNoop(message)) return story
   const children = ranChildren.get(story.view())
   const ran = children?.get(path)
-  if (ran === undefined) return story
+  if (
+    ran === undefined || (instance !== undefined && ran.instance !== instance)
+  ) {
+    return story
+  }
   const component = ran.child.component as unknown as Component.Headless.Any
   const next = (component.update as (
     ...args: ReadonlyArray<unknown>
@@ -2127,6 +2145,8 @@ export const tryFireNode = <Props, Model, Msg, Events>(
     )
   let handled = false
   let out = story
+  // The instances the event reached: a layer's message is for its owner as it was then.
+  const reached = ranChildren.get(story.view())
   // Each layer runs once: its message decides whether its own `preventDefault: true` cancels, then it's
   // sent to the layer's owner.
   for (const layer of layers) {
@@ -2135,10 +2155,14 @@ export const tryFireNode = <Props, Model, Msg, Events>(
     if (message === undefined) continue
     handled = true
     if (layer.eventOptions[event]?.preventDefault === true) prevented = true
+    const path = layer === handler
+      ? undefined
+      : (layer as View.Owned).owner.path
     out = deliver(
       out,
-      layer === handler ? undefined : (layer as View.Owned).owner.path,
-      message
+      path,
+      message,
+      path === undefined ? undefined : reached?.get(path)?.instance
     )
   }
   return { story: out, prevented, handled }

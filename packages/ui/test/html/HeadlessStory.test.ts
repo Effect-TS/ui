@@ -349,6 +349,64 @@ describe("headless components in a story", () => {
       scene.click("Remount").expect(count).toHaveText("10")
     }))
 
+  it.effect("a layer whose owner an earlier layer replaced sends nothing to the new instance", () =>
+    Effect.gen(function*() {
+      const CounterMessage = UiSchema.TaggedEnum({ Inc: {} })
+      const Counter = Html.component({
+        name: "Counter",
+        model: Schema.Number,
+        message: CounterMessage
+      }).make({
+        init: () => 0,
+        update: ($) => $.model + 1,
+        parts: (p, count) => ({
+          count,
+          button: p.part("button", (b) => b.on("click", CounterMessage.Inc()))
+        })
+      })
+      const SwitchEvents = UiSchema.TaggedEnum({ Pressed: {} })
+      const Switch = Html.component({
+        name: "Switch",
+        model: Schema.Null,
+        message: CounterMessage,
+        events: SwitchEvents
+      }).make({
+        init: () => null,
+        update: ($) => $.set($.model).emit(SwitchEvents.Pressed()),
+        parts: (p) => ({
+          button: p.part("button", (b) => b.on("click", CounterMessage.Inc()))
+        })
+      })
+      const Message = UiSchema.TaggedEnum({ Wrap: {} })
+      const Panel = Html.component({
+        name: "Panel",
+        model: Schema.Boolean,
+        message: Message
+      }).make({
+        init: () => false,
+        update: () => true,
+        view: (h, wrap) => {
+          const shown = Counter(h, {
+            key: "counter",
+            view: (counter) =>
+              Switch(h, {
+                key: "switch",
+                onEmit: () => Message.Wrap(),
+                view: (button) =>
+                  counter.button(button.button(h.button.attr("id", "count")))
+                    .children(String(counter.count))
+              })
+          })
+          return wrap ? h.section(shown) : h.div(shown)
+        }
+      })
+      const count = Locator.attr("id", "count")
+      const scene = yield* HtmlScene.make(Panel, {})
+      // The Switch's layer runs first and wraps both in a section: the click began before the new Counter.
+      scene.click(count).expect(Locator.tag("section")).toExist()
+        .expect(count).toHaveText("0")
+    }))
+
   it.effect("a child at the same path that the runtime would create again starts from init", () =>
     Effect.gen(function*() {
       const CounterMessage = UiSchema.TaggedEnum({ Inc: {} })
