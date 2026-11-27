@@ -43,18 +43,36 @@ const text: ViewKind = {
   text: true
 }
 
+const setText = (n: NativeNode, value: unknown, host: ViewHost) => {
+  // Skip if native already shows `value`; include `eventCount` so native accepts it.
+  if (n.props.text === value) return
+  if (value !== undefined) host.set(n, "mostRecentEventCount", n.eventCount)
+  host.set(n, "text", value)
+  // Fabric emits no diff when resetting to the last committed text, so send a command too.
+  if (value !== undefined) {
+    host.command(n, "setTextAndSelection", [n.eventCount, value, -1, -1])
+  }
+}
+
+const textEvent = (name: string) =>
+  (n: NativeNode, event: any, host: ViewHost) =>
+    host.fire(n, name, { value: event?.text ?? "" })
+
 const input: ViewKind = {
+  // Fabric maps both iOS text input names to one `TextInput` component,
+  // which swaps `UITextField` for `UITextView` when `multiline` changes.
   viewName: (_, host) =>
     host.os === "ios" ? "RCTSinglelineTextInputView" : "AndroidTextInput",
+  defaults: { autoCapitalize: "sentences", underlineColorAndroid: 0 },
   props: {
-    value(n, value, host) {
-      // Skip if native already shows `value`; include `eventCount` so native accepts it.
-      if (n.props.text === value) return
-      host.set(n, "mostRecentEventCount", n.eventCount)
-      host.set(n, "text", value)
-      // Fabric emits no diff when resetting to the last committed text, so send a command too.
-      host.command(n, "setTextAndSelection", [n.eventCount, value, -1, -1])
-    }
+    value: setText,
+    defaultValue: setText,
+    underlineColorAndroid: (n, value, host) =>
+      host.set(
+        n,
+        "underlineColorAndroid",
+        value === undefined ? 0 : host.color(value)
+      )
   },
   events: {
     topChange(n, event, host) {
@@ -66,8 +84,8 @@ const input: ViewKind = {
       n.props.text = value
       host.fire(n, "input", { value })
     },
-    topSubmitEditing: (n, event, host) =>
-      host.fire(n, "submit", { value: event?.text ?? "" })
+    topSubmitEditing: textEvent("submit"),
+    topEndEditing: textEvent("endEditing")
   }
 }
 

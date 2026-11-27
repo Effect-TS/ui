@@ -128,7 +128,14 @@ NativeApp.register(NativeApp.mount(App, {}))
       write("src/plain.ts", app("", ""))
       write(
         "src/unused.ts",
-        app(`import "@effect/ui-native/kit"\nimport "./toggle"`, "")
+        app(
+          [
+            `import { clear, setSelection } from "@effect/ui-native/Native"`,
+            `import "@effect/ui-native/kit"`,
+            `import "./toggle"`
+          ].join("\n"),
+          ""
+        )
       )
       write("src/used.ts", app(`import { toggle } from "./toggle"`, "toggle"))
       const bundle = async (entry: string) => {
@@ -138,10 +145,9 @@ NativeApp.register(NativeApp.mount(App, {}))
         )
         return readBundle(config, entry, "android")
       }
-      assert.strictEqual(
-        await bundle("src/unused.ts"),
-        await bundle("src/plain.ts")
-      )
+      const plain = await bundle("src/plain.ts")
+      assert.strictEqual(await bundle("src/unused.ts"), plain)
+      assert.notInclude(plain, "setSelection")
       assert.include(await bundle("src/used.ts"), "FixtureToggleView")
     },
     30_000

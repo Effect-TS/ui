@@ -332,4 +332,210 @@ describe("NativeHost", () => {
       222
     ])
   })
+
+  it("keeps the input node on multiline changes and applies defaults", () => {
+    for (
+      const [os, viewName] of [
+        ["android", "AndroidTextInput"],
+        ["ios", "RCTSinglelineTextInputView"]
+      ] as const
+    ) {
+      const fabric = FakeFabric.make()
+      const { host, root } = NativeHost.make({
+        ui: fabric.ui,
+        rootTag: 1,
+        os,
+        processColor: (c) => `color:${String(c)}`
+      })
+      const input = host.createElement("input")
+      host.insertBefore(root, input, undefined)
+      host.commit!()
+      const committed = () =>
+        FakeFabric.find(fabric.committed(), FakeFabric.byName(viewName))!
+      const first = committed()
+      assert.strictEqual(first.props.autoCapitalize, "sentences")
+      assert.strictEqual(first.props.underlineColorAndroid, 0)
+
+      host.setProp(input, "multiline", true)
+      host.setProp(input, "autoCapitalize", "none")
+      host.setProp(input, "underlineColorAndroid", "#3b82f6")
+      host.commit!()
+      const multi = committed()
+      assert.strictEqual(multi.tag, first.tag)
+      assert.strictEqual(multi.props.multiline, true)
+      assert.strictEqual(multi.props.autoCapitalize, "none")
+      assert.strictEqual(multi.props.underlineColorAndroid, "color:#3b82f6")
+
+      host.setProp(input, "multiline", false)
+      host.setProp(input, "underlineColorAndroid", undefined)
+      host.commit!()
+      const single = committed()
+      assert.strictEqual(single.tag, first.tag)
+      assert.strictEqual(single.props.multiline, false)
+      assert.strictEqual(single.props.underlineColorAndroid, 0)
+    }
+  })
+
+  it("handles defaultValue, clear, and setSelection", async () => {
+    const Msg = UiSchema.TaggedEnum({
+      SetDefault: { value: Schema.UndefinedOr(Schema.String) }
+    })
+    const Field = Native.component({
+      name: "Field",
+      model: Schema.Struct({ initial: Schema.UndefinedOr(Schema.String) }),
+      message: Msg
+    }).make({
+      init: () => ({ initial: "hello" }),
+      update: {
+        SetDefault: ($, { value }) => $.evolve({ initial: value })
+      },
+      view: (h, model) => {
+        void (() => {
+          // @ts-expect-error known InputProps key rejects wrong value type
+          h.input.prop("multiline", 123)
+        })
+        return h.input
+          .prop("defaultValue", model.initial)
+          .prop("multiline", true)
+          .prop("keyboardType", "default")
+          .prop("returnKeyType", "done")
+          .prop("submitBehavior", "newline")
+          .prop("placeholderTextColor", "#9ca3af")
+          .prop("selectionColor", "#3b82f6")
+          .prop("customNativeProp", 123)
+      }
+    })
+    const { close, fabric, find, made, root, settle } = await FakeFabric.mount(
+      (container) => Renderer.mount(Field, {}, container)
+    )
+    const input = () => find(FakeFabric.byName("AndroidTextInput"))
+    const node = input().handle as NativeHost.NativeNode
+    assert.strictEqual(input().props.text, "hello")
+    assert.strictEqual(input().props.mostRecentEventCount, 0)
+
+    // Native edits on an uncontrolled input are not restored.
+    fabric.emit(input(), "topChange", { text: "hello!", eventCount: 2 })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    assert.deepStrictEqual(fabric.commands, [])
+
+    Native.setSelection(made.operations, node, 3)
+    Native.setSelection(made.operations, node, 1, 4)
+    Native.clear(made.operations, node)
+    assert.strictEqual(node.props.text, "")
+
+    // Updating defaultValue replaces text; clearing it sends no command.
+    root.send(Msg.SetDefault({ value: "next" }))
+    await settle()
+    assert.strictEqual(input().props.text, "next")
+    root.send(Msg.SetDefault({ value: undefined }))
+    await settle()
+    assert.isUndefined(input().props.text)
+
+    const tag = input().tag
+    assert.deepStrictEqual(fabric.commands, [
+      [tag, "setTextAndSelection", [2, null, 3, 3]],
+      [tag, "setTextAndSelection", [2, null, 1, 4]],
+      [tag, "setTextAndSelection", [2, "", 0, 0]],
+      [tag, "setTextAndSelection", [2, "next", -1, -1]]
+    ])
+    await close()
+  })
+
+  it("delivers textLayout and input events for Android and iOS", async () => {
+    const received: Array<unknown> = []
+    const Msg = UiSchema.TaggedEnum({
+      Recorded: { entry: Schema.Unknown }
+    })
+    const record = (entry: unknown) => Msg.Recorded({ entry })
+    const Events = Native.component({
+      name: "Events",
+      model: Schema.Number,
+      message: Msg
+    }).make({
+      init: () => 0,
+      update: {
+        Recorded: ($, { entry }) => {
+          received.push(entry)
+          return $.model + 1
+        }
+      },
+      view: (h) =>
+        h.view.children(
+          h.text
+            .on("textLayout", ({ lines }) =>
+              record(["textLayout", lines.length, lines[0]?.text]))
+            .children("Hi"),
+          h.input
+            .on("selectionChange", ({ selection }) =>
+              record(["selection", selection.start, selection.end]))
+            .on("keyPress", ({ key }) => record(["key", key]))
+            .on("contentSizeChange", ({ contentSize }) =>
+              record(["size", contentSize.width, contentSize.height]))
+            .on("endEditing", ({ value }) => record(["endEditing", value]))
+        )
+    })
+    const { close, fabric, find, settle } = await FakeFabric.mount(
+      (container) => Renderer.mount(Events, {}, container)
+    )
+    const text = find(FakeFabric.byName("RCTText"))
+    const input = find(FakeFabric.byName("AndroidTextInput"))
+    assert.strictEqual(text.props.onTextLayout, true)
+    assert.strictEqual(input.props.onSelectionChange, true)
+    assert.strictEqual(input.props.onKeyPress, true)
+    assert.strictEqual(input.props.onContentSizeChange, true)
+    assert.strictEqual(input.props.onEndEditing, true)
+
+    fabric.emit(text, "topTextLayout", {
+      lines: [{
+        text: "Hi",
+        x: 0,
+        y: 0,
+        width: 20,
+        height: 18,
+        ascender: 14,
+        descender: 4,
+        capHeight: 12,
+        xHeight: 8
+      }]
+    })
+    // Android and iOS payload shapes for each input event.
+    fabric.emit(input, "topSelectionChange", {
+      selection: { start: 1, end: 3 }
+    })
+    fabric.emit(input, "topSelectionChange", {
+      selection: { start: 2, end: 2 },
+      text: "ab",
+      target: 1,
+      eventCount: 4
+    })
+    fabric.emit(input, "topKeyPress", { key: "Backspace" })
+    fabric.emit(input, "topKeyPress", { key: "Tab", eventCount: 5 })
+    fabric.emit(input, "topContentSizeChange", {
+      contentSize: { width: 100, height: 44 },
+      target: 1
+    })
+    fabric.emit(input, "topContentSizeChange", {
+      contentSize: { width: 100, height: 66 }
+    })
+    fabric.emit(input, "topEndEditing", { text: "android", target: 1 })
+    fabric.emit(input, "topEndEditing", {
+      text: "ios",
+      target: 1,
+      eventCount: 6
+    })
+    await settle()
+
+    assert.deepStrictEqual(received, [
+      ["textLayout", 1, "Hi"],
+      ["selection", 1, 3],
+      ["selection", 2, 2],
+      ["key", "Backspace"],
+      ["key", "Tab"],
+      ["size", 100, 44],
+      ["size", 100, 66],
+      ["endEditing", "android"],
+      ["endEditing", "ios"]
+    ])
+    await close()
+  })
 })
