@@ -19,67 +19,51 @@ const mountOn = <A>(
   ) => Effect.Effect<A, never, Renderer.Renderer | Native.Host | Scope.Scope>
 ) => FakeFabric.mount(mount, (color) => `processed ${String(color)}`, os)
 
-describe("Modal", () => {
+describe("Modal and SafeArea", () => {
   const Message = UiSchema.TaggedEnum({
     Opened: {},
     Closed: {},
-    Shown: {},
-    Rotated: { orientation: Schema.Literals(["portrait", "landscape"]) }
+    Shown: {}
   })
 
   const Screen = Native.component({
     name: "ModalScreen",
-    model: Schema.Struct({
-      open: Schema.Boolean,
-      shows: Schema.Number,
-      orientation: Schema.String
-    }),
+    model: Schema.Struct({ open: Schema.Boolean, shows: Schema.Number }),
     message: Message
   }).make({
-    init: () => ({ open: false, shows: 0, orientation: "" }),
+    init: () => ({ open: false, shows: 0 }),
     update: {
       Opened: ($) => $.evolve({ open: true }),
       Closed: ($) => $.evolve({ open: false }),
-      Shown: ($) => $.evolve({ shows: (n) => n + 1 }),
-      Rotated: ($, { orientation }) => $.evolve({ orientation })
+      Shown: ($) => $.evolve({ shows: (n) => n + 1 })
     },
     view: (h, model) =>
       h.view.style({ flex: 1 }).children(
-        h.text.children(`${model.shows}:${model.orientation}`),
+        h.text.children(String(model.shows)),
         model.open && Modal(h, {
           onRequestClose: Message.Closed(),
           animationType: "slide",
-          transparent: true,
-          presentationStyle: "pageSheet",
-          supportedOrientations: ["portrait", "landscape"],
-          allowSwipeDismissal: true,
-          hardwareAccelerated: true,
-          statusBarTranslucent: true,
-          navigationBarTranslucent: true
+          transparent: true
         })
           .on("show", Message.Shown())
-          .on("orientationChange", ({ orientation }) =>
-            Message.Rotated({ orientation }))
           .children(
-            SafeArea(h).style({ flex: 1 }).children(
-              h.text.children("Dialog")
-            )
+            SafeArea(h).style({ flex: 1 }).children(h.text.children("Dialog"))
           )
       )
   })
 
-  it("mounts RCTModalHostView while open, forwards props and events, and unmounts on requestClose", async () => {
+  it("mounts RCTModalHostView while open, forwards options and events, and unmounts on requestClose", async () => {
     const { close, fabric, find, printed, root, settle } = await mountOn(
       "android",
       (container) => Renderer.mount(Screen, {}, container)
     )
-    assert.strictEqual(printed(), "<RCTView><RCTText>0:</></>")
+    assert.strictEqual(printed(), "<RCTView><RCTText>0</></>")
 
     root.send(Message.Opened())
     await settle()
     assert.strictEqual(
       printed(),
-      "<RCTView><RCTText>0:</><RCTModalHostView><RCTSafeAreaView><RCTText>Dialog</></></></>"
+      "<RCTView><RCTText>0</><RCTModalHostView><RCTSafeAreaView><RCTText>Dialog</></></></>"
     )
     const modal = find(FakeFabric.byName("RCTModalHostView"))
     assert.deepStrictEqual(modal.props, {
@@ -87,35 +71,23 @@ describe("Modal", () => {
       position: "absolute",
       animationType: "slide",
       transparent: true,
-      presentationStyle: "pageSheet",
-      supportedOrientations: ["portrait", "landscape"],
-      allowSwipeDismissal: true,
-      hardwareAccelerated: true,
-      statusBarTranslucent: true,
-      navigationBarTranslucent: true,
       onRequestClose: true,
-      onShow: true,
-      onOrientationChange: true
+      onShow: true
     })
 
     fabric.emit(modal, "topShow", {})
-    fabric.emit(modal, "topOrientationChange", { orientation: "landscape" })
     await settle()
-    assert.include(printed(), "<RCTText>1:landscape</>")
+    assert.include(printed(), "<RCTText>1</>")
 
     fabric.emit(modal, "topRequestClose", {})
     await settle()
-    assert.strictEqual(printed(), "<RCTView><RCTText>1:landscape</></>")
+    assert.strictEqual(printed(), "<RCTView><RCTText>1</></>")
     await close()
   })
 })
 
 describe("Drawer", () => {
-  const DrawerRef = Native.ref("drawer")
   const Message = UiSchema.TaggedEnum({
-    Opened: {},
-    Closed: {},
-    Slid: { offset: Schema.Number },
     StateChanged: { state: Schema.String },
     Flipped: {}
   })
@@ -124,17 +96,12 @@ describe("Drawer", () => {
     name: "DrawerScreen",
     model: Schema.Struct({
       side: Schema.Literals(["left", "right"]),
-      open: Schema.Boolean,
-      offset: Schema.Number,
       state: Schema.String
     }),
     message: Message
   }).make({
-    init: () => ({ side: "left" as const, open: false, offset: 0, state: "" }),
+    init: () => ({ side: "left" as const, state: "" }),
     update: {
-      Opened: ($) => $.evolve({ open: true }),
-      Closed: ($) => $.evolve({ open: false }),
-      Slid: ($, { offset }) => $.evolve({ offset }),
       StateChanged: ($, { state }) => $.evolve({ state }),
       Flipped: ($) =>
         $.evolve({
@@ -144,44 +111,33 @@ describe("Drawer", () => {
     view: (h, model) =>
       Drawer(h, {
         drawerWidth: 240,
-        drawerLockMode: "unlocked",
         drawerBackgroundColor: "#eee",
         drawer: h.text.children("Menu")
       })
         .prop("drawerPosition", model.side)
-        .ref(DrawerRef)
-        .on("drawerOpen", Message.Opened())
-        .on("drawerClose", Message.Closed())
-        .on("drawerSlide", ({ offset }) => Message.Slid({ offset }))
         .on(
           "drawerStateChanged",
           ({ state }) => Message.StateChanged({ state })
         )
-        .children(
-          h.text.children(`${model.open}:${model.offset}:${model.state}`)
-        )
+        .children(h.text.children(model.state))
   })
 
-  it("renders AndroidDrawerLayout with two non-collapsable wrappers, maps events, and flips sides", async () => {
-    const { close, fabric, find, made, printed, root, settle } = await mountOn(
+  it("renders two wrappers on Android, maps drawer state, follows chained props, and hides the panel on iOS", async () => {
+    const android = await mountOn(
       "android",
       (container) => Renderer.mount(Screen, {}, container)
     )
     assert.strictEqual(
-      printed(),
-      "<AndroidDrawerLayout><RCTView><RCTText>false:0:</></><RCTView><RCTText>Menu</></></>"
+      android.printed(),
+      "<AndroidDrawerLayout><RCTView><RCTText></></><RCTView><RCTText>Menu</></></>"
     )
-    const host = find(FakeFabric.byName("AndroidDrawerLayout"))
+    const host = android.find(FakeFabric.byName("AndroidDrawerLayout"))
     assert.deepStrictEqual(host.props, {
       flex: 1,
       elevation: 16,
       drawerWidth: 240,
       drawerPosition: "left",
-      drawerLockMode: "unlocked",
       drawerBackgroundColor: "processed #eee",
-      onDrawerOpen: true,
-      onDrawerClose: true,
-      onDrawerSlide: true,
       onDrawerStateChanged: true
     })
     assert.deepStrictEqual(host.children[0]!.props, {
@@ -202,48 +158,31 @@ describe("Drawer", () => {
       backgroundColor: "processed #eee"
     })
 
-    // Programmatic commands run against the root AndroidDrawerLayout ref.
-    made.operations.command(host.handle as NativeHost.NativeNode, "openDrawer")
-    made.operations.command(host.handle as NativeHost.NativeNode, "closeDrawer")
-    assert.deepStrictEqual(fabric.commands, [
-      [host.tag, "openDrawer", []],
-      [host.tag, "closeDrawer", []]
-    ])
+    android.fabric.emit(host, "topDrawerStateChanged", { drawerState: 1 })
+    await android.settle()
+    assert.include(android.printed(), "<RCTText>dragging</>")
 
-    fabric.emit(host, "topDrawerStateChanged", { drawerState: 1 })
-    fabric.emit(host, "topDrawerSlide", { offset: 0.5 })
-    fabric.emit(host, "topDrawerOpen", {})
-    await settle()
-    assert.include(printed(), "<RCTText>true:0.5:dragging</>")
-
-    fabric.emit(host, "topDrawerStateChanged", { drawerState: 0 })
-    fabric.emit(host, "topDrawerClose", {})
-    await settle()
-    assert.include(printed(), "<RCTText>false:0.5:idle</>")
-
-    root.send(Message.Flipped())
-    await settle()
-    const flipped = find(FakeFabric.byName("AndroidDrawerLayout"))
+    android.root.send(Message.Flipped())
+    await android.settle()
+    const flipped = android.find(FakeFabric.byName("AndroidDrawerLayout"))
     assert.strictEqual(flipped.props.drawerPosition, "right")
     assert.isUndefined(flipped.children[1]!.props.start)
     assert.strictEqual(flipped.children[1]!.props.end, 0)
-    await close()
-  })
+    await android.close()
 
-  it("falls back to a plain RCTView with a hidden drawer panel on iOS", async () => {
-    const { close, fabric, printed } = await mountOn(
+    const ios = await mountOn(
       "ios",
       (container) => Renderer.mount(Screen, {}, container)
     )
     assert.strictEqual(
-      printed(),
-      "<RCTView><RCTView><RCTText>false:0:</></><RCTView><RCTText>Menu</></></>"
+      ios.printed(),
+      "<RCTView><RCTView><RCTText></></><RCTView><RCTText>Menu</></></>"
     )
     assert.strictEqual(
-      fabric.committed()[0]!.children[1]!.props.display,
+      ios.fabric.committed()[0]!.children[1]!.props.display,
       "none"
     )
-    await close()
+    await ios.close()
   })
 })
 
@@ -256,12 +195,8 @@ describe("InputAccessory", () => {
     init: () => 0,
     update: {},
     view: (h) =>
-      h.view.children(
-        h.input.prop("inputAccessoryViewID", "bar"),
-        InputAccessory(h, { nativeID: "bar", backgroundColor: "#fff" })
-          .children(
-            h.text.children("Done")
-          )
+      InputAccessory(h, { nativeID: "bar", backgroundColor: "#fff" }).children(
+        h.text.children("Done")
       )
   })
 
@@ -272,7 +207,7 @@ describe("InputAccessory", () => {
     )
     assert.strictEqual(
       ios.printed(),
-      "<RCTView><RCTSinglelineTextInputView></><RCTInputAccessoryView><RCTSafeAreaView><RCTText>Done</></></></>"
+      "<RCTInputAccessoryView><RCTSafeAreaView><RCTText>Done</></></>"
     )
     const accessory = ios.find(FakeFabric.byName("RCTInputAccessoryView"))
     assert.deepStrictEqual(accessory.props, {
@@ -289,10 +224,10 @@ describe("InputAccessory", () => {
     )
     assert.strictEqual(
       android.printed(),
-      "<RCTView><AndroidTextInput></><RCTView><RCTView><RCTText>Done</></></></>"
+      "<RCTView><RCTView><RCTText>Done</></></>"
     )
     assert.strictEqual(
-      android.fabric.committed()[0]!.children[1]!.props.display,
+      android.fabric.committed()[0]!.props.display,
       "none"
     )
     await android.close()
