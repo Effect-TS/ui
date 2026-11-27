@@ -274,16 +274,19 @@ export const Shipped: Context.Reference<ShippedContext | undefined> = Context
  * @internal
  */
 export interface Persistence {
-  /** The saved Success of an entry, decoded. */
+  /** The saved Success a new entry starts from, decoded. */
   readonly get: (
-    def: any,
+    def: ReturnType<typeof Query.defOf>,
     argsKey: string
   ) => AsyncResult.Success<any, any> | undefined
-  /** Called with every Success the cache stores. */
+  /**
+   * Called with every result the cache stores. `report` is that cache's
+   * problems sink, which this Layer's own context may not hold.
+   */
   readonly save: (
-    def: any,
+    def: ReturnType<typeof Query.defOf>,
     argsKey: string,
-    result: AsyncResult.Success<any, any>,
+    result: AsyncResult.AsyncResult<any, any>,
     report: (problem: Query.Problem.Any) => void
   ) => void
 }

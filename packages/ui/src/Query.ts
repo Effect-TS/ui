@@ -2401,7 +2401,7 @@ interface QueryDef {
     | undefined
   readonly tags: ReadonlyArray<string>
   /** Restored from and saved to `QueryPersistence`, when an app provides it. */
-  readonly persist: boolean
+  readonly persist: boolean | undefined
   /** Throws when the args don't encode, or encode to something JSON can't carry. */
   readonly argsKey: (args: unknown) => string
   /** The args with the optional `undefined` properties of an args struct dropped, as the key sees them. */
@@ -2588,7 +2588,7 @@ const makeDef = (
     tags: (options.tags ?? []).map((tag) => tag.name),
     argsKey,
     logKey,
-    persist: options.persist === true,
+    persist: options.persist,
     list,
     live
   }
@@ -5017,21 +5017,30 @@ const buildCache = (
   }
   const lookup = (def: QueryDef, argsKey: string): Entry | undefined =>
     index.get(def.name)?.get(argsKey)
+  /** What a new entry starts from. Nothing while a hydrated page is adopted. */
+  const savedOf = (
+    def: QueryDef,
+    argsKey: string
+  ): AsyncResult.Success<any, any> | undefined =>
+    adopting ? undefined : persistence?.get(def, argsKey)
   const ensureEntry = (
     def: QueryDef,
     args: unknown,
-    argsKey = def.argsKey(args)
+    argsKey = def.argsKey(args),
+    saved?: AsyncResult.Success<any, any>
   ): Entry => {
     const found = lookup(def, argsKey)
     if (found !== undefined) return found
+    saved ??= savedOf(def, argsKey)
     const entry: Entry = {
       def,
       argsKey,
       args,
       logKey: undefined,
-      result: undefined,
-      settledAt: 0,
-      invalidated: false,
+      // A saved Success is stale from the start, as a seed is.
+      result: saved,
+      settledAt: saved === undefined ? 0 : now(),
+      invalidated: saved !== undefined,
       removed: false,
       watchers: new Set(),
       waiters: new Set(),
@@ -5060,18 +5069,7 @@ const buildCache = (
     let byKey = index.get(def.name)
     if (byKey === undefined) index.set(def.name, byKey = new Map())
     byKey.set(argsKey, entry)
-    restore(entry)
     return entry
-  }
-  /** A new entry starts from its saved Success, stale, as a seed does. */
-  const restore = (entry: Entry): void => {
-    const saved = adopting
-      ? undefined
-      : persistence?.get(entry.def, entry.argsKey)
-    if (saved === undefined) return
-    entry.result = saved
-    entry.settledAt = now()
-    entry.invalidated = true
   }
   const removeEntry = (entry: Entry): void => {
     if (entry.removed) return
@@ -5555,9 +5553,7 @@ const buildCache = (
   }
   /** A settle or a stored write: patches held after success are confirmed and go. */
   const store = (entry: Entry, result: Settled): void => {
-    if (result._tag === "Success") {
-      persistence?.save(entry.def, entry.argsKey, result, report)
-    }
+    persistence?.save(entry.def, entry.argsKey, result, report)
     entry.result = result
     entry.settledAt = now()
     entry.invalidated = false
@@ -5979,11 +5975,12 @@ const buildCache = (
     const registered = register(def)
     const argsKey = registered.argsKey(args)
     let entry = lookup(registered, argsKey)
-    // A saved value makes an entry, which idles out like any other. A cold one goes at once.
-    if (
-      entry === undefined && persistence !== undefined && registered.persist
-    ) {
-      afterQuiet(entry = ensureEntry(registered, args, argsKey))
+    if (entry === undefined) {
+      // Only a saved value makes an entry here. It idles out like any other.
+      const saved = savedOf(registered, argsKey)
+      if (saved !== undefined) {
+        afterQuiet(entry = ensureEntry(registered, args, argsKey, saved))
+      }
     }
     return entry === undefined ? AsyncResult.initial() : view(entry)
   }

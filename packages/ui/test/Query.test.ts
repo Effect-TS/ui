@@ -104,6 +104,19 @@ const watch = Effect.fnUntraced(
   }
 )
 
+// A session over the test's one store: every build of it is a reload.
+const persisted = Effect.fnUntraced(
+  function*<A, E>(query: Layer.Layer<A, E>) {
+    const store = yield* KeyValueStore.KeyValueStore
+    return Layer.merge(query, Query.layer()).pipe(
+      Layer.provide(
+        QueryPersistence.layerKvs({ prefix: "notes", maxAge: "7 days" })
+      ),
+      Layer.provide(Layer.succeed(KeyValueStore.KeyValueStore, store))
+    )
+  }
+)
+
 const triggers = Effect.map(
   TestQuery.fetches,
   (fetches) =>
@@ -1651,23 +1664,10 @@ describe("Query", () => {
       })
     }
     return Effect.gen(function*() {
-      const store = Layer.succeed(
-        KeyValueStore.KeyValueStore,
-        yield* KeyValueStore.KeyValueStore
-      )
-      const session = () =>
-        Layer.merge(GetNotes.layer, Query.layer()).pipe(
-          Layer.provide(
-            QueryPersistence.layerKvs({
-              prefix: "notes",
-              maxAge: "7 days"
-            })
-          ),
-          Layer.provide(store)
-        )
+      const session = yield* persisted(GetNotes.layer)
 
       const saved = yield* GetNotes.get({ folder: "inbox" }).pipe(
-        Effect.provide(session())
+        Effect.provide(session)
       )
       assert.deepStrictEqual(saved, ["draft", "todo"])
       assert.strictEqual(calls, 1)
@@ -1711,7 +1711,7 @@ describe("Query", () => {
             "todo"
           ])
         }
-      }).pipe(Effect.provide(session()))
+      }).pipe(Effect.provide(session))
     }).pipe(Effect.provide(KeyValueStore.layerMemory))
   })
 
@@ -1731,22 +1731,9 @@ describe("Query", () => {
       })
     }
     return Effect.gen(function*() {
-      const store = Layer.succeed(
-        KeyValueStore.KeyValueStore,
-        yield* KeyValueStore.KeyValueStore
-      )
-      const session = () =>
-        Layer.merge(GetNotes.layer, Query.layer()).pipe(
-          Layer.provide(
-            QueryPersistence.layerKvs({
-              prefix: "notes-hydrate",
-              maxAge: "7 days"
-            })
-          ),
-          Layer.provide(store)
-        )
+      const session = yield* persisted(GetNotes.layer)
 
-      yield* GetNotes.get({ folder: "inbox" }).pipe(Effect.provide(session()))
+      yield* GetNotes.get({ folder: "inbox" }).pipe(Effect.provide(session))
       assert.strictEqual(calls, 1)
 
       yield* Effect.gen(function*() {
@@ -1765,7 +1752,7 @@ describe("Query", () => {
         const got = yield* GetNotes.get({ folder: "inbox" })
         assert.deepStrictEqual(got, ["server"])
         assert.strictEqual(calls, 1)
-      }).pipe(Effect.provide(session()))
+      }).pipe(Effect.provide(session))
     }).pipe(Effect.provide(KeyValueStore.layerMemory))
   })
 
@@ -1778,18 +1765,8 @@ describe("Query", () => {
       static readonly layer = this.toLayer(() => Effect.succeed("saved"))
     }
     return Effect.gen(function*() {
-      const store = Layer.succeed(
-        KeyValueStore.KeyValueStore,
-        yield* KeyValueStore.KeyValueStore
-      )
-      const session = () =>
-        Layer.merge(GetNotes.layer, Query.layer()).pipe(
-          Layer.provide(
-            QueryPersistence.layerKvs({ prefix: "notes", maxAge: "7 days" })
-          ),
-          Layer.provide(store)
-        )
-      yield* GetNotes.get({}).pipe(Effect.provide(session()))
+      const session = yield* persisted(GetNotes.layer)
+      yield* GetNotes.get({}).pipe(Effect.provide(session))
 
       yield* Effect.gen(function*() {
         const cache = Query.internals(yield* Query.Cache)
@@ -1799,7 +1776,7 @@ describe("Query", () => {
         const peeked = yield* GetNotes.peek({})
         assert(AsyncResult.isSuccess(peeked))
         assert.strictEqual(peeked.value, "saved")
-      }).pipe(Effect.provide(session()))
+      }).pipe(Effect.provide(session))
     }).pipe(Effect.provide(KeyValueStore.layerMemory))
   })
 })

@@ -75,7 +75,6 @@ import * as Latch from "effect/Latch"
 import * as Layer from "effect/Layer"
 import * as KeyValueStore from "effect/persistence/KeyValueStore"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
-import type * as Schema from "effect/Schema"
 import * as queryCore from "./internal/queryCore.ts"
 import { holdsRedacted } from "./internal/schemaRedact.ts"
 import type * as Query from "./Query.ts"
@@ -94,24 +93,10 @@ export class SaveFailed extends Data.TaggedClass("SaveFailed")<{
   readonly part: "encode" | "write"
 }> {}
 
-/** What this module reads of a query's definition. */
-interface Def {
-  readonly name: string
-  readonly persist: boolean
-  readonly args: Schema.Top
-  readonly success: Schema.Top
-  readonly error: Schema.Top
-  readonly codec: () => {
-    readonly encodeSuccess: (value: unknown) => unknown
-    readonly decodeSuccess: (encoded: unknown) => unknown
-  }
-}
+type Def = ReturnType<typeof Query.defOf>
 
 interface Saved {
   readonly version: string | undefined
-  readonly savedAt: number
-  readonly query: string
-  readonly argsKey: string
   readonly value: unknown
   readonly timestamp: number
 }
@@ -119,16 +104,26 @@ interface Saved {
 const parse = (text: string | undefined): Saved | undefined => {
   try {
     const saved = JSON.parse(text!)
-    return typeof saved.savedAt === "number" &&
-        typeof saved.query === "string" &&
-        typeof saved.argsKey === "string" &&
-        typeof saved.timestamp === "number" && "value" in saved
+    return typeof saved.timestamp === "number" && "value" in saved
       ? saved
       : undefined
   } catch {
     return undefined
   }
 }
+
+/** A query whose Schemas hold a `Schema.Redacted` never leaves memory. */
+const persisted = (def: Def): boolean | undefined =>
+  def.persist && !holdsRedacted(def.args.ast) &&
+  !holdsRedacted(def.success.ast) && !holdsRedacted(def.error.ast)
+
+const failed = (query: string, part: "encode" | "write"): SaveFailed =>
+  new SaveFailed({
+    query,
+    part,
+    message: "[QueryPersistence] an entry of " + JSON.stringify(query) +
+      " failed to " + part + ". It wasn't saved."
+  })
 
 /**
  * Persists `persist` queries to the `KeyValueStore`, one key per entry
@@ -159,60 +154,55 @@ export const layerKvs = (options: {
 }): Layer.Layer<never, never, KeyValueStore.KeyValueStore> => {
   const maxAge = Duration.toMillis(options.maxAge)
   const start = options.prefix + "/"
-  const keyOf = (query: string, argsKey: string) =>
-    start + query + "/" + argsKey
+  const keyOf = (def: Def, argsKey: string) => start + def.name + "/" + argsKey
   return Layer.effect(
     queryCore.Persistence,
     Effect.gen(function*() {
       const store = yield* KeyValueStore.KeyValueStore
-      const clock = yield* Clock.Clock
-      const now = clock.currentTimeMillisUnsafe()
+      const now = yield* Clock.currentTimeMillis
       const saved = new Map<string, Saved>()
-      for (const key of yield* Effect.orElseSucceed(store.keys, () => [])) {
-        if (!key.startsWith(start)) continue
-        const entry = parse(
-          yield* Effect.orElseSucceed(store.get(key), () => undefined)
-        )
-        if (
-          entry !== undefined && entry.version === options.version &&
-          now - entry.savedAt <= maxAge &&
-          keyOf(entry.query, entry.argsKey) === key
-        ) {
-          saved.set(key, entry)
-        } else {
-          yield* Effect.ignore(store.remove(key))
-        }
-      }
+      const keys = yield* Effect.orElseSucceed(store.keys, () => [])
+      yield* Effect.forEach(
+        keys.filter((key) => key.startsWith(start)),
+        (key) =>
+          Effect.flatMap(
+            Effect.orElseSucceed(store.get(key), () => undefined),
+            (text) => {
+              const entry = parse(text)
+              if (
+                entry !== undefined && entry.version === options.version &&
+                // A result is saved as it is stored, so its timestamp is when it was saved.
+                now - entry.timestamp <= maxAge
+              ) {
+                saved.set(key, entry)
+                return Effect.void
+              }
+              return Effect.ignore(store.remove(key))
+            }
+          ),
+        { concurrency: "unbounded", discard: true }
+      )
 
-      let report = (_: Query.Problem.Any): void => {}
-      const dirty = new Set<string>()
+      /** The keys the store is behind on, each with the report of its failed write. */
+      const dirty = new Map<string, () => void>()
       const latch = Latch.makeUnsafe()
       const flush = Effect.suspend(() => {
-        const keys = Array.from(dirty)
+        const writes = Array.from(dirty)
         dirty.clear()
-        return Effect.forEach(keys, (key) => {
-          const entry = saved.get(key)!
-          return Effect.try(() => JSON.stringify(entry)).pipe(
-            Effect.flatMap((text) => store.set(key, text)),
-            Effect.catch(() =>
-              Effect.sync(() =>
-                report(
-                  new SaveFailed({
-                    query: entry.query,
-                    part: "write",
-                    message: "[QueryPersistence] an entry of " +
-                      JSON.stringify(entry.query) + " failed to save."
-                  })
-                )
-              )
-            )
-          )
-        }, { discard: true })
+        latch.closeUnsafe()
+        return Effect.forEach(
+          writes,
+          ([key, onFailure]) =>
+            Effect.try(() => JSON.stringify(saved.get(key))).pipe(
+              Effect.flatMap((text) => store.set(key, text)),
+              Effect.catch(() => Effect.sync(onFailure))
+            ),
+          { concurrency: "unbounded", discard: true }
+        )
       })
       // Added before the fiber, so it runs after the fiber's interruption: what is left goes out once.
       yield* Effect.addFinalizer(() => flush)
       yield* latch.await.pipe(
-        Effect.andThen(latch.close),
         Effect.andThen(Effect.sleep(1000)),
         Effect.andThen(Effect.uninterruptible(flush)),
         Effect.forever,
@@ -220,9 +210,9 @@ export const layerKvs = (options: {
       )
 
       const persistence: queryCore.Persistence = {
-        get: (def: Def, argsKey) => {
-          const entry = def.persist
-            ? saved.get(keyOf(def.name, argsKey))
+        get: (def, argsKey) => {
+          const entry = persisted(def)
+            ? saved.get(keyOf(def, argsKey))
             : undefined
           if (entry === undefined) return undefined
           try {
@@ -234,36 +224,21 @@ export const layerKvs = (options: {
             return undefined
           }
         },
-        save: (def: Def, argsKey, result, sink) => {
-          if (
-            !def.persist || holdsRedacted(def.args.ast) ||
-            holdsRedacted(def.success.ast) || holdsRedacted(def.error.ast)
-          ) return
-          report = sink
+        save: (def, argsKey, result, report) => {
+          if (result._tag !== "Success" || !persisted(def)) return
           let value: unknown
           try {
             value = def.codec().encodeSuccess(result.value)
           } catch {
-            return sink(
-              new SaveFailed({
-                query: def.name,
-                part: "encode",
-                message: "[QueryPersistence] an entry of " +
-                  JSON.stringify(def.name) +
-                  " failed to encode. It wasn't saved."
-              })
-            )
+            return report(failed(def.name, "encode"))
           }
-          const key = keyOf(def.name, argsKey)
+          const key = keyOf(def, argsKey)
           saved.set(key, {
             version: options.version,
-            savedAt: clock.currentTimeMillisUnsafe(),
-            query: def.name,
-            argsKey,
             value,
             timestamp: result.timestamp
           })
-          dirty.add(key)
+          dirty.set(key, () => report(failed(def.name, "write")))
           latch.openUnsafe()
         }
       }
