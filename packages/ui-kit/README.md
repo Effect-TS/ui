@@ -62,6 +62,7 @@ A component that doesn't need an instance, such as `Switch`, is a plain view fun
 - [Select](src/Select.ts): a button that opens a list of options, whose open state and value live in your Model, with typeahead, the popup laid over the trigger with the selected option on its text, and inputs for a form.
 - [Separator](src/Separator.ts): a horizontal or vertical divider between sections of content.
 - [Slider](src/Slider.ts): a controlled slider with one thumb or a range, each thumb a native range input you supply.
+- [SortableList](src/SortableList.ts): a list reordered by dragging a row or, without a pointer, by activating a row's handle and choosing where it goes, with focus kept on the moved row and announcements for a live region.
 - [Switch](src/Switch.ts): a controlled on/off setting.
 - [Tabs](src/Tabs.ts): a list of tabs that each show a panel, whose active tab lives in your Model, with roving focus, link tabs, panel enter and exit transitions, and an indicator placed under the active tab with CSS variables.
 - [Toast](src/Toast.ts): `ToastProvider`, a stack of notifications that components inside it post to, which close after a timeout.

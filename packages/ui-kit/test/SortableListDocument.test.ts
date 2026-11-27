@@ -93,7 +93,7 @@ const box = (
     ({ left, top, width, height }) as DOMRect
 }
 
-describe("SortableList in a document", () => {
+describe("SortableList in a document", { concurrent: false }, () => {
   it.effect("keyboard reorder with h.lazy rows emits once, avoids row re-renders during move, and keeps focus on the moved handle", () =>
     Effect.gen(function*() {
       let rowRenders = 0
@@ -183,7 +183,7 @@ describe("SortableList in a document", () => {
         (li) => li.getAttribute("data-id")
       )
       assert.deepStrictEqual(order, ["b", "c", "a"])
-      assert.deepStrictEqual(root.model().events, [{ from: 0, to: 2 }])
+      assert.deepStrictEqual(root.model()?.events, [{ from: 0, to: 2 }])
       assert.strictEqual(document.activeElement?.id, "handle-a")
       assert.strictEqual(
         byId("status").textContent,
@@ -290,7 +290,7 @@ describe("SortableList in a document", () => {
         })
       )
       yield* tick
-      assert.deepStrictEqual(root.model().first, ["b", "c", "a"])
+      assert.deepStrictEqual(root.model()?.first, ["b", "c", "a"])
 
       // Real pointer drag: list 2 rejects list 1's row; list 1 accepts and reorders.
       const itemC = byId("first-c")
@@ -313,7 +313,7 @@ describe("SortableList in a document", () => {
       drag(itemC, "dragend", transfer)
       yield* tick
 
-      assert.deepStrictEqual(root.model().first, ["c", "b", "a"])
-      assert.deepStrictEqual(root.model().second, ["x", "y"])
+      assert.deepStrictEqual(root.model()?.first, ["c", "b", "a"])
+      assert.deepStrictEqual(root.model()?.second, ["x", "y"])
     }).pipe(Effect.scoped))
 })

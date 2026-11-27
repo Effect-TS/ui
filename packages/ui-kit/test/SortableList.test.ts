@@ -1,4 +1,4 @@
-import type { Component, View } from "@effect/ui"
+import type { Component, Mount, View } from "@effect/ui"
 import {
   DirectionProvider,
   SortableList,
@@ -48,11 +48,15 @@ const item = (id: string) => Locator.attr("data-testid", `item-${id}`)
 const handle = (id: string) => Locator.attr("data-testid", `handle-${id}`)
 const status = Locator.attr("data-testid", "status")
 
-type Scene = Effect.Success<
-  ReturnType<typeof HtmlScene.make<typeof SortableList, Html.Elements>>
->
+interface Scene {
+  readonly current: {
+    readonly pending: ReadonlyArray<{ readonly command: unknown }>
+  }
+  readonly resolve: (command: never, result: never) => unknown
+  readonly get: (locator: Locator.Locator) => Locator.Node
+}
 
-const drain = (scene: Scene) => {
+const drain = <S extends Scene>(scene: S): S => {
   for (const { command } of scene.current.pending) {
     scene.resolve(command as never, { found: true } as never)
   }
@@ -83,7 +87,10 @@ describe("SortableList", () => {
         standIn
       )
 
-      assert.strictEqual(scene.get(list).attrs?.["data-orientation"], "vertical")
+      assert.strictEqual(
+        scene.get(list).attrs?.["data-orientation"],
+        "vertical"
+      )
       assert.isUndefined(scene.get(list).attrs?.["data-moving"])
       assert.deepInclude(scene.get(status).attrs, {
         role: "status",
@@ -210,6 +217,7 @@ describe("SortableList", () => {
       scene.click(handle("b"))
       drain(scene)
       scene.fire(list, "focusout", { within: true, disabled: false })
+        .expectIgnored()
       assert.strictEqual(scene.get(list).attrs?.["data-moving"], "")
       scene.fire(list, "focusout", { within: false, disabled: false })
       drain(scene)
@@ -225,6 +233,12 @@ describe("SortableList", () => {
         { items: ["a", "b", "c"], orientation: "horizontal" },
         standIn
       )
+      // Without a DirectionProvider, a horizontal list tracks CSS `direction`.
+      const trackDirection =
+        (scene.get(list) as unknown as View.Element<unknown>)
+          .owned?.find((layer) => layer.mount !== undefined)
+          ?.mount as unknown as Mount.Issued<unknown, never, never, unknown>
+      scene.expectMount(trackDirection)
 
       assert.strictEqual(
         scene.get(list).attrs?.["data-orientation"],
@@ -263,7 +277,13 @@ describe("SortableList", () => {
       scene.fire(item("a"), "dragstart")
       scene.fire(item("b"), "dragover", { x: 10, y: 5, width: 100, height: 40 })
       assert.isUndefined(scene.get(item("b")).attrs?.["data-drop-position"])
-      scene.drop(item("b"), { data: dataA, x: 10, y: 5, width: 100, height: 40 })
+      scene.drop(item("b"), {
+        data: dataA,
+        x: 10,
+        y: 5,
+        width: 100,
+        height: 40
+      })
       assert.deepStrictEqual(scene.current.emitted, [])
 
       // Lower half of "b" drops "a" after "b" (index 1).
@@ -328,7 +348,7 @@ describe("SortableList", () => {
         }
       )
       const exit = yield* Effect.exit(bad)
-      assert.strictEqual(exit._tag, "Failure")
+      if (exit._tag !== "Failure") assert.fail("expected failure")
       assert.match(String(exit.cause), /a part for <button> was given <div>/)
     }))
 })
