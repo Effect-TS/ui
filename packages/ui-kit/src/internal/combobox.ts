@@ -52,7 +52,6 @@ import { grouped, valued } from "./list.ts"
 import { holdLayer, nextLayerOrder } from "./modal.ts"
 import { listenOutside, releasedOutside } from "./outside.ts"
 import { fillValue } from "./range.ts"
-import { mergeNow } from "./stream.ts"
 import { layered, raiseAbove } from "./topLayer.ts"
 import {
   frameOf,
@@ -1170,15 +1169,15 @@ const TrackCombobox = Mount.makeStream(
   "TrackCombobox",
   { args: TrackComboboxArgs },
   (node: HTMLElement, args, changes) =>
-    mergeNow(
+    Stream.merge(
+      watch(node, args, changes),
       Positioning.trackPosition(
         node,
         args.position,
         Stream.map(changes, (next) => next.position)
       ).pipe(
         Stream.map((placement) => Message.ChangedPlacement({ placement }))
-      ),
-      watch(node, args, changes)
+      )
     )
 )
 

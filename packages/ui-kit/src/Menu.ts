@@ -302,7 +302,6 @@ import {
   inSafeArea,
   type Point
 } from "./internal/safeArea.ts"
-import { mergeNow } from "./internal/stream.ts"
 import { layered, raiseAbove } from "./internal/topLayer.ts"
 import {
   frameOf,
@@ -2106,15 +2105,15 @@ const TrackMenu = Mount.makeStream(
   "TrackMenu",
   { args: TrackMenuArgs },
   (node: HTMLElement, args, changes) =>
-    mergeNow(
+    Stream.merge(
+      watch(node, args, changes),
       Positioning.trackPosition(
         node,
         args.position,
         Stream.map(changes, (next) => next.position)
       ).pipe(
         Stream.map((placement) => MenuMessage.ChangedPlacement({ placement }))
-      ),
-      watch(node, args, changes)
+      )
     )
 )
 
