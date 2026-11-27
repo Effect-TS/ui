@@ -361,9 +361,11 @@ it.layer(SaveNote.layer.pipe(Layer.provideMerge(Notes.layerMemory([note]))), {
 // host's scheduler then runs their fibers too, such as a backend's worker
 // that every root shares, and each step settles them with the tree. A Layer
 // merged beside the host with `Layer.mergeAll` runs on the default scheduler,
-// so a step can read the tree before that worker has published. A resolved
-// Promise or zero-delay timer gets one quiet macrotask after work runs;
-// anything taking real time outside Effect isn't waited for.
+// so a step can read the tree before that worker has published. After host
+// scheduler tasks run, settling waits for one quiet macrotask, allowing
+// resolved Promises and zero-delay timers to resume those fibers. With no
+// new tasks and no pending Command, fetch or lazy load, settling returns
+// without a macrotask wait. Drive longer waits from the test.
 
 // `NoteEditor` already provides the app's Layers, and an inner provide wins
 // over an outer one. So a test starts from `NoteEditorNoDeps` and provides

@@ -928,7 +928,7 @@ export class SettleError extends Data.TaggedError("SettleError")<{
   readonly log: ReadonlyArray<MessageLog.Entry>
 }> {}
 
-/** What each host's `ran` was when `settle` last returned. */
+/** Task count at the end of each host's last drain. */
 const settledAt = new WeakMap<TestHost, number>()
 
 const realTimer = <K extends "setTimeout" | "clearTimeout">(
@@ -942,7 +942,7 @@ const realTimer = <K extends "setTimeout" | "clearTimeout">(
   }
 }
 
-// Taken at load, unwrapping any fake clock so fake timers never hold `settle`.
+// Unwrap Sinon fake timers so settling does not require advancing the fake clock.
 const setTimeout = realTimer("setTimeout")
 const clearTimeout = realTimer("clearTimeout")
 
@@ -958,24 +958,27 @@ export const nextMacrotask = Effect.callback<void>((resume) => {
  *
  * **Details**
  *
- * A fiber blocked on a Queue or on `TestClock` counts as idle, so a
- * Subscription waiting for its next value, or a Command or fetch sleeping on
- * the clock, doesn't keep `settle` from returning; adjust `TestClock`, which
- * runs what it wakes. Whenever tasks ran on the test scheduler since the last
- * `settle`, `settle` waits one quiet macrotask so resolved Promises (from a
- * Subscription or a Layer fiber on the host's `Scheduler`) and zero-delay
- * timers can come back; pending Commands and fetches get up to three quiet
- * macrotasks. An idle `settle` returns without waiting. A run or fetch that
- * never returns is left in `pending()`. A `Component.lazy` load is waited for
- * until it settles. Fibers on the host's `Scheduler` run with the tree's
- * tasks, under the same budget: see `layer`. Then it undoes edits the Model
- * refused on each tree `mount` made.
+ * After tasks run on the test scheduler, `settle` waits for one macrotask
+ * with no further tasks. This gives resolved Promises and zero-delay timers
+ * a chance to resume Subscriptions and Layer fibers on the host's Scheduler.
+ * Pending Commands and fetches get up to three quiet macrotasks; a `Component.lazy`
+ * load is waited for until it settles.
+ *
+ * If no tasks have run since `settle` last drained the host and no Command,
+ * fetch or load is pending, `settle` returns without a macrotask wait.
+ *
+ * A fiber blocked on a Queue or `TestClock` does not prevent settling. Advance
+ * `TestClock` to wake sleeping fibers. Commands and fetches that have not
+ * returned remain in `pending()`.
+ *
+ * Fibers on the host's Scheduler share the tree's task budget: see `layer`.
+ * After draining, `settle` undoes edits the Model refused on each tree
+ * registered by `mount`.
  *
  * **Gotchas**
  *
- * Work that takes real time outside Effect (a real timer or a Promise that
- * doesn't resolve within a macrotask) isn't waited for; drive it from the test
- * instead.
+ * Except for lazy loads, `settle` does not wait indefinitely for Promises or
+ * real timers. Drive work that outlasts the macrotask grace from the test.
  *
  * A tree mounted with `Renderer.mount` directly isn't registered: `settle`
  * runs its work, but doesn't wait for its runs and fetches, report its crash
@@ -1012,7 +1015,7 @@ export const settle: Effect.Effect<
   })
 
 const drainAll = Effect.fnUntraced(function*(testHost: TestHost) {
-  // The budget covers every task, whether a drain ran it or the host's `Scheduler` did during a wait.
+  // Count tasks run by the scheduler during waits against the same budget.
   const limit = testHost.ran() + testHost.budget
   let quiet = 0
   while (true) {
@@ -1022,8 +1025,7 @@ const drainAll = Effect.fnUntraced(function*(testHost: TestHost) {
       if (!testHost.drain(limit - ran)) return yield* exhausted(testHost)
       continue
     }
-    // A run or fetch sleeping on the clock looks the same as one waiting on a Promise, so anything
-    // in flight gets the grace. With nothing in flight, what ran since the last settle gets one turn.
+    // Pending work may be waiting on either TestClock or a Promise; both get grace.
     const pending = testHost.pending()
     const grace = pending.length > 0
       ? 3
@@ -1031,7 +1033,6 @@ const drainAll = Effect.fnUntraced(function*(testHost: TestHost) {
       ? 0
       : 1
     if (quiet >= grace) break
-    // Something may come back from outside the scheduler, such as a resolved Promise.
     yield* nextMacrotask
     if (testHost.ran() > limit) return yield* exhausted(testHost)
     if (testHost.ran() !== ran) quiet = 0
