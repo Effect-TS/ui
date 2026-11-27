@@ -215,8 +215,8 @@ export const RequestSubmit: Command.Factory<
 )
 
 /**
- * Focuses the element `ref` names in the committing task once the render the
- * issuing `update` caused is committed, and sends `f`'s message.
+ * Focuses the element `ref` names, once the render the issuing `update`
+ * caused is committed, and sends `f`'s message.
  *
  * **Details**
  *
@@ -249,8 +249,7 @@ export const focus = <N extends HTMLElement | SVGElement, Msg>(
   Command.map(Focus.make(options === undefined ? { ref } : { ref, options }), f)
 
 /**
- * Takes focus away from the element `ref` names in the committing task once
- * the render commits, and sends `f`'s message.
+ * Takes focus away from the element `ref` names, and sends `f`'s message.
  *
  * @stability experimental
  * @category commands
@@ -263,8 +262,7 @@ export const blur = <N extends HTMLElement | SVGElement, Msg>(
   Command.map(Blur.make({ ref }), f)
 
 /**
- * Scrolls the element `ref` names into view in the committing task once the
- * render commits, and sends `f`'s message.
+ * Scrolls the element `ref` names into view, and sends `f`'s message.
  *
  * @stability experimental
  * @category commands
@@ -281,9 +279,8 @@ export const scrollIntoView = <N extends globalThis.Element, Msg>(
   )
 
 /**
- * Measures the element `ref` names in the committing task once the render
- * commits, and sends `f`'s message with its box, or `Option.none()` when the
- * ref isn't rendered.
+ * Measures the element `ref` names, and sends `f`'s message with its box, or
+ * `Option.none()` when the ref isn't rendered.
  *
  * @stability experimental
  * @category commands
@@ -303,9 +300,8 @@ export const measure = <N extends globalThis.Element, Msg>(
 > => Command.map(Measure.make({ ref }), f)
 
 /**
- * Selects all the text in the `input` or `textarea` `ref` names in the
- * committing task once the render the issuing `update` caused is committed,
- * and sends `f`'s message.
+ * Selects all the text in the `input` or `textarea` `ref` names, once the
+ * render the issuing `update` caused is committed, and sends `f`'s message.
  *
  * **Details**
  *
@@ -337,9 +333,8 @@ export const select = <N extends HTMLInputElement | HTMLTextAreaElement, Msg>(
   Command.map(Select.make({ ref }), f)
 
 /**
- * Submits the form of the element `ref` names in the committing task once the
- * render commits, as a press on its submit button would, and sends `f`'s
- * message.
+ * Submits the form of the element `ref` names, as a press on its submit
+ * button would, and sends `f`'s message.
  *
  * **Details**
  *
@@ -394,9 +389,8 @@ export const ShowPicker: Command.Factory<
 )
 
 /**
- * Opens the picker of the `input` or `select` `ref` names in the committing
- * task once the render commits, as a click on it would, and sends `f`'s
- * message.
+ * Opens the picker of the `input` or `select` `ref` names, as a click on
+ * it would, and sends `f`'s message.
  *
  * **When to use**
  *

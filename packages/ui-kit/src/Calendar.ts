@@ -324,10 +324,7 @@ const contextOf = (props: CalendarProps, monthStart = monthOf(props)) => ({
 const settled = ($: CalendarUpdate) =>
   $.model.pendingFocus === null ? $.model : $.evolve({ pendingFocus: null })
 
-const navigate = (
-  $: CalendarUpdate,
-  move: CalendarGridKey
-) => {
+const navigate = ($: CalendarUpdate, move: CalendarGridKey) => {
   if ($.props.disabled === true) return $.model
   const context = contextOf($.props)
   const syncing = !sameMonth($.model.shownMonth, context.monthStart)
@@ -552,6 +549,16 @@ export const Calendar = Html.component({
       })
     })
 
+    const pressedKey = (
+      { alt, ctrl, key, meta, shift }: Html.KeyPayload
+    ) => {
+      if (disabled || alt || ctrl || meta) return undefined
+      const move = gridKeyOf(key, shift, rtl)
+      return move === undefined
+        ? undefined
+        : CalendarMessage.PressedKey({ move })
+    }
+
     const cellPart = p.part("td", (b, date: DateTime.Utc) =>
       b.attrs({
         role: "gridcell",
@@ -593,17 +600,7 @@ export const Calendar = Html.component({
           )
           .on("focus", CalendarMessage.FocusedDay({ date }))
           .on("blur", CalendarMessage.BlurredDay())
-          .on(
-            "keydown",
-            ({ alt, ctrl, key: pressed, meta, shift }) => {
-              if (disabled || alt || ctrl || meta) return undefined
-              const move = gridKeyOf(pressed, shift, rtl)
-              return move === undefined
-                ? undefined
-                : CalendarMessage.PressedKey({ move })
-            },
-            { preventDefault: true }
-          )
+          .on("keydown", pressedKey, { preventDefault: true })
       }
     )
 

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { UiSchema } from "@effect/ui"
+import { type Component, UiSchema, type View } from "@effect/ui"
 import { Calendar, Field } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
@@ -7,6 +7,33 @@ import { DateTime, Effect, Schema } from "effect"
 import { byId, click, container, tick } from "./utils/document.ts"
 
 const utc = (iso: string) => DateTime.makeUnsafe(iso + "T00:00:00Z")
+
+// A grid whose day buttons have their ISO date as `id`.
+const grid = (
+  h: View.Tags<Html.Elements, any>,
+  calendar: Component.Headless.Parts<typeof Calendar>
+) =>
+  calendar.root(h.div).children(
+    calendar.grid(h.table).children(
+      h.tbody(
+        ...calendar.weeks.map((week) =>
+          h.tr(
+            ...week.map((date) =>
+              calendar.cell({ element: h.td, date }).children(
+                calendar.day({
+                  element: h.button.attr(
+                    "id",
+                    DateTime.formatIsoDateUtc(date)
+                  ),
+                  date
+                })
+              )
+            )
+          )
+        )
+      )
+    )
+  )
 
 const Message = UiSchema.TaggedEnum({
   Jumped: {},
@@ -54,28 +81,7 @@ const Page = Html.component({
           Picked: () => undefined,
           RequestedMonth: ({ month }) => Message.RequestedMonth({ month })
         },
-        view: (calendar) =>
-          calendar.root(h.div).children(
-            calendar.grid(h.table).children(
-              h.tbody(
-                ...calendar.weeks.map((week) =>
-                  h.tr(
-                    ...week.map((date) =>
-                      calendar.cell({ element: h.td, date }).children(
-                        calendar.day({
-                          element: h.button.attr(
-                            "id",
-                            DateTime.formatIsoDateUtc(date)
-                          ),
-                          date
-                        })
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          )
+        view: (calendar) => grid(h, calendar)
       })
     )
 })
@@ -188,28 +194,7 @@ const PickPage = Html.component({
           Picked: ({ date }) => PickMessage.Picked({ date }),
           RequestedMonth: ({ month }) => PickMessage.RequestedMonth({ month })
         },
-        view: (calendar) =>
-          calendar.root(h.div).children(
-            calendar.grid(h.table).children(
-              h.tbody(
-                ...calendar.weeks.map((week) =>
-                  h.tr(
-                    ...week.map((date) =>
-                      calendar.cell({ element: h.td, date }).children(
-                        calendar.day({
-                          element: h.button.attr(
-                            "id",
-                            DateTime.formatIsoDateUtc(date)
-                          ),
-                          date
-                        })
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          )
+        view: (calendar) => grid(h, calendar)
       })
     )
 })
@@ -235,14 +220,7 @@ const keydown = (id: string, key: string) =>
     new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })
   )
 
-const arrowRight = () =>
-  document.activeElement!.dispatchEvent(
-    new KeyboardEvent("keydown", {
-      key: "ArrowRight",
-      bubbles: true,
-      cancelable: true
-    })
-  )
+const arrowRight = () => keydown(document.activeElement!.id, "ArrowRight")
 
 // Enter on a focused button activates it with a click.
 const enter = () => (document.activeElement as HTMLElement).click()

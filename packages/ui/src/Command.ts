@@ -1018,13 +1018,13 @@ const define = (
   const stream = options.stream === true
   const mode = options.mode ?? "concurrent"
   const group = options.group ?? []
-  const commit = (options as { readonly [onCommit]?: boolean })[onCommit] ===
-    true
+  const commit = (options as { readonly [onCommit]?: true })[onCommit]
+    ? { [onCommit]: true }
+    : undefined
   const argsSchema = argsSchemaOf(options.args)
   const groupOf = makeGroup(name, argsSchema, group)
   return {
     [DefinitionTypeId]: DefinitionTypeId,
-    ...(commit ? { [onCommit]: true } : undefined),
     stream,
     mode,
     group,
@@ -1043,7 +1043,7 @@ const define = (
         afterRefetch: undefined,
         resolve: identity,
         reject: undefined,
-        ...(commit ? { [onCommit]: true } : undefined),
+        ...commit,
         ...issue(args)
       }, unmatched)
     }
