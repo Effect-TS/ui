@@ -221,7 +221,7 @@ interface Index<N> {
   readonly entries: ReadonlyArray<Entry<N>>
   readonly byNode: Map<N, Entry<N>>
   readonly byId: Map<string, N>
-  /** The `label` elements of each labeled control, in document order. */
+  /** Associated labels by control, in document order. */
   readonly labels: Map<N, Array<N>>
 }
 
@@ -408,7 +408,6 @@ const buildIndex = <N>(root: N): Index<N> => {
   }
   walk(root, false, modal !== undefined, [], false)
   for (const [label, first] of labels) {
-    // A label without `for` labels its first labelable descendant.
     const target = reader.attr(label, "for")
     const control = target === undefined ? first : index.byId.get(target)
     if (control === undefined || !isLabelable(reader, control)) continue

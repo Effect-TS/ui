@@ -2,4 +2,4 @@
 "@effect/ui": patch
 ---
 
-`HtmlLocator` role queries name a `<button>` or `<output>` by its associated `<label>` before its content, so `<label for="theme">Theme</label><button id="theme">Dark</button>` is the button "Theme".
+`HtmlLocator` role queries now find `<button>` and `<output>` elements by their associated `<label>` text, including buttons with `role="switch"`. Associated labels take precedence over element content, but not ARIA names.
