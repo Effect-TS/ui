@@ -1386,6 +1386,7 @@ export const StreamService: <Self>() => <
       readonly staleTime?: never
       readonly refetchInterval?: never
       readonly persist?: never
+      readonly reactivityKeys?: never
     }
 ) => StreamService<
   Self,
@@ -1407,7 +1408,13 @@ export const StreamService: <Self>() => <
   queryClass(makeDef(
     name,
     // Overridden, not left out: an options variable can still hold them.
-    { ...options, staleTime: 0, refetchInterval: undefined, persist: false },
+    {
+      ...options,
+      staleTime: 0,
+      refetchInterval: undefined,
+      persist: false,
+      reactivityKeys: undefined
+    },
     undefined,
     liveOps
   ))
@@ -5041,7 +5048,7 @@ const buildCache = (
     if (existing === undefined) {
       queries.set(def.name, def)
       if (
-        !settleOnce && def.reactivityKeys !== undefined &&
+        !disposed && !settleOnce && def.reactivityKeys !== undefined &&
         reactivity === undefined
       ) {
         report(
@@ -5091,7 +5098,8 @@ const buildCache = (
     const found = lookup(def, argsKey)
     if (found !== undefined) return found
     saved ??= savedOf(def, argsKey)
-    const keys = reactivity !== undefined && def.reactivityKeys !== undefined
+    const keys = !disposed && reactivity !== undefined &&
+        def.reactivityKeys !== undefined
       ? def.reactivityKeys(args)
       : undefined
     const entry: Entry = {

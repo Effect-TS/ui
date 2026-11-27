@@ -117,6 +117,14 @@ describe("Query", () => {
       success: Schema.Number,
       staleTime: 0
     })
+    const streamOpts = {
+      success: Schema.Number,
+      reactivityKeys: () => ["n"]
+    }
+    expect(Query.StreamService<"S">()).type.not.toBeCallableWith(
+      "S",
+      streamOpts
+    )
   })
 
   it("toLayer infers fakes and failures, rejects mismatched fetchers, and Layer.succeed still works", () => {

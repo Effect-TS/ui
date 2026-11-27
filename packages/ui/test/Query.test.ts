@@ -2038,12 +2038,17 @@ describe("Query", () => {
       )
       assert.strictEqual(registrations, 0)
 
-      // Cache disposal unregisters remaining entries.
+      // Cache disposal unregisters remaining entries, and a late watch registers nothing.
       yield* GetUser.prefetch({ id: "2" }).pipe(Effect.provideContext(ctx))
       yield* advance(10)
       assert.strictEqual(registrations, 1)
       yield* Scope.close(scope, Exit.void)
       assert.strictEqual(registrations, 0)
+      const late = yield* watch(
+        GetUser.changes({ id: "3" }).pipe(Stream.provideContext(ctx))
+      )
+      assert.strictEqual(registrations, 0)
+      yield* late.stop
     }).pipe(Effect.provide(reactivityLayer))
   })
 
