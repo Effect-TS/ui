@@ -296,6 +296,59 @@ describe("headless components in a story", () => {
       scene.click("Show").expect(copy).toHaveAttribute("data-active", false)
     }))
 
+  it.effect("a mounted child keeps its Model across new props, and one closed and placed again within a click starts from init", () =>
+    Effect.gen(function*() {
+      const CounterMessage = UiSchema.TaggedEnum({ Inc: {} })
+      const Counter = Html.component({
+        name: "Counter",
+        props: Schema.Struct({ seed: Schema.Number }),
+        model: Schema.Number,
+        message: CounterMessage
+      }).make({
+        init: ($) => $.set($.props.seed),
+        update: ($) => $.model + 1,
+        parts: (p, count) => ({
+          count,
+          button: p.part("button", (b) => b.on("click", CounterMessage.Inc()))
+        })
+      })
+      const Message = UiSchema.TaggedEnum({ Reseed: {}, Hide: {}, Show: {} })
+      const Panel = Html.component({
+        name: "Panel",
+        model: Schema.Struct({ seed: Schema.Number, shown: Schema.Boolean }),
+        message: Message
+      }).make({
+        init: () => ({ seed: 0, shown: true }),
+        update: ($, message) =>
+          Message.match(message, {
+            Reseed: () => ({ ...$.model, seed: 10 }),
+            Hide: () => ({ ...$.model, shown: false }),
+            Show: () => ({ ...$.model, shown: true })
+          }),
+        view: (h, model) =>
+          h.div(
+            h.button.on("click", Message.Reseed()).children("Reseed"),
+            h.button.on("pointerdown", Message.Hide())
+              .on("click", Message.Show()).children("Remount"),
+            model.shown && Counter(h, {
+              key: "counter",
+              props: { seed: model.seed },
+              view: (counter) =>
+                counter.button(h.button.attr("id", "count")).children(
+                  String(counter.count)
+                )
+            })
+          )
+      })
+      const count = Locator.attr("id", "count")
+      const scene = yield* HtmlScene.make(Panel, {})
+      // The runtime runs a mounted child's init once: new props don't run it again.
+      scene.click("Reseed").expect(count).toHaveText("0")
+        .click(count).expect(count).toHaveText("1")
+      // Hidden on pointerdown and shown on click, the counter is a new instance.
+      scene.click("Remount").expect(count).toHaveText("10")
+    }))
+
   it.effect("an author's story renders with the vocabulary it's given", () =>
     Effect.gen(function*() {
       const Neutral = Component.define({

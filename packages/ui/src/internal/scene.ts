@@ -403,9 +403,7 @@ const trackMounts = (
       }`
     )
   }
-  return engine.update(engine.placedChildren(state), {
-    ack: { ...state.ack, mounts, tree }
-  })
+  return engine.update(state, { ack: { ...state.ack, mounts, tree } })
 }
 
 /** The one mount of the scene matching `target`. Throws when none or several do, listing them. */

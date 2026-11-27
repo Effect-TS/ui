@@ -763,7 +763,15 @@ export const record = <Props, Model, Msg, Events>(
   render: () => View.Node<Msg, any>
 ): State<Props, Model, Msg, Events> => {
   let rendered: View.Node<Msg, any> | undefined
-  const view = () => rendered ??= render()
+  const view = () => {
+    if (rendered === undefined) {
+      rendered = render()
+      // A render that fails places nothing, so the next one starts from the Models this one started from.
+      const placed = placedModels(rendered, fields.childModels)
+      if (placed !== undefined) childModels.set(story, placed)
+    }
+    return rendered
+  }
   // A view value is a `Locator.Node` tree; a child is a node with no tag or text.
   const root = () => view() as Locator.Node
   const context = () =>
@@ -838,6 +846,22 @@ export const record = <Props, Model, Msg, Events>(
   return story
 }
 
+// The Models a render placed, by path, as the runtime keeps an instance while it's placed: `init` runs
+// once, and a child no longer placed is closed, so one placed again starts from `init`.
+const placedModels = (
+  expanded: View.Node<any, any>,
+  given: ReadonlyMap<string, unknown> | undefined
+): ReadonlyMap<string, unknown> | undefined => {
+  const ran = ranChildren.get(expanded)
+  if (ran === undefined) return given?.size ? new Map() : given
+  return given?.size === ran.size &&
+      [...ran].every(([path, child]) =>
+        given.has(path) && given.get(path) === child.model
+      )
+    ? given
+    : new Map([...ran].map(([path, child]) => [path, child.model]))
+}
+
 const fieldsOf = <Props, Model, Msg, Events>(
   story: State<Props, Model, Msg, Events>
 ): Fields<Props, Model, Msg, Events> => ({
@@ -882,26 +906,6 @@ export const update = <Props, Model, Msg, Events>(
       ? story.view
       : () => expandedView(fields)
   return record(fields, view)
-}
-
-/**
- * `story` without the Models of the headless children its view no longer places, as the runtime closes
- * their instances: one placed again starts from `init`.
- *
- * @internal
- */
-export const placedChildren = <Props, Model, Msg, Events>(
-  story: State<Props, Model, Msg, Events>
-): State<Props, Model, Msg, Events> => {
-  const given = childModels.get(story)
-  if (given === undefined) return story
-  const ran = ranChildren.get(story.view())
-  const kept = new Map(
-    [...given].filter(([path]) => ran?.has(path) === true)
-  )
-  return kept.size === given.size
-    ? story
-    : record({ ...fieldsOf(story), childModels: kept }, story.view)
 }
 
 /**
@@ -1922,7 +1926,7 @@ const dispatchChild = <Props, Model, Msg, Events>(
     undefined,
     sharedReads.record(component, ran.shared)
   )
-  let out = placedChildren(story)
+  let out = story
   if (next.model !== ran.model) {
     out = update(out, {
       childModels: new Map(childModels.get(out)).set(path, next.model)
