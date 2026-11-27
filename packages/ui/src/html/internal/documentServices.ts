@@ -64,7 +64,7 @@ const globalEventsOf = (
         },
         () => event.preventDefault()
       )
-    // Not `noteKey` itself, which subscriptions would share and lose when the first one stops.
+    // Each subscription needs its own listener; browsers deduplicate shared callbacks.
     const note = !custom && name === "keyup"
       ? (event: Event) => noteKey(event)
       : undefined

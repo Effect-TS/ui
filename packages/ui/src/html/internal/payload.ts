@@ -148,9 +148,8 @@ const fieldOf = (
     ? target
     : element) as HTMLInputElement
 
-// The physical keys whose keydown composed, until their keyup.
 const composingCodes = new Set<string>()
-// Keyups that released one, so every listener of the same keyup agrees.
+// Cache the result after releasing the key so all listeners of the event agree.
 const composingKeyups = new WeakSet<Event>()
 
 // Safari reports the key that ends a composition with `isComposing` false and `keyCode` 229.
@@ -158,8 +157,8 @@ const isComposingKey = (event: KeyboardEvent): boolean =>
   event.isComposing === true ||
   (event as { readonly keyCode?: number }).keyCode === 229
 
-// While a key is pending, its window reports every release, wherever focus
-// moves in the page. Losing focus to another window or frame forgets them.
+// Observe releases outside the host too, since focus can move while a key is held.
+// Window blur clears pending keys whose releases may occur in another window or frame.
 let watched: Window | null = null
 const watch = (view: Window | null): void => {
   if (view === watched) return
@@ -175,9 +174,8 @@ const forgetKeys = (): void => {
 }
 
 /**
- * Tracks keydown and keyup so the keyup of a key whose keydown composed still
- * reports `composing: true` after `compositionend`. Call it for both, before
- * any payload of the event is read, wherever either is listened for.
+ * Preserves `composing: true` for a commit key released after `compositionend`.
+ * Call for both keydown and keyup before reading the event payload.
  */
 export const noteKey = (event: Event): void => {
   const e = event as KeyboardEvent
@@ -188,7 +186,7 @@ export const noteKey = (event: Event): void => {
     composingCodes.add(e.code)
     return
   }
-  // A held key repeats its keydown, which is no new press.
+  // Auto-repeat after compositionend still belongs to the held commit key.
   if (e.type === "keydown" && e.repeat) return
   if (composingCodes.delete(e.code)) {
     if (e.type === "keyup") composingKeyups.add(event)
