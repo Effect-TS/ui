@@ -236,7 +236,7 @@ const originalUrl = (request: IncomingMessage): string =>
 
 const documentId = "virtual:@effect/ui/document"
 const serverId = "virtual:@effect/ui/server"
-const effectUiPattern = /^@effect\/ui/
+const effectUi = /^@effect\/ui/
 
 const declaration = [
   "import type { Context } from \"effect/Context\"",
@@ -276,29 +276,26 @@ export const plugin = (options: Options): Plugin => {
     name: "effect-ui-html-server",
     // Shared, so the server build sees the `templateFile` that `buildApp` sets.
     sharedDuringBuild: true,
-    async config(userConfig, { isPreview }) {
-      const uiPackages = await discoverUiPackages(
-        path.resolve(userConfig.root ?? "")
-      )
-      return {
-        // In dev, page requests that Vite doesn't answer reach the server
-        // entry. A preview serves `/about` from `about.html`.
-        appType: isPreview ? "mpa" : "custom",
-        builder: {},
-        ssr: { noExternal: [effectUiPattern, ...uiPackages] },
-        environments: {
-          ssr: {
-            build: {
-              copyPublicDir: false,
-              rolldownOptions: { input: { index: serverId } },
-              ...(options.serverOutDir === undefined
-                ? { write: false }
-                : { outDir: options.serverOutDir })
-            }
+    config: async ({ root }, { isPreview }) => ({
+      // In dev, page requests that Vite doesn't answer reach the server
+      // entry. A preview serves `/about` from `about.html`.
+      appType: isPreview ? "mpa" : "custom",
+      builder: {},
+      ssr: {
+        noExternal: [effectUi, ...await uiPackages(path.resolve(root ?? ""))]
+      },
+      environments: {
+        ssr: {
+          build: {
+            copyPublicDir: false,
+            rolldownOptions: { input: { index: serverId } },
+            ...(options.serverOutDir === undefined
+              ? { write: false }
+              : { outDir: options.serverOutDir })
           }
         }
       }
-    },
+    }),
     resolveId: (source) =>
       source === documentId || source === serverId ? `\0${source}` : undefined,
     async load(id) {
@@ -661,103 +658,65 @@ const send = async (response: Http.ServerResponse, answer: Response) => {
   }
 }
 
-interface PackageJson {
-  readonly dependencies?: Record<string, unknown> | undefined
-  readonly devDependencies?: Record<string, unknown> | undefined
-  readonly peerDependencies?: Record<string, unknown> | undefined
-}
+type PackageJson = Partial<
+  Record<"dependencies" | "devDependencies" | "peerDependencies", object>
+>
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-
-const readPackageJson = async (
-  dir: string
-): Promise<PackageJson | undefined> => {
-  try {
-    const parsed: unknown = JSON.parse(
-      await fs.readFile(path.join(dir, "package.json"), "utf8")
-    )
-    return isRecord(parsed) ? parsed : undefined
-  } catch {
-    return undefined
-  }
-}
-
-const closestPackageJson = async (
-  startDir: string
-): Promise<{ readonly dir: string; readonly pkg: PackageJson } | undefined> => {
-  let current = path.resolve(startDir)
+/** The closest `<sub>/package.json` at or above `from`, with its directory. */
+const findPackage = async (
+  from: string,
+  sub = ""
+): Promise<
+  { readonly dir: string; readonly json: PackageJson } | undefined
+> => {
+  let current = from
   while (true) {
-    const pkg = await readPackageJson(current)
-    if (pkg !== undefined) return { dir: current, pkg }
+    const dir = path.join(current, sub)
+    const json: PackageJson | null | undefined = await fs
+      .readFile(path.join(dir, "package.json"), "utf8")
+      .then(JSON.parse)
+      .catch(() => undefined)
+    if (json) return { dir, json }
     const parent = path.dirname(current)
     if (parent === current) return undefined
     current = parent
   }
 }
 
-const resolvePackage = async (
-  fromDir: string,
-  name: string
-): Promise<{ readonly dir: string; readonly pkg: PackageJson } | undefined> => {
-  let current = fromDir
-  while (true) {
-    if (path.basename(current) !== "node_modules") {
-      const dir = path.join(current, "node_modules", name)
-      const pkg = await readPackageJson(dir)
-      if (pkg !== undefined) return { dir, pkg }
-    }
-    const parent = path.dirname(current)
-    if (parent === current) return undefined
-    current = parent
-  }
-}
-
-const dependencyNames = (
-  ...fields: ReadonlyArray<unknown>
-): ReadonlyArray<string> => {
+/**
+ * The installed packages that depend on `@effect/ui`, found from the
+ * dependencies of the closest `package.json` at or above `root`, and from
+ * the dependencies of each package found.
+ */
+const uiPackages = async (root: string): Promise<Array<string>> => {
   const names = new Set<string>()
-  for (const field of fields) {
-    if (!isRecord(field)) continue
-    for (const name of Object.keys(field)) {
+  const crawled = new Set<string>()
+  const crawl = (
+    from: string,
+    dependencies: ReadonlyArray<string>
+  ): Promise<unknown> =>
+    Promise.all(dependencies.map(async (name) => {
+      const found = await findPackage(from, path.join("node_modules", name))
+      if (found === undefined) return
+      const own = Object.keys({
+        ...found.json.dependencies,
+        ...found.json.peerDependencies
+      })
+      if (!own.some((dependency) => effectUi.test(dependency))) return
       names.add(name)
-    }
-  }
-  return [...names]
-}
-
-const discoverUiPackages = async (
-  root: string
-): Promise<ReadonlyArray<string>> => {
-  const app = await closestPackageJson(root)
-  if (app === undefined) return []
-  const visited = new Map<string, boolean>()
-  const included = new Set<string>()
-
-  const visit = async (fromDir: string, name: string): Promise<void> => {
-    const found = await resolvePackage(fromDir, name)
-    if (found === undefined) return
-    const realDir = await fs.realpath(found.dir).catch(() => found.dir)
-    const seen = visited.get(realDir)
-    if (seen !== undefined) {
-      if (seen && !effectUiPattern.test(name)) included.add(name)
-      return
-    }
-    const deps = dependencyNames(
-      found.pkg.dependencies,
-      found.pkg.peerDependencies
+      // The real path, so a symlinked package finds its own dependencies.
+      const dir = await fs.realpath(found.dir)
+      if (crawled.has(dir)) return
+      crawled.add(dir)
+      await crawl(dir, own)
+    }))
+  const app = await findPackage(root)
+  if (app !== undefined) {
+    await crawl(
+      app.dir,
+      Object.keys({ ...app.json.dependencies, ...app.json.devDependencies })
     )
-    const isUi = deps.some((dep) => effectUiPattern.test(dep))
-    visited.set(realDir, isUi)
-    if (!isUi) return
-    if (!effectUiPattern.test(name)) included.add(name)
-    await Promise.all(deps.map((dep) => visit(realDir, dep)))
   }
-
-  const rootDeps = dependencyNames(
-    app.pkg.dependencies,
-    app.pkg.devDependencies
-  )
-  await Promise.all(rootDeps.map((name) => visit(app.dir, name)))
-  return [...included].sort()
+  // Sorted, since the crawl's order varies and Vite hashes this list.
+  return [...names].filter((name) => !effectUi.test(name)).sort()
 }
