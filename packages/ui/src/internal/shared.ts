@@ -55,7 +55,6 @@ export const readsOf = (
   let reads = cache.get(declared)
   if (reads === undefined) {
     reads = Object.entries(declared).map(([name, entry]): Read => {
-      // A component or a key alone is short for `{ owner }`.
       const long: Exclude<Component.SharedRead, Component.Shared.Owner> =
         "owner" in entry ? entry : { owner: entry }
       const owner = long.owner === "self"

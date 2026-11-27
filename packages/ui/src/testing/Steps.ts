@@ -356,19 +356,19 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    *
    * **Details**
    *
-   * `owner` is a headless component with `shares`, or its `SharedKey`, and
-   * the value is keyed by it, not by a reader's local name: in a scene, one step reaches the
-   * scene's component and every headless child the scene expands. The value
+   * `owner` is a headless component with `shares`, or its `SharedKey`.
+   * The value is keyed by owner, not by a reader's local name, so one step
+   * reaches the scene's component and every headless child it expands. The value
    * is kept until the next `shared` step or `given` that sets one for
    * `owner`.
    *
    * Without it, a reader sees the value of the nearest `owner` in the
    * scene's own view, or else, for an `optional` read, `undefined`, and
    * for a required one `shares({ model: init(props).model, props, reads })` with no props
-   * when every prop of `owner` is optional. A read of a key has no
-   * default. Otherwise rendering a scene
-   * throws, naming this step, but not in a `shared` step: `shared` steps
-   * in a row can give several owners' values.
+   * when every prop of `owner` is optional. Required reads of a key have no
+   * default. If a required value is still missing, rendering throws and
+   * asks for a `shared` step. Consecutive `shared` steps can supply several
+   * owners before rendering.
    *
    * When the component had a value for `owner`, given before or the
    * default of a required read, and this one differs, each `onChange` its

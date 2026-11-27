@@ -286,9 +286,8 @@ export interface Next<out Model, out Msg, out Events, out R = never> {
 }
 
 /**
- * A `$.send(Owner, message)` an `update` issued: the owner component or
- * its shared key, whose nearest instance above the sender gets the message,
- * and the message.
+ * A message issued by `$.send`, paired with its owner component or shared
+ * key. The nearest matching owner above the sender receives it.
  *
  * @stability experimental
  * @category models
@@ -451,21 +450,11 @@ export declare namespace Shared {
 }
 
 /**
- * An owner's identity apart from its implementation: its name, the Schema
- * of what it shares, the messages it receives and what its readers report.
- * `Component.sharedKey` makes one.
+ * An owner identity created by `Component.sharedKey`. Readers use it in
+ * `reads` and `$.send` without importing the owner component.
  *
- * **When to use**
- *
- * Use when a reader works with or without an owner above it, and shouldn't
- * import the owner to name it. A reader lists the key in `reads` and sends
- * to it with `$.send(Key, message)`, as it would the owner component.
- *
- * **Details**
- *
- * An owner adopts a key with `key` in its `shares`, and `define` checks
- * that the two agree. The runtime then matches readers of the key, and of
- * the owner component, by the key. An owner that adopts none is its own key.
+ * The owner adopts the key through `shares.key`. Reads and sends targeting
+ * either the component or its key resolve to the same owner instance.
  *
  * @stability experimental
  * @category models
@@ -511,23 +500,17 @@ export declare namespace SharedKey {
 }
 
 /**
- * Makes a shared key: an owner's name, the Schema of what it shares, the tags
- * of `message` it receives and the Schema of what its readers report.
+ * Creates an owner identity from its name, shared-value schema and optional
+ * message and report schemas. `receives` selects the accepted message tags.
  *
- * **When to use**
+ * Keep the key in a separate module so readers can import it without
+ * bundling the owner component. The owner adopts it through `shares.key`;
+ * its name, shared value, received messages and collected reports must
+ * match the key's types. Also supply the owner's `shares.schema`.
  *
- * Use when readers look for an owner optionally, as a `Menu` looks for a
- * `Menubar`, so a reader rendered alone doesn't bundle the owner.
- *
- * **Details**
- *
- * The owner gives the key as `key` in its `shares`, next to the same
- * `schema`, `receives` and `collects.schema`. The key holds only its name
- * and Schemas, so readers import it without the owner's `update` and parts.
- * `reports` only types `report`, and isn't kept.
- *
- * In a story, a required read of a key has no default, since there is no
- * owner to start: give its value with `.shared(Key, value)`.
+ * `reports` supplies the reader's `report` type but is not stored at runtime.
+ * In a story, required reads of a key need `.shared(Key, value)` because
+ * the key has no owner implementation to initialize.
  *
  * **Example** (An owner and an optional reader joined by a key)
  *
@@ -537,7 +520,7 @@ export declare namespace SharedKey {
  *
  * const BarMessage = UiSchema.TaggedEnum({ Pinged: {} })
  *
- * // Readers import this, and not `Bar`.
+ * // Put the key in a separate module that readers and Bar both import.
  * const BarKey = Component.sharedKey({
  *   name: "Bar",
  *   schema: Schema.Boolean,

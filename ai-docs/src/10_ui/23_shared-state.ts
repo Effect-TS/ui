@@ -415,11 +415,10 @@ export const nestedLock = Effect.gen(function*() {
 // A shared key: naming an owner without importing it
 // ---------------------------------------------------------------------------
 
-// A reader that names an owner imports all of it, `update` and parts
-// included, even in an app that never renders one. A `SharedKey` holds only
-// the owner's name and Schemas. An optional reader names the key instead, so
-// its bundle leaves the owner out until the app renders one. Keep the key in
-// a module of its own that the owner and its readers both import.
+// Importing an owner component for an optional read can retain its
+// implementation even when the app never renders it. Use a shared key to
+// avoid that dependency. In an app, put the key in a separate module that
+// the owner and its readers both import.
 const SidebarMessage = UiSchema.TaggedEnum({ Collapsed: {} })
 const SidebarShared = Schema.Struct({ collapsed: Schema.Boolean })
 
@@ -430,10 +429,9 @@ export const SidebarKey = Component.sharedKey({
   receives: ["Collapsed"]
 })
 
-// The owner adopts the key in `shares`, next to the same `schema` and
-// `receives`. It fails to compile when its name, value, `receives` or
-// `collects` don't match the key's. Readers of the key and readers of
-// `Sidebar` itself find the same instance.
+// `shares.key` checks that the owner's name, shared value, received messages
+// and collected reports match the key's types. Readers of SidebarKey and
+// Sidebar resolve to the same owner instance.
 export const Sidebar = Html.component({
   name: "Sidebar",
   model: SidebarShared,
@@ -451,7 +449,6 @@ export const Sidebar = Html.component({
 
 const NavLinkMessage = UiSchema.TaggedEnum({ Clicked: {} })
 
-// `reads` and `$.send` take the key wherever they take an owner.
 export const NavLink = Html.component({
   name: "NavLink",
   model: Schema.Null,
@@ -466,8 +463,8 @@ export const NavLink = Html.component({
     )
 })
 
-// `shared` and `sent` take the key too. A required read of a key has no
-// default, since there's no owner to start: give its value with `shared`.
+// Supply the owner's value without mounting Sidebar. For required reads of
+// a key, this step is mandatory: the key has no implementation to initialize.
 export const navLink = Effect.gen(function*() {
   const link = yield* Scene.make(NavLink, {})
   link.shared(SidebarKey, { collapsed: false })

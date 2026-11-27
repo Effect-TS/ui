@@ -3,4 +3,4 @@
 "@effect/ui-kit": patch
 ---
 
-Add `Component.sharedKey`: a reader can name an owner by a key holding only its name and Schemas, so a reader rendered alone doesn't bundle the owner. `Menu`, `Select`, `ToggleGroup` and `Checkbox` read `Menubar`, `Toolbar` and `CheckboxGroup` by key, and no longer bundle them.
+Add `Component.sharedKey` so readers can read shared state and send messages without importing the owner component. Use shared keys in `Menu`, `Select`, `ToggleGroup` and `Checkbox` to avoid bundling unused `Menubar`, `Toolbar` and `CheckboxGroup` implementations.

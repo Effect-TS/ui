@@ -235,7 +235,6 @@ function install(root, packed, name) {
 }
 
 const benchmark = (file) => path.join(import.meta.dirname, file)
-// An app that is one file of this directory.
 const single = (file) => (root) => {
   const input = path.join(root, file)
   fs.copyFileSync(benchmark(file), input)
