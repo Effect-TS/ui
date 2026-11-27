@@ -133,7 +133,7 @@ You can package your own reusable behavior the same way.
 
 ### The UI kit
 
-**`@effect/ui-kit` ships 51 modules** — 46 headless components plus 5 lower-level primitives (`Dismissal`, `ListNavigation`, `Positioning`, `Typeahead` and `VirtualKeyboard`) — so you don't have to build accessible UI from scratch. It covers every component in [Base UI](https://base-ui.com/), plus `Calendar`, `RangeCalendar`, `DateField`, `DatePicker`, `FileDrop`, `SortableList`, `NavigationLinks`, `VirtualList` and `DirectionProvider`. Each handles keyboard, focus and ARIA while you write the markup and styles.
+**`@effect/ui-kit` ships 51 modules**, so you don't have to build accessible UI from scratch. Of those, 46 are headless components and 5 are lower-level primitives: `Dismissal`, `ListNavigation`, `Positioning`, `Typeahead` and `VirtualKeyboard`. The kit covers every component in [Base UI](https://base-ui.com/), plus `Calendar`, `RangeCalendar`, `DateField`, `DatePicker`, `FileDrop`, `SortableList`, `NavigationLinks`, `VirtualList` and `DirectionProvider`. Each handles keyboard, focus and ARIA while you write the markup and styles.
 
 Here are all 51 modules. Hover or tap to animate.
 
@@ -180,10 +180,10 @@ Effect UI has an inspector you can add with one Layer, `DevTools.layer`, or auto
 
 - **Timeline:** One list holds every Message from every Component, the Model after it and what changed.
 - **Cause and effect:** For any entry, DevTools traces what sent the Message, the Commands it issued and how each one ended.
-- **Element picker:** Click **Pick** to select any element on the page and jump straight to the Component instance that rendered it — try it on this page.
+- **Element picker:** Click **Pick** to select any element on the page and jump to the Component instance that rendered it. Try it on this page.
 - **Noise control:** Stop or resume recording noisy Message tags at runtime without editing code, and surface or filter declared payload fields in the timeline.
 - **Time travel:** Pick an earlier entry to see the page at that point. The live app keeps running, and Resume returns to it.
-- **For agents:** An MCP server (and experimental WebMCP in the browser) gives an agent the same view — reading the log, finding instances, inspecting state and pausing on any entry. If you allow it, the agent can also send Messages.
+- **For agents:** An MCP server, or the experimental WebMCP in the browser, gives an agent the same view. It can read the log, find Component instances, inspect their state and pause on any entry. If you allow it, the agent can also send Messages.
 
 Terminal apps built with `@effect/ui-opentui` can stream their logs into the same browser inspector with `DevToolsHeadless.layer`.
 :::
@@ -224,7 +224,7 @@ pnpm add effect \
   @effect/ui-kit@https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@main
 ```
 
-To stay on one build, replace `main` with a commit's short SHA. Snapshots of `@effect/ui-devtools`, `@effect/ui-opentui` and `@effect/ui-native` are published the same way — see [Snapshots](https://github.com/Effect-TS/ui#snapshots) in the README for their install commands. You can ignore pnpm's unmet `@effect/ui` peer warning: the packages still use the snapshots you installed.
+To stay on one build, replace `main` with a commit's short SHA. Snapshots of `@effect/ui-devtools`, `@effect/ui-opentui` and `@effect/ui-native` are published the same way, with install commands under [Snapshots](https://github.com/Effect-TS/ui#snapshots) in the README. You can ignore pnpm's unmet `@effect/ui` peer warning: the packages still use the snapshots you installed.
 
 To start a new app from Vite's `vanilla-ts` template, follow [Start a new app](https://github.com/Effect-TS/ui#start-a-new-app). `@effect/ui` ships its guide as `node_modules/@effect/ui/AGENTS.md`, so point your coding agent's instructions at that file.
 
