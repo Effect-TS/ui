@@ -72,6 +72,7 @@ import * as SchemaParser from "effect/SchemaParser"
 import * as SchemaTransformation from "effect/SchemaTransformation"
 import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
+import * as Tracer from "effect/Tracer"
 import type * as Types from "effect/Types"
 import { runCodec } from "./internal/codecRun.ts"
 import type { Given } from "./internal/given.ts"
@@ -1303,6 +1304,8 @@ export const invalidatesEntry = <R extends Query.Any>(
  * - `invalidation`: an invalidation hit a watched entry.
  * - `loadMore`: an infinite query's `loadMore`.
  * - `reset`: an infinite query's `reset` hit a watched list.
+ *
+ * It is also the `trigger` attribute of the fetch's span.
  *
  * @stability experimental
  * @category models
@@ -4519,6 +4522,17 @@ const buildCache = (
 
   const now = (): number => clock.currentTimeMillisUnsafe()
   const runFork = Effect.runForkWith(context)
+  /** A fetch's span: named after the query, it parents the spans the fetcher opens. */
+  const traced = <A, E>(
+    def: QueryDef,
+    trigger: Trigger,
+    body: Effect.Effect<A, E>
+  ): Effect.Effect<A, E> =>
+    Effect.useSpan(
+      def.name,
+      { attributes: { trigger } },
+      (span) => Effect.provideService(body, Tracer.ParentSpan, span)
+    )
   /** Runs `f` one scheduler step later. */
   const defer = (f: () => void): void => {
     runFork(
@@ -5057,7 +5071,7 @@ const buildCache = (
       previous === undefined
         ? Effect.yieldNow
         : Effect.uninterruptible(Fiber.await(previous)),
-      Effect.suspend(body)
+      traced(entry.def, trigger, Effect.suspend(body))
     ))
     fetch.fiber = fiber
     fetchFibers.add(fiber)
@@ -5289,7 +5303,7 @@ const buildCache = (
       previous.length === 0
         ? Effect.yieldNow
         : Effect.uninterruptible(Fiber.awaitAll(previous)),
-      body
+      traced(entry.def, "get", body)
     ))
     shared.fiber = fiber
     fetchFibers.add(fiber)
@@ -5556,20 +5570,24 @@ const buildCache = (
         if (existing !== undefined) resetIdle(existing)
         if (registered.list === undefined) {
           event(undefined)
-          return buildOf(fetcher).fetcher(args)
+          return traced(registered, "get", buildOf(fetcher).fetcher(args))
         }
         event({ page: 0, cursor: undefined })
         const count = existing === undefined
           ? 1
           : Math.max(registered.list.ops.heldPages(existing).length, 1)
-        return registered.list.ops.callerWalk(
-          listEnv(),
+        return traced(
           registered,
-          args,
-          logKey,
-          buildOf(fetcher),
-          count,
-          (page, cursor) => event({ page, cursor })
+          "get",
+          registered.list.ops.callerWalk(
+            listEnv(),
+            registered,
+            args,
+            logKey,
+            buildOf(fetcher),
+            count,
+            (page, cursor) => event({ page, cursor })
+          )
         )
       }
       const entry = ensureEntry(registered, args, argsKey)
