@@ -12,6 +12,7 @@ import {
   Fiber,
   Layer,
   Option,
+  Queue,
   Redacted,
   Schema,
   Stream
@@ -498,6 +499,98 @@ describe("Query hydration", () => {
         ["args", undefined]
       ])
     }).pipe(Effect.provide(Layer.merge(GetUser.layer, TestQuery.layer())))
+  })
+
+  it.effect("a stream query dehydrates its first element on the server, closes the stream, and starts on the client once the window closes", () => {
+    const Note = Schema.Struct({ id: Schema.String, title: Schema.String })
+    type Note = typeof Note.Type
+    interface StreamHandle {
+      readonly emit: (title: string) => void
+      closed: boolean
+    }
+    const streams: Array<StreamHandle> = []
+    class GetNote extends Query.StreamService<GetNote>()("notes/GetNote", {
+      args: { id: Schema.String },
+      success: Note,
+      error: Schema.Never
+    }) {
+      static readonly layer = this.toLayer(({ id }) =>
+        Stream.callback<Note>((queue) =>
+          Effect.acquireRelease(
+            Effect.sync(() => {
+              const handle: StreamHandle = {
+                emit: (title) => {
+                  Queue.offerUnsafe(queue, { id, title })
+                },
+                closed: false
+              }
+              streams.push(handle)
+              return handle
+            }),
+            (handle) =>
+              Effect.sync(() => {
+                handle.closed = true
+              })
+          )
+        )
+      )
+    }
+
+    return Effect.gen(function*() {
+      const shipped = yield* Effect.gen(function*() {
+        const got = yield* GetNote.get({ id: "1" }).pipe(Effect.forkScoped)
+        yield* flush
+        assert.strictEqual(streams.length, 1)
+        streams[0].emit("Server")
+        yield* flush
+        assert.deepStrictEqual(yield* Fiber.join(got), {
+          id: "1",
+          title: "Server"
+        })
+        assert.isTrue(streams[0].closed)
+        return (yield* cache).dehydrate()
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(Layer.merge(GetNote.layer, settleOnce([])))
+      )
+
+      assert.deepStrictEqual(shipped, {
+        "notes/GetNote": [[`{"id":"1"}`, 0, { id: "1", title: "Server" }, 0]]
+      })
+
+      yield* Effect.gen(function*() {
+        const query = yield* cache
+        query.hydrate(shipped)
+        const seen: Array<string> = []
+        const watcher = yield* GetNote.changes({ id: "1" }).pipe(
+          runForEach((result) =>
+            seen.push(
+              (AsyncResult.isSuccess(result)
+                ? result.value.title
+                : result._tag) +
+                (result.waiting ? " waiting" : "")
+            )
+          ),
+          Effect.forkScoped
+        )
+        yield* flush
+        assert.deepStrictEqual(seen, ["Server"])
+        assert.strictEqual(streams.length, 1)
+
+        query.closeWindow()
+        yield* flush
+        assert.strictEqual(streams.length, 2)
+        assert.deepStrictEqual(seen, ["Server", "Server waiting"])
+
+        streams[1].emit("Live")
+        yield* flush
+        assert.deepStrictEqual(seen, ["Server", "Server waiting", "Live"])
+        yield* Fiber.interrupt(watcher)
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(Layer.merge(GetNote.layer, TestQuery.layer()))
+      )
+    })
   })
 })
 
