@@ -177,8 +177,9 @@ export const make = (options: Options): {
   }
   const setNative = (n: NativeNode, name: string, value: unknown) => {
     // Removing a prop puts back the kind's default, as leaving it out does.
-    value ??= defaultsOf(n)?.[name]
-    if (value !== undefined && isColor.test(name)) value = color(value)
+    // Defaults are already in Fabric's form, so only a set colour is processed.
+    if (value === undefined) value = defaultsOf(n)?.[name]
+    else if (isColor.test(name)) value = color(value)
     if (same(n.props[name], value)) return
     if (value === undefined) delete n.props[name]
     else n.props[name] = value

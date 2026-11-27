@@ -319,7 +319,7 @@ describe("NativeHost", () => {
   it("renders a view another module defines, and sends its events only to it", () => {
     Native.defineView(() => new Native.Element("toggle"), {
       viewName: (_, host) => host.os === "ios" ? "RCTSwitch" : "AndroidSwitch",
-      defaults: { enabled: true },
+      defaults: { enabled: true, thumbTintColor: 0x7fff0000 },
       props: { checked: (n, value, host) => host.set(n, "value", value) }
     })
     const fabric = FakeFabric.make()
@@ -327,7 +327,7 @@ describe("NativeHost", () => {
       ui: fabric.ui,
       rootTag: 1,
       os: "ios",
-      processColor: (c) => c
+      processColor: (c) => `processed ${c}`
     })
     const fired: Array<unknown> = []
     const dispatch = (name: string, handler: unknown, payload: unknown) =>
@@ -344,16 +344,27 @@ describe("NativeHost", () => {
       FakeFabric.find(fabric.committed(), FakeFabric.byName("RCTSwitch"))!
     assert.deepStrictEqual(shadow().props, {
       enabled: true,
+      thumbTintColor: 0x7fff0000,
       value: true,
       onValueChange: true
     })
+    // A removed colour goes back to the default as it was at mount.
+    for (const color of ["blue", undefined]) {
+      host.setProp(toggle, "thumbTintColor", color)
+      host.commit!()
+    }
+    assert.strictEqual(shadow().props.thumbTintColor, 0x7fff0000)
 
     fabric.emit(shadow(), "topValueChange", { value: false })
     assert.deepStrictEqual(fired, [["valueChange", "toggle", { value: false }]])
 
     host.setEvents(toggle, {}, dispatch, {})
     host.commit!()
-    assert.deepStrictEqual(shadow().props, { enabled: true, value: true })
+    assert.deepStrictEqual(shadow().props, {
+      enabled: true,
+      thumbTintColor: 0x7fff0000,
+      value: true
+    })
     fabric.emit(shadow(), "topValueChange", { value: true })
     assert.strictEqual(fired.length, 1)
   })
