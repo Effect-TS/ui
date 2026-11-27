@@ -297,6 +297,10 @@ describe("NativeHost", () => {
     assert.deepStrictEqual(fired, [["valueChange", "toggle", { value: false }]])
 
     host.setEvents(toggle, {}, dispatch, {})
+    host.setProp(toggle, "enabled", false)
+    host.commit!()
+    assert.deepStrictEqual(shadow().props, { enabled: false, value: true })
+    host.setProp(toggle, "enabled", undefined)
     host.commit!()
     assert.deepStrictEqual(shadow().props, { enabled: true, value: true })
     fabric.emit(shadow(), "topValueChange", { value: true })
@@ -390,23 +394,31 @@ describe("NativeHost", () => {
         SetDefault: ($, { value }) => $.evolve({ initial: value })
       },
       view: (h, model) =>
-        h.input
-          .prop("defaultValue", model.initial)
-          .prop("multiline", true)
-          .prop("keyboardType", "default")
-          .prop("returnKeyType", "done")
-          .prop("submitBehavior", "newline")
-          .prop("placeholderTextColor", "#9ca3af")
-          .prop("selectionColor", "#3b82f6")
-          .prop("customNativeProp", 123)
+        h.view.children(
+          h.input
+            .prop("defaultValue", model.initial)
+            .prop("multiline", true)
+            .prop("keyboardType", "default")
+            .prop("returnKeyType", "done")
+            .prop("submitBehavior", "newline")
+            .prop("placeholderTextColor", "#9ca3af")
+            .prop("selectionColor", "#3b82f6")
+            .prop("customNativeProp", 123),
+          h.input.value("live").prop("defaultValue", "seed"),
+          h.input.prop("defaultValue", "seed").value("live")
+        )
     })
     const { close, fabric, find, made, root, settle } = await FakeFabric.mount(
       (container) => Renderer.mount(Field, {}, container)
     )
-    const input = () => find(FakeFabric.byName("AndroidTextInput"))
+    const inputs = () => find(FakeFabric.byName("RCTView")).children
+    const input = () => inputs()[0]!
     const node = input().handle as NativeHost.NativeNode
     assert.strictEqual(input().props.text, "hello")
     assert.strictEqual(input().props.mostRecentEventCount, 0)
+    // Controlled `value` wins over `defaultValue` in either prop order.
+    assert.strictEqual(inputs()[1]!.props.text, "live")
+    assert.strictEqual(inputs()[2]!.props.text, "live")
 
     // Native edits on an uncontrolled input are not restored.
     fabric.emit(input(), "topChange", { text: "hello!", eventCount: 2 })
@@ -418,13 +430,15 @@ describe("NativeHost", () => {
     Native.clear(made.operations, node)
     assert.strictEqual(node.props.text, "")
 
-    // Updating defaultValue replaces text; clearing it sends no command.
+    // Updating defaultValue replaces text; removing it preserves the latest edit.
     root.send(Msg.SetDefault({ value: "next" }))
     await settle()
     assert.strictEqual(input().props.text, "next")
+    fabric.emit(input(), "topChange", { text: "edited", eventCount: 3 })
     root.send(Msg.SetDefault({ value: undefined }))
     await settle()
-    assert.isUndefined(input().props.text)
+    assert.strictEqual(node.props.text, "edited")
+    assert.strictEqual(input().props.text, "next")
 
     const tag = input().tag
     assert.deepStrictEqual(fabric.commands, [

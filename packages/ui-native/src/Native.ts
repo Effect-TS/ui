@@ -230,6 +230,7 @@ export interface InputProps {
     | "phone-pad"
     | "url"
     | "ascii-capable"
+    | "ascii-capable-number-pad"
     | "numbers-and-punctuation"
     | "name-phone-pad"
     | "twitter"
