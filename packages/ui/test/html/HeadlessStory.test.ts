@@ -219,36 +219,21 @@ describe("headless components in a story", () => {
       assert.isFalse(Story.parts(Menu, scene.current).open)
     }))
 
-  it.effect("a consumer's story shows the child expanded, and runs only the consumer's layer", () =>
+  it.effect("a consumer's story runs the expanded child's layer, then the consumer's", () =>
     Effect.gen(function*() {
       const scene = yield* Scene.make(Toolbar, {})
       // Expanded from the Menu's init Model.
-      assert.strictEqual(
-        scene.get(Locator.text("Actions")).attrs?.["aria-expanded"],
-        "false"
-      )
+      scene.expect(trigger).toHaveAttribute("aria-expanded", "false")
       assert.deepStrictEqual(labels(scene), ["Archive", "Block", "Copy"])
-      scene.givenChild(Menu, "actions", {
-        open: true,
-        query: "co",
-        active: "c",
-        typed: "",
-        focused: []
-      })
-      assert.strictEqual(
-        scene.get(Locator.text("Actions")).attrs?.["aria-expanded"],
+      // Only the Menu handles a click on its trigger.
+      scene.click("Actions").expect(trigger).toHaveAttribute(
+        "aria-expanded",
         "true"
       )
-      assert.deepStrictEqual(labels(scene), ["Copy"])
-      // The row has the Menu's layer and the Toolbar's: the story runs the Toolbar's.
+      // The row has the Menu's layer and the Toolbar's, run in that order.
       scene.click("Copy")
-        .childEmit(Menu, "actions", { _tag: "Picked", id: "c" })
-        .expect(Locator.tag("output")).toHaveText("Clicked c, Picked c")
-      // Only the Menu handles a click on its trigger, and a story doesn't run the Menu's update.
-      assert.throws(
-        () => scene.click("Actions"),
-        /only \/Toolbar\/Menu\[actions\] handles "click"/
-      )
+        .expect(Locator.tag("output")).toHaveText("Picked c, Clicked c")
+        .expect(trigger).toHaveAttribute("aria-expanded", "false")
     }))
 
   it.effect("an author's story renders with the vocabulary it's given", () =>
