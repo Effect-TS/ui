@@ -124,13 +124,16 @@ export class NativeNode {
   constructor(
     kind: Native.ViewKind,
     host: Native.ViewHost,
-    props: Record<string, unknown> = { ...kind.defaults }
+    props?: Record<string, unknown>
   ) {
     this.kind = kind
     this.host = host
-    this.props = props
+    this.props = props ?? { ...defaultsOf(this) }
   }
 }
+
+const defaultsOf = ({ host, kind: { defaults } }: NativeNode) =>
+  typeof defaults === "function" ? defaults(host) : defaults
 
 const rawText: Native.ViewKind = { viewName: "RCTRawText" }
 // Distinct references so restore can tell mounted roots from kept containers.
@@ -173,8 +176,10 @@ export const make = (options: Options): {
     return out
   }
   const setNative = (n: NativeNode, name: string, value: unknown) => {
-    if (value !== undefined && isColor.test(name)) value = color(value)
-    if (n.props[name] === value) return
+    // Kind defaults are already processed for Fabric, including colours.
+    if (value === undefined) value = defaultsOf(n)?.[name]
+    else if (isColor.test(name)) value = color(value)
+    if (same(n.props[name], value)) return
     if (value === undefined) delete n.props[name]
     else n.props[name] = value
     // A node not created yet takes all its props at createNode.
@@ -347,6 +352,22 @@ export const make = (options: Options): {
     }
   }
   return { host, root, operations }
+}
+
+// Skip Fabric commits for inline objects whose contents have not changed.
+const same = (a: any, b: any): boolean => {
+  if (a === b) return true
+  if (
+    typeof a !== "object" || typeof b !== "object" ||
+    a?.constructor !== b?.constructor
+  ) return false
+  let extra = 0
+  for (const key in a) {
+    if (!(key in b) || !same(a[key], b[key])) return false
+    extra--
+  }
+  for (const _ in b) extra++
+  return !extra
 }
 
 const markDirty = (n: NativeNode | undefined) => {

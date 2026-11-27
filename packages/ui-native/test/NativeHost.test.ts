@@ -240,6 +240,61 @@ describe("NativeHost", () => {
     )
   })
 
+  it("sets React Native's text and input defaults for the platform", () => {
+    const props = (os: string) => {
+      const fabric = FakeFabric.make()
+      const { host, root } = NativeHost.make({
+        ui: fabric.ui,
+        rootTag: 1,
+        os,
+        processColor: (c) => c
+      })
+      const nodes = [host.createElement("text"), host.createElement("input")]
+      for (const n of nodes) host.insertBefore(root, n, undefined)
+      host.commit!()
+      // Removing a prop puts its default back.
+      for (const value of [false, undefined]) {
+        for (const n of nodes) host.setProp(n, "accessible", value)
+        host.commit!()
+      }
+      return fabric.committed().map((n) => n.props)
+    }
+    assert.deepStrictEqual(props("android"), [
+      { ellipsizeMode: "tail" },
+      { accessible: true }
+    ])
+    assert.deepStrictEqual(props("ios"), [
+      { ellipsizeMode: "tail", accessible: true },
+      { accessible: true }
+    ])
+  })
+
+  it("commits an object prop only when its value changes", () => {
+    const fabric = FakeFabric.make()
+    const { host, root } = NativeHost.make({
+      ui: fabric.ui,
+      rootTag: 1,
+      os: "android",
+      processColor: (c) => c
+    })
+    const view = host.createElement("view")
+    const set = (name: string, value: unknown) => {
+      host.setProp(view, name, value)
+      host.commit!()
+      return fabric.committed()[0]!.props[name]
+    }
+    host.insertBefore(root, view, undefined)
+    const transform = set("transform", [{ rotate: "45deg" }])
+    assert.strictEqual(set("transform", [{ rotate: "45deg" }]), transform)
+    assert.deepStrictEqual(set("transform", [{ rotate: "90deg" }]), [
+      { rotate: "90deg" }
+    ])
+    set("accessibilityState", { disabled: undefined })
+    assert.deepStrictEqual(set("accessibilityState", { selected: true }), {
+      selected: true
+    })
+  })
+
   it("runs the Host operations on committed nodes", async () => {
     const { fabric, made, find } = await setup()
     const input = find(FakeFabric.byName("AndroidTextInput"))
@@ -264,7 +319,7 @@ describe("NativeHost", () => {
   it("renders a view another module defines, and sends its events only to it", () => {
     Native.defineView(() => new Native.Element("toggle"), {
       viewName: (_, host) => host.os === "ios" ? "RCTSwitch" : "AndroidSwitch",
-      defaults: { enabled: true },
+      defaults: { enabled: true, thumbTintColor: 0x7fff0000 },
       props: { checked: (n, value, host) => host.set(n, "value", value) }
     })
     const fabric = FakeFabric.make()
@@ -272,7 +327,7 @@ describe("NativeHost", () => {
       ui: fabric.ui,
       rootTag: 1,
       os: "ios",
-      processColor: (c) => c
+      processColor: (c) => `processed ${c}`
     })
     const fired: Array<unknown> = []
     const dispatch = (name: string, handler: unknown, payload: unknown) =>
@@ -289,16 +344,27 @@ describe("NativeHost", () => {
       FakeFabric.find(fabric.committed(), FakeFabric.byName("RCTSwitch"))!
     assert.deepStrictEqual(shadow().props, {
       enabled: true,
+      thumbTintColor: 0x7fff0000,
       value: true,
       onValueChange: true
     })
+    // A removed colour goes back to the default as it was at mount.
+    for (const color of ["blue", undefined]) {
+      host.setProp(toggle, "thumbTintColor", color)
+      host.commit!()
+    }
+    assert.strictEqual(shadow().props.thumbTintColor, 0x7fff0000)
 
     fabric.emit(shadow(), "topValueChange", { value: false })
     assert.deepStrictEqual(fired, [["valueChange", "toggle", { value: false }]])
 
     host.setEvents(toggle, {}, dispatch, {})
     host.commit!()
-    assert.deepStrictEqual(shadow().props, { enabled: true, value: true })
+    assert.deepStrictEqual(shadow().props, {
+      enabled: true,
+      thumbTintColor: 0x7fff0000,
+      value: true
+    })
     fabric.emit(shadow(), "topValueChange", { value: true })
     assert.strictEqual(fired.length, 1)
   })

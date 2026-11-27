@@ -37,15 +37,22 @@ const scroll: ViewKind = {
   }
 }
 
+// As React Native's `Text` sets them: native clips truncated text by
+// default, and VoiceOver skips text that isn't accessible.
+const textDefaults = { ellipsizeMode: "tail" }
+const iosTextDefaults = { ...textDefaults, accessible: true }
+
 const text: ViewKind = {
   // Fabric represents text nested inside text as virtual text.
   viewName: (n) => n.parent?.kind.text === true ? "RCTVirtualText" : "RCTText",
+  defaults: (host) => host.os === "ios" ? iosTextDefaults : textDefaults,
   text: true
 }
 
 const input: ViewKind = {
   viewName: (_, host) =>
     host.os === "ios" ? "RCTSinglelineTextInputView" : "AndroidTextInput",
+  defaults: { accessible: true },
   props: {
     value(n, value, host) {
       // Skip if native already shows `value`; include `eventCount` so native accepts it.
