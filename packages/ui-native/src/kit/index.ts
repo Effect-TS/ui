@@ -78,6 +78,18 @@ export * from "./InputAccessory.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as Keyboard from "./Keyboard.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * from "./KeyboardAvoidingView.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as LayoutAnimation from "./LayoutAnimation.ts"
 
 /**
