@@ -1,7 +1,7 @@
 /**
  * @internal
  */
-import * as Cause from "effect/Cause"
+import type * as Cause from "effect/Cause"
 import * as Clock from "effect/Clock"
 import * as Context from "effect/Context"
 import * as Duration from "effect/Duration"
@@ -159,15 +159,7 @@ const bridge = (
               onMessage
             )
           }
-          let message: unknown = handler
-          if (typeof handler === "function") {
-            try {
-              message = handler(payload)
-            } catch (error) {
-              Kernel.fail(inst, "event", Cause.die(error))
-              return false
-            }
-          }
+          const message = inst.message(handler, payload)
           if (message === undefined) return false
           onMessage?.(
             (rec.v as View.Element<any, any>).eventOptions[event] ??

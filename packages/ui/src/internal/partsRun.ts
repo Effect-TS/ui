@@ -11,7 +11,7 @@ interface Layer {
 /** @internal */
 export class Layered {
   readonly layers: Array<Layer> = []
-  /** Calls `onMessage` with the options of each layer that sends. */
+  /** Calls `onMessage` with the options of each layer that produces a message, before it's sent. */
   "~fire"(
     payload: unknown,
     event: string,
@@ -19,9 +19,11 @@ export class Layered {
   ): boolean {
     let sent = false
     for (const layer of this.layers) {
-      if (!layer.inst.fire(layer.handler, payload, event)) continue
+      const message = layer.inst.message(layer.handler, payload)
+      if (message === undefined) continue
       sent = true
       onMessage?.(layer.options)
+      Kernel.send(layer.inst, message, event)
     }
     return sent
   }

@@ -856,6 +856,13 @@ export const pointer = {
 }
 
 /**
+ * What a click's `mousedown` and `mouseup` send: `pointer`, without a pointer id, as a browser's mouse events.
+ *
+ * @internal
+ */
+export const mouse = { ...pointer, pointerId: -1 }
+
+/**
  * Starts a scene cursor over `component`, or over the stand-in a headless or slotted scene builds from
  * `options`.
  *

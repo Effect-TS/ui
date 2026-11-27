@@ -2896,13 +2896,18 @@ describe("BrowserHost", { concurrent: false }, () => {
   })
 
   describe("pointer gestures", () => {
+    /** Each `setPointerCapture`, with the element it was called on, and each `Handle` update, in order. */
+    const calls: Array<readonly [Element, number] | string> = []
     const Handle = Html.component({
       name: "Handle",
       model: Schema.Null,
       message: Schema.String
     }).make({
       init: () => null,
-      update: ($) => $.model,
+      update: ($, message) => {
+        calls.push(message)
+        return $.model
+      },
       parts: (p) => ({
         root: p.part(
           "div",
@@ -2955,25 +2960,24 @@ describe("BrowserHost", { concurrent: false }, () => {
           pointerType: "mouse"
         })
       )
-    /** Records each `setPointerCapture` with the element it was called on. */
     const captures = Effect.acquireRelease(
       Effect.sync(() => {
-        const calls: Array<readonly [Element, number]> = []
+        calls.length = 0
         const spy = vi.spyOn(Element.prototype, "setPointerCapture")
           .mockImplementation(function(this: Element, pointerId: number) {
             calls.push([this, pointerId])
           })
-        return { calls, spy }
+        return spy
       }),
-      ({ spy }) => Effect.sync(() => spy.mockRestore())
-    ).pipe(Effect.map(({ calls }) => calls))
+      (spy) => Effect.sync(() => spy.mockRestore())
+    )
 
     // Html's own host, and `makeHost` driven through `Renderer.Host` alone, each with an author's handler and a part's.
     it.effect.each(["mountEffect", "Renderer.Host"])(
-      "a press captures its pointer on the element with the handler, unless the handler sends nothing: %s",
+      "a press captures its pointer on the element with the handler before the update, unless the handler sends nothing: %s",
       (via) =>
         Effect.gen(function*() {
-          const calls = yield* captures
+          yield* captures
           const app = yield* container
           if (via === "mountEffect") {
             yield* BrowserHost.mountEffect(Divider, {}, app)
@@ -2991,7 +2995,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           pointer(app.querySelector("span")!, "pointerdown", { pointerId: 7 })
           pointer(divider, "pointerdown", { pointerId: 8, button: 2 })
           pointer(handle, "pointerdown", { pointerId: 9 })
-          assert.deepStrictEqual(calls, [[divider, 7], [handle, 9]])
+          assert.deepStrictEqual(calls, [[divider, 7], [handle, 9], "grab"])
         }).pipe(Effect.scoped)
     )
 

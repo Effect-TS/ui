@@ -533,7 +533,7 @@ describe("HtmlScene", () => {
       )
     })
 
-    it.effect("sends pointerdown, mousedown, mouseup, click in order, follows cancel rules, and stops when press removes or disables the element", () =>
+    it.effect("sends pointerdown, mousedown, pointerup, mouseup, click in order, follows cancel rules, and stops when press removes or disables the element", () =>
       Effect.gen(function*() {
         const Sequence = Html.component({
           name: "Sequence",
@@ -553,15 +553,17 @@ describe("HtmlScene", () => {
           view: (h, model) =>
             h.div(
               h.form.on("submit", "submit").children(
-                h.button.on("pointerdown", "pd")
-                  .on("mousedown", "md")
-                  .on("mouseup", "mu")
+                h.button.on("pointerdown", ({ pointerId }) => `pd${pointerId}`)
+                  .on("mousedown", ({ pointerId }) => `md${pointerId}`)
+                  .on("pointerup", ({ pointerId }) => `pu${pointerId}`)
+                  .on("mouseup", ({ pointerId }) => `mu${pointerId}`)
                   .on("click", "ck")
                   .children("All")
               ),
               h.input.attrs({ type: "checkbox", "aria-label": "CancelPD" })
                 .on("pointerdown", "pd-cancel", { preventDefault: true })
                 .on("mousedown", "md")
+                .on("pointerup", "pu")
                 .on("mouseup", "mu")
                 .on("click", "ck")
                 .on("change", "ch"),
@@ -592,15 +594,13 @@ describe("HtmlScene", () => {
         const scene = yield* HtmlScene.make(Sequence, {})
         scene.click("All")
           .expectDefaultPrevented()
-          .expect(log).toHaveText("pd|md|mu|ck|submit")
+          .expect(log).toHaveText("pd1|md-1|pu1|mu-1|ck|submit")
           .click(HtmlLocator.label("CancelPD"))
           .expectDefaultPrevented(false)
-          .expect(log).toHaveText("pd|md|mu|ck|submit|pd-cancel|ck|ch")
+          .expect(log).toHaveText(/\|pd-cancel\|pu\|ck\|ch$/)
           .click(HtmlLocator.label("CancelMouse"))
           .expectDefaultPrevented(false)
-          .expect(log).toHaveText(
-            "pd|md|mu|ck|submit|pd-cancel|ck|ch|pd|md-cancel|mu-cancel|ck|ch"
-          )
+          .expect(log).toHaveText(/\|pd\|md-cancel\|mu-cancel\|ck\|ch$/)
           .click("Remove")
           .expect(log).toHaveText(/\|remove-down$/)
           .click("Disable")

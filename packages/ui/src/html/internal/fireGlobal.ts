@@ -39,6 +39,8 @@ export const fire = (
 ): boolean => {
   const defaults = event === "keydown" || event === "keyup"
     ? key
+    : event === "mousedown" || event === "mouseup"
+    ? scene.mouse
     : pointerEvents.has(event)
     ? scene.pointer
     : undefined

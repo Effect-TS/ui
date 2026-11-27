@@ -120,17 +120,15 @@ export class PlayCursor {
   {
     const target = this.handlerOn(node, event)
     if (target === undefined) return undefined
-    const preventDefault = target.eventOptions[event]?.preventDefault
-    let prevented = event === "submit" || preventDefault === "always"
+    let prevented = event === "submit" ||
+      target.eventOptions[event]?.preventDefault === "always"
     const handled = target.dispatch!(
       event,
       target.handlers[event]!,
       payload(),
-      preventDefault === true
-        ? () => {
-          prevented = true
-        }
-        : undefined
+      (options) => {
+        if (options.preventDefault === true) prevented = true
+      }
     )
     return { handled, prevented }
   }

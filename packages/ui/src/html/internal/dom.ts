@@ -1,4 +1,3 @@
-import * as Cause from "effect/Cause"
 import * as Kernel from "../../internal/kernel.ts"
 import * as transitionRun from "../../internal/transitionRun.ts"
 import type * as View from "../../View.ts"
@@ -382,15 +381,7 @@ export const makeHost = (
       if (handler?.["~fire"] !== undefined) {
         return handler["~fire"](payload(), name, sent)
       }
-      let message = handler
-      if (typeof handler === "function") {
-        try {
-          message = handler(payload())
-        } catch (error) {
-          Kernel.fail(inst, "event", Cause.die(error))
-          return false
-        }
-      }
+      const message = inst.message(handler, payload())
       if (message === undefined) return false
       sent(options)
       Kernel.send(inst, message, name)
