@@ -836,7 +836,7 @@ export const makeHost = (
         const focused = (node.getRootNode() as Document | ShadowRoot)
           .activeElement as HTMLElement | null
         parent.insertBefore(node, before)
-        // Focus is given back only if it was dropped, not if a blur handler moved it.
+        // Do not override focus set by a blur handler.
         if (
           document.activeElement === document.body && node.contains(focused)
         ) {
