@@ -1,5 +1,12 @@
 // @vitest-environment happy-dom
-import { Component, Feature, MessageLog, Mount, UiSchema } from "@effect/ui"
+import {
+  Component,
+  Feature,
+  MessageLog,
+  Mount,
+  UiSchema,
+  View
+} from "@effect/ui"
 import { BrowserHost, Canvas, Html } from "@effect/ui/html"
 import { expect, it } from "@effect/vitest"
 import { Effect, Exit, Schema } from "effect"
@@ -409,4 +416,149 @@ it.effect("a dispatch whose update throws tells the Failed entry, and the failed
       in: "update"
     })
     expect(root.instance(tally)).toBeUndefined()
+  }).pipe(Effect.scoped))
+
+const Leaf = Html.component({
+  name: "Leaf",
+  model: Schema.Null,
+  message: Schema.Never
+}).make({
+  init: () => null,
+  update: ($) => $.model,
+  view: (h) => h.em("leaf")
+})
+
+const Card = Html.component({
+  name: "Card",
+  model: Schema.Null,
+  message: Schema.Never,
+  slots: ["body"]
+}).make({
+  init: () => null,
+  update: ($) => $.model,
+  view: (h) =>
+    h.section.attr("data-card", "42").children(h.span("title"), h.slots.body)
+})
+
+const InnerPart = Html.component({
+  name: "InnerPart",
+  model: Schema.Null,
+  message: Schema.Never
+}).make({
+  init: () => null,
+  update: ($) => $.model,
+  parts: (p) => ({
+    trigger: p.part("button", (b) => b.attr("data-inner", ""))
+  })
+})
+
+const OuterPart = Html.component({
+  name: "OuterPart",
+  model: Schema.Null,
+  message: Schema.Never
+}).make({
+  init: () => null,
+  update: ($) => $.model,
+  parts: (p) => {
+    const outer = p.part("button", (b) => b.attr("data-outer", ""))
+    return p.child(InnerPart, {
+      key: "inner",
+      parts: (inner) => ({
+        trigger: View.wrapPart(
+          outer,
+          <B extends View.PartTarget<"button">>(element: B): ReturnType<
+            B["attr"]
+          > => outer(inner.trigger(element))
+        )
+      })
+    })
+  }
+})
+
+const LookupBoard = Html.component({
+  name: "LookupBoard",
+  model: Schema.Null,
+  message: Schema.Never
+}).make({
+  init: () => null,
+  update: ($) => $.model,
+  view: (h) =>
+    h.div(
+      Card(h, {
+        key: "42",
+        slots: {
+          body: [
+            h.button.attr("data-slot-btn", "").children("slot"),
+            Leaf(h, { key: "l" })
+          ]
+        }
+      }),
+      OuterPart(h, {
+        key: "o",
+        view: (parts) =>
+          h.div(
+            parts.trigger(h.button).children("part"),
+            h.p("plain")
+          )
+      })
+    )
+})
+
+it.effect("instanceAt resolves the instance whose view wrote a node, within its own root", () =>
+  Effect.gen(function*() {
+    const { app, page } = yield* place()
+    const log = MessageLog.makeMemory()
+    const roots: Array<BrowserHost.Controllable> = []
+    yield* BrowserHost.mountEffect(LookupBoard, {}, app).pipe(
+      register(roots),
+      Effect.provideService(MessageLog.MessageLog, log)
+    )
+    const root = roots[0]!
+    const paths = (nodes: ReadonlyArray<Node>) =>
+      BrowserHost.instancesAt(root, nodes).map((found) => found?.path)
+
+    const section = app.querySelector("section[data-card='42']")!
+    const span = section.querySelector("span")!
+    const plain = app.querySelector("p")!
+    expect(BrowserHost.instanceAt(root, section)).toMatchObject({
+      instance: (log.entries().find((entry) =>
+        entry._tag === "Mounted" && entry.path === "/LookupBoard/Card[42]"
+      ) as MessageLog.Mounted).instance,
+      component: "Card"
+    })
+    expect(paths([
+      span.firstChild!,
+      span.appendChild(document.createElement("i")),
+      section.querySelector("button[data-slot-btn]")!,
+      section.querySelector("em")!,
+      app.querySelector("button[data-outer][data-inner]")!,
+      app,
+      page.appendChild(document.createElement("div"))
+    ])).toEqual([
+      "/LookupBoard/Card[42]",
+      "/LookupBoard/Card[42]",
+      "/LookupBoard",
+      "/LookupBoard/Card[42]/[body]/Leaf[l]",
+      "/LookupBoard/OuterPart[o]",
+      undefined,
+      undefined
+    ])
+
+    // A root mounted inside an element of this one owns what it renders,
+    // and its painted copy belongs to neither.
+    const plainText = plain.firstChild!
+    yield* BrowserHost.mountEffect(Counter, {}, plain).pipe(
+      register(roots),
+      Effect.provideService(MessageLog.MessageLog, MessageLog.makeMemory())
+    )
+    const inner = plain.querySelector("button")!
+    expect(paths([plain, plainText, inner])).toEqual([
+      "/LookupBoard",
+      "/LookupBoard",
+      undefined
+    ])
+    expect(BrowserHost.instanceAt(roots[1]!, inner)?.component).toBe("Counter")
+    yield* roots[1]!.pause(() => ({ model: 0 }))
+    expect(paths([plain.nextElementSibling!.firstChild!])).toEqual([undefined])
+    yield* roots[1]!.resume
   }).pipe(Effect.scoped))

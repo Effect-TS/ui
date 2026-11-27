@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { DevTools } from "@effect/ui-devtools"
+import { HtmlLocator } from "@effect/ui/html/testing"
 import { afterEach, assert, describe, it } from "@effect/vitest"
 import { Effect, Exit, Layer, Scope } from "effect"
 import { play } from "./fixtures/TwoEditors.ts"
@@ -60,6 +61,44 @@ describe("DevTools WebMCP", { concurrent: false }, () => {
   })
 
   it.live(
+    "keeps the last pick of each root on a page with two",
+    () =>
+      Effect.gen(function*() {
+        const mc = installModelContext()
+        const services = yield* Layer.build(DevTools.layer())
+        const apps = [
+          yield* play("open").pipe(Effect.provide(services)),
+          yield* play("open").pipe(Effect.provide(services))
+        ]
+        yield* wait(20)
+        const overlay = document.querySelector<HTMLIFrameElement>(
+          "iframe[data-effect-ui-devtools]"
+        )!.contentDocument!.body
+        for (const app of apps) {
+          HtmlLocator.click(
+            HtmlLocator.getByRole(overlay, "button", { name: /pick/i })
+          )
+          yield* wait(20)
+          HtmlLocator.click(
+            HtmlLocator.getByRole(app, "button", { name: "Save n1" })
+          )
+          yield* wait(20)
+        }
+        const sessions: ReadonlyArray<any> = yield* mc.call(
+          "effect_ui_list_sessions"
+        )
+        assert.lengthOf(sessions, 2)
+        for (const { session } of sessions) {
+          assert.deepInclude(
+            yield* mc.call("effect_ui_get_picked", { session }),
+            { session, path: "/Workspace/Editor[n1]" }
+          )
+        }
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
     "registers page tools, redacts historical state, controls the page, and unregisters on close",
     () =>
       Effect.gen(function*() {
@@ -89,6 +128,8 @@ describe("DevTools WebMCP", { concurrent: false }, () => {
           "effect_ui_resume",
           "effect_ui_set_recording",
           "effect_ui_get_message_schema",
+          "effect_ui_find_instances",
+          "effect_ui_get_picked",
           "effect_ui_wait"
         ])
         for (const tool of mc.tools.values()) {
@@ -159,7 +200,7 @@ describe("DevTools WebMCP", { concurrent: false }, () => {
           yield* play("open").pipe(Effect.provide(services))
           yield* wait(20)
 
-          assert.strictEqual(mc.tools.size, 14)
+          assert.strictEqual(mc.tools.size, 16)
           assert.isTrue(
             mc.tools.get("effect_ui_dispatch")?.annotations?.consequentialHint
           )

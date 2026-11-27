@@ -50,7 +50,8 @@ export const mount = (
         ),
       setOpen: () => Effect.void,
       setRecording: () => Effect.void,
-      setPosition: () => Effect.void
+      setPosition: () => Effect.void,
+      highlight: () => Effect.void
     })
     yield* mountOverlay(container, feed, pages)
     const watch = Effect.gen(function*() {

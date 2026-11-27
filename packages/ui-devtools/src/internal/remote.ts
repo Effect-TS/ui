@@ -1,4 +1,4 @@
-import type * as BrowserHost from "@effect/ui/html/BrowserHost"
+import * as BrowserHost from "@effect/ui/html/BrowserHost"
 import * as MessageLog from "@effect/ui/MessageLog"
 import * as Effect from "effect/Effect"
 import * as Schedule from "effect/Schedule"
@@ -19,6 +19,7 @@ export interface Controller {
   readonly resume: Effect.Effect<void>
   readonly notRecording: () => ReadonlyArray<string>
   readonly setRecording: (tag: string, recording: boolean) => void
+  readonly picks: () => ReadonlyArray<Control.Picked>
   readonly changes: Stream.Stream<void>
 }
 
@@ -288,6 +289,19 @@ const messageSchema = (
     )
   })
 
+const maxMatches = 20
+
+// What the tools tell of an element: its tag and the instance that rendered it, never its text.
+export const matchOf = (
+  element: Element,
+  found: BrowserHost.ControlledInstance
+) => ({
+  tag: element.localName,
+  instance: found.instance,
+  path: found.path,
+  component: found.component
+})
+
 export const makeHandler = (
   controller: Omit<Controller, "changes">
 ): (request: Control.Request) => Effect.Effect<Json, string> => {
@@ -370,6 +384,24 @@ export const makeHandler = (
             paused: paused?.session === request.session ? paused.seq : null
           }
         })
+      case "Find":
+        return Effect.suspend(() => {
+          const root = controller.roots.get(request.session)
+          if (root === undefined) return Effect.fail(noRoot(request.session))
+          let elements: NodeListOf<Element>
+          try {
+            elements = document.querySelectorAll(request.selector)
+          } catch {
+            return Effect.fail("Invalid CSS selector: " + request.selector)
+          }
+          const matches: Array<Json> = []
+          let total = 0
+          BrowserHost.instancesAt(root, elements).forEach((found, index) => {
+            if (found === undefined || ++total > maxMatches) return
+            matches.push({ ...matchOf(elements[index]!, found), index })
+          })
+          return Effect.succeed({ total, matches })
+        })
     }
   }
 }
@@ -391,7 +423,8 @@ export const connect = (
         _tag: "State",
         sessions: Array.from(controller.roots.keys()),
         paused: controller.paused() ?? null,
-        notRecording: controller.notRecording()
+        notRecording: controller.notRecording(),
+        picks: controller.picks()
       })
     )
     yield* state
