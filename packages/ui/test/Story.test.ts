@@ -1245,4 +1245,147 @@ describe("Story", () => {
         waiting.send(author).given((model) => model).keepPending("author")
       }))
   })
+
+  describe("explore", () => {
+    const SearchMsg = UiSchema.TaggedEnum({
+      Typed: { text: Schema.String },
+      GotResults: { query: Schema.String }
+    })
+
+    const makeSearch = (mode: Command.Mode) => {
+      const Search = Command.make(
+        "search/Search",
+        { args: { text: Schema.String }, mode },
+        ({ text }) => Effect.succeed(SearchMsg.GotResults({ query: text }))
+      )
+      const SearchComponent = Component.define({
+        name: "ExploreSearch",
+        model: Schema.Struct({
+          query: Schema.String,
+          results: Schema.NullOr(Schema.String)
+        }),
+        message: SearchMsg
+      }).make({
+        init: () => ({ query: "", results: null }),
+        update: ($, message) =>
+          SearchMsg.match(message, {
+            Typed: ({ text }) =>
+              $.set({ ...$.model, query: text }).run(Search.make({ text })),
+            GotResults: ({ query }) => ({ ...$.model, results: query })
+          }),
+        view: (h, model) => h.el("div", model.query)
+      })
+      return { Search, Component: SearchComponent }
+    }
+
+    const searchMessages = [
+      SearchMsg.Typed({ text: "a" }),
+      SearchMsg.Typed({ text: "ab" })
+    ]
+
+    const resultsMatchQuery = (story: {
+      readonly pending: ReadonlyArray<unknown>
+      readonly model: {
+        readonly query: string
+        readonly results: string | null
+      }
+    }) =>
+      story.pending.length > 0 || story.model.results === null ||
+      story.model.results === story.model.query
+
+    const exploreFailure = (f: () => void): string => {
+      try {
+        f()
+      } catch (error) {
+        if (error instanceof TypeError) throw error
+        return error instanceof Error ? error.message : String(error)
+      }
+      assert.fail("expected Story.explore to throw")
+    }
+
+    it("finds the shortest stale-result interleaving under concurrent mode", () => {
+      const concurrent = makeSearch("concurrent")
+      const message = exploreFailure(() => {
+        Story.explore(concurrent.Component, {}, {
+          messages: searchMessages,
+          commands: [[concurrent.Search, {
+            success: ({ text }) => [SearchMsg.GotResults({ query: text })]
+          }]],
+          invariant: resultsMatchQuery,
+          depth: 6
+        })
+      })
+      assert.include(message, "Story.start(ExploreSearch, {})")
+      assert.match(
+        message,
+        /\.send\(\{"_tag":"Typed","text":"a"\}\)[\s\S]*\.keepPending\([^)]*search\/Search[^)]*\)[\s\S]*\.send\(\{"_tag":"Typed","text":"ab"\}\)[\s\S]*\.resolve\([^)]*search\/Search[^)]*"ab"[^)]*,\s*\{"_tag":"GotResults","query":"ab"\}\)[\s\S]*\.resolve\([^)]*search\/Search[^)]*,\s*\{"_tag":"GotResults","query":"a"\}\)/
+      )
+      assert.lengthOf(message.match(/\.(send|resolve)\(/g) ?? [], 4)
+      assert.include(message, `"query":"ab"`)
+      assert.include(message, `"results":"a"`)
+    })
+
+    it("passes with a closed state space under switch mode and passes within depth under queue mode", () => {
+      const switched = makeSearch("switch")
+      const switchResult = Story.explore(switched.Component, {}, {
+        messages: searchMessages,
+        commands: [[switched.Search, {
+          success: ({ text }) => [SearchMsg.GotResults({ query: text })]
+        }]],
+        invariant: resultsMatchQuery,
+        depth: 6
+      })
+      assert.isTrue(switchResult.closed)
+      assert.isAbove(switchResult.states, 0)
+
+      const queued = makeSearch("queue")
+      const queueResult = Story.explore(queued.Component, {}, {
+        messages: searchMessages,
+        commands: [[queued.Search, {
+          success: ({ text }) => [SearchMsg.GotResults({ query: text })]
+        }]],
+        invariant: resultsMatchQuery,
+        depth: 6
+      })
+      assert.isFalse(queueResult.closed)
+      assert.isAbove(queueResult.states, switchResult.states)
+    })
+
+    it("throws when the state budget is exhausted before reaching depth", () => {
+      const queued = makeSearch("queue")
+      const message = exploreFailure(() => {
+        Story.explore(queued.Component, {}, {
+          messages: searchMessages,
+          commands: [[queued.Search, {
+            success: ({ text }) => [SearchMsg.GotResults({ query: text })]
+          }]],
+          invariant: resultsMatchQuery,
+          depth: 6,
+          states: 10
+        })
+      })
+      assert.match(message, /state|budget/i)
+      assert.notInclude(message, "Story.start(")
+    })
+
+    it("fails naming an unlisted Command, and explores across emitted events and unloaded queries", () => {
+      const message = exploreFailure(() => {
+        Story.explore(Note, {}, {
+          messages: [NoteMessage.Save()],
+          commands: [],
+          invariant: () => true,
+          depth: 2
+        })
+      })
+      assert.include(message, "notes/SaveNote")
+
+      const result = Story.explore(Note, { author: "1" }, {
+        messages: [NoteMessage.Save()],
+        commands: [[SaveNoteCommand, { success: [NoteMessage.Saved()] }]],
+        invariant: () => true,
+        depth: 2
+      })
+      assert.isAbove(result.states, 0)
+    })
+  })
 })
