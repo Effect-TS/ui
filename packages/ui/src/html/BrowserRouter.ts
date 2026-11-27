@@ -11,8 +11,9 @@
  *
  * Links are plain anchors with a printed route. A click is intercepted only
  * when the routes parse its href and it has no modifier key, `target` or
- * `download`. Anything else is a full page load. `<form method="get">` is
- * intercepted by the same test. Following either to the current route sends a
+ * `download`. Anything else is a full page load. An unhandled
+ * `<form method="get">` is intercepted by the same test, and otherwise
+ * submits natively. Following either to the current route sends a
  * message without scrolling to the top, announcing or moving focus. A `#hash`
  * link still scrolls to its target, even when it's the current hash, and a
  * bare `#` stays in the URL and scrolls to the top. Both work the same in a
@@ -518,8 +519,7 @@ const make = (
       if (href !== undefined) Effect.runSync(router.intent(href))
     }
     const onSubmit = (event: SubmitEvent) => {
-      const ownedUnhandled = submit.ownedUnhandled.has(event)
-      if (event.defaultPrevented && !ownedUnhandled) return
+      if (event.defaultPrevented) return
       const form = event.target as HTMLFormElement | null
       if (form === null || form.localName !== "form") return
       flushHistory()
@@ -535,14 +535,7 @@ const make = (
       }
       url.search = search.toString()
       url.hash = ""
-      const href = local(url)
-      // The host already stopped the browser's submission, so the Router makes it: a full page
-      // load for anything the routes don't parse.
-      if (ownedUnhandled) {
-        Effect.runSync(
-          href !== undefined ? router.navigate(href) : router.load(url.href)
-        )
-      } else follow(event, href)
+      follow(event, local(url))
     }
     const handled = new WeakSet<Event>()
     const begin = (event: Event) => {

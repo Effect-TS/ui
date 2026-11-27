@@ -1604,12 +1604,15 @@ describe("BrowserHost", { concurrent: false }, () => {
       const [name, form] of [
         [
           "a form the patch inserts",
-          (h: any, after: boolean) => after ? h.el("form") : h.el("div")
+          (h: any, after: boolean) =>
+            after ? h.el("form").attr("method", "dialog") : h.el("div")
         ],
         [
           "a form whose submit handler the patch takes away",
           (h: any, after: boolean) =>
-            after ? h.el("form") : h.el("form").on("submit", "sent")
+            after
+              ? h.el("form").attr("method", "dialog")
+              : h.el("form").on("submit", "sent")
         ]
       ] as const
     ) {
@@ -2293,7 +2296,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(root.model()).toEqual(["submit Hello [a,b]"])
       }).pipe(Effect.scoped))
 
-    it.effect("an unhandled form is prevented only for same-window GET and dialog; handled forms always are; forms outside the app aren't", () =>
+    it.effect("an unhandled form is prevented only for dialog; handled forms always are; forms outside the app aren't", () =>
       Effect.gen(function*() {
         const app = yield* container
         const outside = yield* container
@@ -2341,7 +2344,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         const form = (name: string) =>
           HtmlLocator.getByRole(mounted, "form", { name }) as HTMLFormElement
         const bare = form("Bare")
-        expect(submitted(bare)).toBe(true)
+        expect(submitted(bare)).toBe(false)
         expect(
           submitted(
             bare,
@@ -2354,7 +2357,7 @@ describe("BrowserHost", { concurrent: false }, () => {
             HtmlLocator.getByRole(bare, "button", { name: "New tab" })
           )
         ).toBe(false)
-        expect(submitted(form("Invalid"))).toBe(true)
+        expect(submitted(form("Invalid"))).toBe(false)
         expect(submitted(form("Dialog"))).toBe(true)
         expect(submitted(form("Post"))).toBe(false)
         expect(submitted(form("Blank"))).toBe(false)
@@ -2369,7 +2372,8 @@ describe("BrowserHost", { concurrent: false }, () => {
           .make({
             init: () => null,
             update: ($) => $.model,
-            view: (h) => h.el("FORM", h.input.attr("name", "q"))
+            view: (h) =>
+              h.el("FORM", h.input.attr("name", "q")).attr("method", "dialog")
           })
         const upper = yield* container
         yield* BrowserHost.mountEffect(Upper, {}, upper)
@@ -3907,7 +3911,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           init: () => null,
           update: ($) => $.model,
           view: (h) =>
-            h.form(
+            h.form.attr("method", "dialog").children(
               h.el("div").attrs({ "Data-Kind": "box", "a b": "dropped" }),
               h.el("svg", h.el("rect").attr("viewBox", "0 0 1 1"))
             )

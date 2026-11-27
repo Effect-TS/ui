@@ -624,19 +624,13 @@ export const makeHost = (
           )
     )
     if (
-      name === "submit" && event.target !== null && forms.has(event.target)
-    ) {
-      submit.ownedUnhandled.delete(event)
-      if (handled) event.preventDefault()
-      else {
-        const kind = submit.kindOf(
-          event.target as globalThis.Element,
-          (event as SubmitEvent).submitter ?? null
-        )
-        if (kind !== "native") event.preventDefault()
-        if (kind === "get") submit.ownedUnhandled.add(event)
-      }
-    }
+      name === "submit" && event.target !== null && forms.has(event.target) &&
+      (handled ||
+        submit.kindOf(
+            event.target as globalThis.Element,
+            (event as SubmitEvent).submitter ?? null
+          ) === "dialog")
+    ) event.preventDefault()
     if (name === "dragend") endTargets()
     if (restoring.has(name) && target !== undefined && target !== null) {
       restoreSoon(target)

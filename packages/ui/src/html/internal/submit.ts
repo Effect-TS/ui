@@ -5,13 +5,6 @@
  */
 
 /**
- * Same-window GETs cancelled by the host but left for the Router.
- *
- * @internal
- */
-export const ownedUnhandled = new WeakSet<Event>()
-
-/**
  * Read an attribute through the form's own-window prototype, bypassing controls
  * named `getAttribute` that shadow the method on the form.
  *
@@ -21,10 +14,10 @@ export const attribute = (form: Element, name: string): string | null =>
   (Object.getPrototypeOf(form) as Element).getAttribute.call(form, name)
 
 /**
- * Where an unhandled submission goes: `"dialog"` for the `dialog` method, `"get"`
- * for a same-window GET the Router can follow, and `"native"` for POST or GET
- * targeting another window. An invalid method counts as `get`, as in the
- * browser.
+ * How a submission is made: `"dialog"` for the `dialog` method, which the
+ * host cancels, `"get"` for a same-window GET the Router can follow, and
+ * `"native"` for POST or GET targeting another window. An invalid method
+ * counts as `get`, as in the browser.
  *
  * @internal
  */
