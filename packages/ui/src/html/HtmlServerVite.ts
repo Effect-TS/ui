@@ -277,12 +277,9 @@ export const plugin = (options: Options): Plugin => {
     // Shared, so the server build sees the `templateFile` that `buildApp` sets.
     sharedDuringBuild: true,
     async config(userConfig, { isPreview }) {
-      const root = path.resolve(
-        typeof userConfig?.root === "string" && userConfig.root.length > 0
-          ? userConfig.root
-          : process.cwd()
+      const uiPackages = await discoverUiPackages(
+        path.resolve(userConfig.root ?? "")
       )
-      const uiPackages = await discoverUiPackages(root)
       return {
         // In dev, page requests that Vite doesn't answer reach the server
         // entry. A preview serves `/about` from `about.html`.
