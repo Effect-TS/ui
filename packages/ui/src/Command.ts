@@ -88,6 +88,7 @@ import type { Given } from "./internal/given.ts"
 import type * as Kernel from "./internal/kernel.ts"
 import * as internalNoop from "./internal/noop.ts"
 import { canonical } from "./internal/queryCore.ts"
+import { onCommit } from "./internal/services.ts"
 import type * as Query from "./Query.ts"
 import type * as Renderer from "./Renderer.ts"
 
@@ -1017,10 +1018,13 @@ const define = (
   const stream = options.stream === true
   const mode = options.mode ?? "concurrent"
   const group = options.group ?? []
+  const commit = (options as { readonly [onCommit]?: boolean })[onCommit] ===
+    true
   const argsSchema = argsSchemaOf(options.args)
   const groupOf = makeGroup(name, argsSchema, group)
   return {
     [DefinitionTypeId]: DefinitionTypeId,
+    ...(commit ? { [onCommit]: true } : undefined),
     stream,
     mode,
     group,
@@ -1039,6 +1043,7 @@ const define = (
         afterRefetch: undefined,
         resolve: identity,
         reject: undefined,
+        ...(commit ? { [onCommit]: true } : undefined),
         ...issue(args)
       }, unmatched)
     }

@@ -263,3 +263,18 @@ export const isNavigation = (
   command: { readonly name: string; readonly service?: unknown }
 ): boolean =>
   command.service !== undefined && command.name.startsWith("@effect/ui/Router/")
+
+/**
+ * Marks a Command definition and its issued Commands to run in the committing
+ * task once their render commits, rather than waiting for the scheduler.
+ *
+ * @internal
+ */
+export const onCommit: unique symbol = Symbol.for(
+  "@effect/ui/Command/onCommit"
+) as any
+
+/** @internal */
+export const isOnCommit = (
+  command: { readonly name: string; readonly [onCommit]?: boolean | undefined }
+): boolean => command[onCommit] === true

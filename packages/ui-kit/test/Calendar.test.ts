@@ -445,6 +445,7 @@ describe("Calendar", () => {
         ["2026-11-15"]
       )
 
+      scene.focus(dayLoc("2026-11-18"))
       assert.deepStrictEqual(
         focused(
           scene.keydown(dayLoc("2026-11-18"), "Home").expectDefaultPrevented()
@@ -458,6 +459,7 @@ describe("Calendar", () => {
         ["2026-11-21"]
       )
 
+      scene.focus(dayLoc("2026-11-15"))
       scene.keydown(dayLoc("2026-11-15"), "ArrowRight", { alt: true })
         .expectIgnored().expectDefaultPrevented(false)
       scene.keydown(dayLoc("2026-11-15"), "Enter")

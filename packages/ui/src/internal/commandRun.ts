@@ -19,7 +19,7 @@ import { isNoop } from "./noop.ts"
 import * as queryCore from "./queryCore.ts"
 import { refsOf } from "./refs.ts"
 import * as schedule from "./schedule.ts"
-import { isNavigation, Refs } from "./services.ts"
+import { isNavigation, isOnCommit, Refs } from "./services.ts"
 
 type Issued =
   | Command.Issued<any, any, never, "Effect">
@@ -294,7 +294,10 @@ class Runs implements Kernel.Runs {
       })
     }
     if (routed.has(tree) && isNavigation(command)) defer(tree, () => go(true))
-    else go()
+    else if (isOnCommit(command)) {
+      ;(tree.committed ??= []).push(() => go(true))
+      Kernel.wake(tree)
+    } else go()
   }
   exited(
     run: Run,

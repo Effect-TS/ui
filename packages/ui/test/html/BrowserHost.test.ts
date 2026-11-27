@@ -3606,6 +3606,24 @@ describe("BrowserHost", { concurrent: false }, () => {
         }).pipe(Effect.scoped)
     )
 
+    it.effect("ref Commands run in the committing task under HtmlScheduler", () =>
+      Effect.gen(function*() {
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(refs(Html), {}, app)
+        yield* tick
+        yield* Effect.promise(async () => {
+          root.send(Message.Focus())
+          await Promise.resolve()
+        })
+        expect(document.activeElement).toBe(
+          HtmlLocator.getByRole(app, "textbox", { name: "Field" })
+        )
+        expect(root.model()).toEqual(["mounted input", "found true"])
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(HtmlScheduler.layer({ budget: 0 }))
+      ))
+
     const Code = Html.ref("Code", "input")
     const Loose = Html.ref("Loose", "input")
     const EntryMessage = UiSchema.TaggedEnum({
