@@ -3,4 +3,4 @@
 "@effect/ui-devtools": patch
 ---
 
-Add `Case`, which names one state of a component (props, a starting Model, messages, a Layer) for `Play.fromCase`, `HtmlPlay.fromCase` and `BrowserCase.mount`. `DevToolsVite.plugin({ workbench })` serves each case at `/__workbench/<Component>/<key>` in the dev server.
+Add `Case` to share component props, starting state, messages and service stubs between `Play.fromCase`, `HtmlPlay.fromCase` and `BrowserCase.mount`. Enable `DevToolsVite.plugin({ workbench })` to preview each case at `/__workbench/<Component>/<key>` in the dev server.

@@ -325,7 +325,6 @@ export const plugin = (options?: Options): Plugin => {
     ? options.overlay
     : {}
   const workbench = options?.workbench
-  // Vite's resolved `base`, such as `/app/`.
   let base = "/"
   let bound = Promise.resolve(false)
   let partial = false
@@ -374,7 +373,7 @@ export const plugin = (options?: Options): Plugin => {
       // catch-all, such as HtmlServerVite's.
       if (workbench !== undefined) {
         server.middlewares.use((req, res, next) => {
-          // Before Vite strips `base`, so this strips it.
+          // This middleware runs before Vite strips the base path.
           const url = underBase(base, req.url ?? "/")
           if (
             req.method !== "GET" || url === undefined ||

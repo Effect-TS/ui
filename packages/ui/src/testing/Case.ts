@@ -104,7 +104,7 @@ export interface Case<C extends AnyComponent, R = never> {
 }
 
 /**
- * What `make` takes for each case.
+ * Props and optional starting state, messages and services for a case.
  *
  * **Details**
  *
@@ -168,7 +168,6 @@ export type Requirements<C extends AnyComponent, I> = I extends unknown ?
     | (I extends { readonly layer?: infer L } ? LayerRequirements<L> : never)
   : never
 
-// Distributes, as `Effect.Services` does for `Props | Effect<Props, never, Config>`.
 type LayerRequirements<L> = L extends Layer.Layer<any, any, infer R> ? R
   : never
 

@@ -6,8 +6,6 @@ import type * as Case from "../testing/Case.ts"
 import type * as runtime from "./runtime.ts"
 
 /**
- * A case's fields, or a component and props alone.
- *
  * @internal
  */
 export type Start = Pick<
@@ -27,9 +25,9 @@ const none: runtime.HotSession = {
 }
 
 /**
- * The hot session a case root mounts with: `hot` with its saved snapshot
- * dropped, so a full reload starts the case over. With a case Model the root starts from it, and what `init` returned is
- * dropped, Commands, events and sends included.
+ * Discards the saved snapshot so a full reload replays messages from the
+ * case's starting state, not the restored state. A supplied model replaces
+ * init's result, including its Commands, events and sends.
  *
  * @internal
  */
@@ -50,8 +48,8 @@ export const session = (
 }
 
 /**
- * Runs `mount` with the case's Layer, built in the current Scope, then sends
- * the case's messages to the root in one synchronous pass.
+ * Sends all messages in one synchronous pass so Command results arrive
+ * after the list, even when a Command completes immediately.
  *
  * @internal
  */

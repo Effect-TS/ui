@@ -18,20 +18,19 @@ import * as BrowserHost from "../BrowserHost.ts"
 import type * as Html from "../Html.ts"
 
 /**
- * Mounts `c` into `container` with `BrowserHost`, sends its messages, and
- * returns the root once the DOM shows them, for the life of the current
- * Scope.
+ * Mounts `c` into `container`, sends its messages, and returns the root
+ * after the DOM commit. The current Scope owns the mount.
  *
  * **Details**
  *
  * The root starts from the case's `model` when it has one, and the case's
  * `layer` is built in the current Scope and provided around the mount.
- * The messages go in the same order as with `Play.fromCase`, so a case
- * shows the same state in both. The Effect completes after the commit that
- * follows them, a held view transition's included, without waiting for the
- * Commands they start. The root never adopts the state saved
- * before a Vite full reload, so a reload doesn't send the messages again to
- * a restored Model. In-place hot reload still updates it.
+ * Messages are sent in order, as with `Play.fromCase`. The Effect waits
+ * for the following commit, including a held view transition, but not for
+ * in-flight Commands.
+ *
+ * A full reload starts the case over rather than replaying messages onto
+ * a saved Model. In-place hot reload still updates the mounted component.
  *
  * @stability experimental
  * @category constructors
