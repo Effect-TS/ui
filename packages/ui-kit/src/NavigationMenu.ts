@@ -186,7 +186,7 @@ import {
   attrSelector,
   flag,
   type Keyed,
-  withStyle
+  ownStyle
 } from "./internal/attributes.ts"
 import { provided } from "./internal/direction.ts"
 import {
@@ -198,20 +198,14 @@ import {
 import { watchHoverArea } from "./internal/hoverArea.ts"
 import { onEscape } from "./internal/interaction.ts"
 import {
-  ArrowKeys,
   itemAttribute,
   linkAttrs,
-  moveFocus,
+  makeTrackArrowKeys,
   opensPanel
 } from "./internal/navigation.ts"
 import { listenOutside } from "./internal/outside.ts"
 import { makeTrackPresence } from "./internal/presence.ts"
-import {
-  atDocumentOrigin,
-  inPlaceBox,
-  layered,
-  portalBox
-} from "./internal/topLayer.ts"
+import { layered, portalStyle } from "./internal/topLayer.ts"
 import {
   statusOf,
   transitionAttrs,
@@ -368,7 +362,7 @@ const NavigationMenuMessage = UiSchema.TaggedEnum({
   PressedEscape: {},
   FocusedOutside: {},
   ShowedValue: { value: Schema.String },
-  CompletedWaitBeforeOpening: {},
+  CompletedWaitBeforeOpening: { value: Schema.String },
   CompletedWaitBeforeClosing: {},
   CompletedPatience: {},
   ShowedPortal: {},
@@ -381,7 +375,6 @@ const NavigationMenuMessage = UiSchema.TaggedEnum({
 type NavigationMenuMessage = typeof NavigationMenuMessage.Type
 
 const NavigationMenuModel = Schema.Struct({
-  hover: Schema.NullOr(Schema.String),
   touched: Schema.Boolean,
   away: Schema.Boolean,
   request: Schema.NullOr(Schema.Struct({
@@ -390,7 +383,8 @@ const NavigationMenuModel = Schema.Struct({
   })),
   reason: Schema.NullOr(NavigationMenuOpenReason),
   patient: Schema.Boolean,
-  closeReason: Schema.NullOr(NavigationMenuDismissReason),
+  // Whether the close being shown returns focus to the trigger.
+  restoreFocus: Schema.Boolean,
   value: Schema.NullOr(Schema.String),
   mounted: Schema.Boolean,
   started: Schema.Boolean,
@@ -407,16 +401,23 @@ type NavigationMenuUpdate = Component.Update<
   NavigationMenuProps
 >
 
+const sleep = (delay: number) => Effect.sleep(Duration.millis(delay))
+
 const wait = <M>(name: string, message: M) =>
   Command.make(
     name,
     { args: { delay: Schema.Number }, mode: "switch" },
-    ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), message)
+    ({ delay }) => Effect.as(sleep(delay), message)
   )
 
-const WaitBeforeOpening = wait(
+const WaitBeforeOpening = Command.make(
   "WaitBeforeOpening",
-  NavigationMenuMessage.CompletedWaitBeforeOpening()
+  { args: { delay: Schema.Number, value: Schema.String }, mode: "switch" },
+  ({ delay, value }) =>
+    Effect.as(
+      sleep(delay),
+      NavigationMenuMessage.CompletedWaitBeforeOpening({ value })
+    )
 )
 
 const WaitBeforeClosing = wait(
@@ -466,7 +467,7 @@ const openFor = (
   reason: NavigationMenuOpenReason
 ) => {
   const next = UiStruct.evolve(model, {
-    closeReason: null,
+    restoreFocus: false,
     transition: $.props.value === null ? null : model.transition
   })
   return ($.props.value === value
@@ -483,52 +484,50 @@ const dismiss = (
 ) =>
   $.props.value === null
     ? $.model
-    : $.evolve({ closeReason: reason, request: null }).run(
+    : $.evolve({ restoreFocus: reason === "escape-key", request: null }).run(
       Command.interrupt(WaitBeforeClosing)
     ).emit(NavigationMenuEvents.RequestedClose({ reason }))
 
+// The popup shows `value`, so a request the consumer took applies.
+const showed = (
+  model: NavigationMenuModel,
+  $: NavigationMenuUpdate,
+  value: string
+) =>
+  opened(
+    UiStruct.evolve(model, { value }),
+    $,
+    model.request?.value === value ? model.request.reason : null
+  )
+
 const triggerAttribute = "data-navigation-menu-trigger"
 
-const TrackNavigationList = Mount.makeStream(
+const triggersOf = (scope: string) =>
+  attrSelector(itemAttribute, scope) + `[${triggerAttribute}]`
+
+const triggerOf = (scope: string, value: string) =>
+  attrSelector(itemAttribute, scope) + attrSelector(triggerAttribute, value)
+
+const rootAttribute = "data-navigation-menu"
+
+// The open key on a trigger whose panel is closed asks to open it.
+const TrackNavigationList = makeTrackArrowKeys(
   "TrackNavigationList",
-  { args: { ...ArrowKeys.fields, value: Schema.NullOr(Schema.String) } },
-  (node: HTMLElement, args, changes) =>
-    Stream.callback<NavigationMenuMessage>((queue) =>
-      Effect.gen(function*() {
-        let current = args
-        const onKeyDown = (event: KeyboardEvent) => {
-          moveFocus(node, event, current)
-          if (event.defaultPrevented || !opensPanel(node, event, current)) {
-            return
-          }
-          const value = elementOf(event.target)?.closest(
-            attrSelector(itemAttribute, current.scope) + `[${triggerAttribute}]`
-          )?.getAttribute(triggerAttribute)
-          if (value == null || value === current.value) return
-          event.preventDefault()
-          Queue.offerUnsafe(
-            queue,
-            NavigationMenuMessage.PressedOpenKey({ value })
-          )
-        }
-        yield* Effect.acquireRelease(
-          Effect.sync(() => node.addEventListener("keydown", onKeyDown)),
-          () =>
-            Effect.sync(() => node.removeEventListener("keydown", onKeyDown))
-        )
-        yield* Stream.runForEach(changes, (next) =>
-          Effect.sync(() => {
-            current = next
-          })).pipe(Effect.forkScoped)
-      })
-    )
+  (list, event, keys) => {
+    if (event.defaultPrevented || !opensPanel(list, event, keys)) return
+    const trigger = elementOf(event.target)?.closest(triggersOf(keys.scope))
+    const value = trigger?.getAttribute(triggerAttribute)
+    if (value == null || trigger!.getAttribute("aria-expanded") === "true") {
+      return
+    }
+    event.preventDefault()
+    return NavigationMenuMessage.PressedOpenKey({ value })
+  }
 )
 
 const TrackPanelArgs = Schema.Struct({
   position: Positioning.TrackPositionArgs,
-  root: Schema.String,
-  triggers: Schema.String,
-  trigger: Schema.String,
+  scope: Schema.String,
   value: Schema.String
 })
 
@@ -584,28 +583,21 @@ const watchPanel = (
     const send = (message: NavigationMenuMessage) => {
       Queue.offerUnsafe(queue, message)
     }
+    // The portal is drawn inside the root.
+    const root = node.closest(attrSelector(rootAttribute, args.scope)) ?? node
+    const triggers = triggersOf(args.scope)
     const inside = (target: EventTarget | null) => {
       const element = elementOf(target)
-      return element !== null &&
-        (node.contains(element) ||
-          document.querySelector(current.root)?.contains(element) === true)
-    }
-    let settle: ReturnType<typeof setTimeout> | undefined
-    const onFocusOut = (event: FocusEvent) => {
-      if (!inside(event.target)) return
-      clearTimeout(settle)
-      settle = setTimeout(() => {
-        if (!inside(document.activeElement)) {
-          send(NavigationMenuMessage.FocusedOutside())
-        }
-      }, 0)
+      return element !== null && root.contains(element)
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (
         event.key !== "Tab" || event.defaultPrevented || event.ctrlKey ||
         event.altKey || event.metaKey
       ) return
-      const trigger = document.querySelector<HTMLElement>(current.trigger)
+      const trigger = root.querySelector<HTMLElement>(
+        triggerOf(current.scope, current.value)
+      )
       // Focus leaving the root closes the panel already.
       if (
         trigger !== null && bridgeTab(node, trigger, event) &&
@@ -616,18 +608,14 @@ const watchPanel = (
     const { signal } = controller
     return Effect.acquireRelease(
       Effect.sync(() => {
-        send(NavigationMenuMessage.ShowedValue({ value: current.value }))
         listenOutside(document, signal, {
           open: () => true,
-          inside: (target) => inside(target),
-          pressed: () => send(NavigationMenuMessage.PressedOutside())
-        })
-        document.addEventListener("focusout", onFocusOut, {
-          capture: true,
-          signal
+          inside,
+          pressed: () => send(NavigationMenuMessage.PressedOutside()),
+          left: () => send(NavigationMenuMessage.FocusedOutside())
         })
         document.addEventListener("keydown", onKeyDown, { signal })
-        watchHoverArea(node, signal, () => current.triggers, (away) =>
+        watchHoverArea(node, signal, () => triggers, (away) =>
           send(
             away
               ? NavigationMenuMessage.LeftHoverArea()
@@ -645,10 +633,7 @@ const watchPanel = (
         )
       ),
       () =>
-        Effect.sync(() => {
-          controller.abort()
-          clearTimeout(settle)
-        })
+        Effect.sync(() => controller.abort())
     )
   })
 
@@ -730,13 +715,12 @@ export const NavigationMenu = Html.component({
   restore: false
 }).make({
   init: () => ({
-    hover: null,
     touched: false,
     away: true,
     request: null,
     reason: null,
     patient: false,
-    closeReason: null,
+    restoreFocus: false,
     value: null,
     mounted: false,
     started: false,
@@ -745,10 +729,10 @@ export const NavigationMenu = Html.component({
   }),
   update: {
     EnteredTrigger: ($, { value }) => {
-      const next = UiStruct.evolve($.model, { hover: value, away: false })
+      const next = UiStruct.evolve($.model, { away: false })
       if ($.props.value === null) {
         return next.touched ? next : $.set(next).run(
-          WaitBeforeOpening.make({ delay: $.props.delay ?? 50 })
+          WaitBeforeOpening.make({ delay: $.props.delay ?? 50, value })
         )
       }
       return $.props.value === value || next.touched
@@ -756,7 +740,7 @@ export const NavigationMenu = Html.component({
         : openFor(next, $, value, "trigger-hover")
     },
     LeftTrigger: ($) =>
-      $.evolve({ hover: null, touched: false }).run(
+      $.evolve({ touched: false }).run(
         Command.interrupt(WaitBeforeOpening)
       ),
     TouchedTrigger: ($) =>
@@ -781,17 +765,10 @@ export const NavigationMenu = Html.component({
     PressedOutside: ($) => dismiss($, "outside-press"),
     PressedEscape: ($) => dismiss($, "escape-key"),
     FocusedOutside: ($) => dismiss($, "focus-out"),
-    ShowedValue: ($, { value }) => {
-      const request = $.model.request
-      return opened(
-        UiStruct.evolve($.model, { value }),
-        $,
-        request?.value === value ? request.reason : null
-      )
-    },
-    CompletedWaitBeforeOpening: ($) =>
-      $.props.value === null && $.model.hover !== null && !$.model.touched
-        ? openFor($.model, $, $.model.hover, "trigger-hover")
+    ShowedValue: ($, { value }) => showed($.model, $, value),
+    CompletedWaitBeforeOpening: ($, { value }) =>
+      $.props.value === null && !$.model.touched
+        ? openFor($.model, $, value, "trigger-hover")
         : $.model,
     CompletedWaitBeforeClosing: ($) =>
       $.model.away && $.model.reason === "trigger-hover"
@@ -801,7 +778,11 @@ export const NavigationMenu = Html.component({
     ShowedPortal: ($) =>
       $.props.value === null
         ? $.evolve({ mounted: true })
-        : $.evolve({ mounted: true, closeReason: null }),
+        : showed(
+          UiStruct.evolve($.model, { mounted: true, restoreFocus: false }),
+          $,
+          $.props.value
+        ),
     RenderedFirstFrame: ($) =>
       $.props.value === null ? $.model : $.evolve({ started: true }),
     FinishedTransition: ($, { open }) => {
@@ -831,11 +812,9 @@ export const NavigationMenu = Html.component({
     const popupId = p.id("popup")
     const arrowId = p.id("arrow")
     const placement = model.placement
-    const items = attrSelector(itemAttribute, scope)
-    const triggers = items + `[${triggerAttribute}]`
     const triggerSelector = value === null
-      ? triggers
-      : items + attrSelector(triggerAttribute, value)
+      ? triggersOf(scope)
+      : triggerOf(scope, value)
     const tracked = Positioning.trackArgs(props, {
       side: "bottom",
       anchorSelector: triggerSelector,
@@ -920,17 +899,12 @@ export const NavigationMenu = Html.component({
     )
 
     const topLayer = tracked.topLayer !== false
-    const portalStyle = !topLayer
-      ? inPlaceBox
-      : tracked.positionMethod === "absolute"
-      ? portalBox + ";" + atDocumentOrigin
-      : portalBox
-    const portalPart = p.part("div", (b) => {
-      const portal = layered(b, topLayer, shown).forward((node) =>
-        node.attr("style", withStyle(node.elementAttrs.style, portalStyle))
-      )
-      return shown
-        ? portal.onMount(
+    const portalBox = portalStyle(topLayer, tracked.positionMethod)
+    // Drawn only while it shows.
+    const portalPart = p.part(
+      "div",
+      (b) =>
+        layered(b, topLayer, true).forward(ownStyle(portalBox)).onMount(
           TrackNavigationMenuPresence({
             open,
             mounted: model.mounted,
@@ -938,19 +912,16 @@ export const NavigationMenu = Html.component({
             holdExit: false,
             popupId,
             trigger: triggerSelector,
-            restore: model.closeReason === "escape-key"
+            restore: model.restoreFocus
           })
         )
-        : portal
-    })
+    )
     const portal = View.wrapPart(
       portalPart,
       <B extends View.PartTarget<"div">>(
         element: B
-      ): ReturnType<B["attr"]> | undefined => {
-        const out = portalPart(element)
-        return shown ? out : undefined
-      }
+      ): ReturnType<B["attr"]> | undefined =>
+        shown ? portalPart(element) : undefined
     )
 
     const positionerStyle = Positioning.positionerStyle(tracked.positionMethod)
@@ -961,20 +932,9 @@ export const NavigationMenu = Html.component({
           role: "presentation",
           "data-anchor-hidden": flag(open && placement?.anchorHidden)
         })
-        .forward((node) =>
-          node.attr(
-            "style",
-            withStyle(node.elementAttrs.style, positionerStyle)
-          )
-        )
+        .forward(ownStyle(positionerStyle))
       return props.value === null ? decorated : decorated.onMount(
-        TrackNavigationPanel({
-          position: tracked,
-          root: attrSelector("data-navigation-menu", scope),
-          triggers,
-          trigger: triggerSelector,
-          value: props.value
-        })
+        TrackNavigationPanel({ position: tracked, scope, value: props.value })
       )
     })
     const positioner = View.wrapPart(
@@ -997,19 +957,17 @@ export const NavigationMenu = Html.component({
           "aria-hidden": "true",
           "data-uncentered": flag(placement?.arrowUncentered)
         })
-        .forward((node) =>
-          node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))
-        ))
+        .forward(ownStyle(arrowStyle)))
 
-    const viewport = p.part("div", (b) => {
-      const decorated = b
+    // Drawn inside the portal, so only while it shows.
+    const viewport = p.part("div", (b) =>
+      b
         .attrs({
           "data-activation-direction": transition?.direction ?? undefined,
           "data-transitioning": flag(transition !== null)
         })
         .forward((node) => viewportContent(node, value ?? "", transition))
-      return shown
-        ? decorated.onMount(
+        .onMount(
           TrackViewport({
             open,
             trigger: triggerSelector,
@@ -1021,9 +979,7 @@ export const NavigationMenu = Html.component({
               NavigationMenuMessage.ChangedViewport({ change })
             )
           )
-        )
-        : decorated
-    })
+        ))
 
     return {
       value,
@@ -1033,14 +989,13 @@ export const NavigationMenu = Html.component({
       openReason: open ? model.reason : null,
       side,
       align,
-      root: p.part("nav", (b) => b.attr("data-navigation-menu", scope)),
+      root: p.part("nav", (b) => b.attr(rootAttribute, scope)),
       list: p.part("ul", (b) =>
         b.onMount(
           TrackNavigationList({
             scope,
             vertical: props.orientation === "vertical",
-            rtl: provided(p.reads.provider),
-            value: props.value
+            rtl: provided(p.reads.provider)
           })
         )),
       item: p.part("li", (b) => b),

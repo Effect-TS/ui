@@ -1,5 +1,6 @@
 import * as Mount from "@effect/ui/Mount"
 import * as Effect from "effect/Effect"
+import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { type Attributed, attrSelector, flag } from "./attributes.ts"
@@ -73,28 +74,41 @@ export const opensPanel = (
   keys: ArrowKeys
 ): boolean =>
   !modified(event) &&
-  event.key === (keys.vertical
-      ? (keys.rtl ?? isRtl(list)) ? "ArrowLeft" : "ArrowRight"
-      : "ArrowDown")
+  (keys.vertical
+    ? (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
+      (event.key === "ArrowLeft") === (keys.rtl ?? isRtl(list))
+    : event.key === "ArrowDown")
 
-export const TrackArrowKeys = Mount.makeStream(
-  "TrackArrowKeys",
-  { args: ArrowKeys },
-  (node: HTMLElement, args, changes) =>
-    Stream.callback<never>(() =>
-      Effect.gen(function*() {
-        let current = args
-        const onKeyDown = (event: KeyboardEvent) =>
-          moveFocus(node, event, current)
-        yield* Effect.acquireRelease(
-          Effect.sync(() => node.addEventListener("keydown", onKeyDown)),
-          () =>
-            Effect.sync(() => node.removeEventListener("keydown", onKeyDown))
-        )
-        yield* Stream.runForEach(changes, (next) =>
-          Effect.sync(() => {
-            current = next
-          })).pipe(Effect.forkScoped)
-      })
-    )
-)
+// A list's arrow keys, and what `onKey` makes of a key they leave.
+export const makeTrackArrowKeys = <M = never>(
+  name: string,
+  onKey?: (
+    list: HTMLElement,
+    event: KeyboardEvent,
+    keys: ArrowKeys
+  ) => M | undefined
+) =>
+  Mount.makeStream(
+    name,
+    { args: ArrowKeys },
+    (node: HTMLElement, args, changes) =>
+      Stream.callback<M>((queue) =>
+        Effect.gen(function*() {
+          let current = args
+          const onKeyDown = (event: KeyboardEvent) => {
+            moveFocus(node, event, current)
+            const message = onKey?.(node, event, current)
+            if (message !== undefined) Queue.offerUnsafe(queue, message)
+          }
+          yield* Effect.acquireRelease(
+            Effect.sync(() => node.addEventListener("keydown", onKeyDown)),
+            () =>
+              Effect.sync(() => node.removeEventListener("keydown", onKeyDown))
+          )
+          yield* Stream.runForEach(changes, (next) =>
+            Effect.sync(() => {
+              current = next
+            })).pipe(Effect.forkScoped)
+        })
+      )
+  )

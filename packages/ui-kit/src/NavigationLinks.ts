@@ -103,7 +103,9 @@ import * as View from "@effect/ui/View"
 import * as Schema from "effect/Schema"
 import { DirectionProvider } from "./DirectionProvider.ts"
 import { provided } from "./internal/direction.ts"
-import { linkAttrs, TrackArrowKeys } from "./internal/navigation.ts"
+import { linkAttrs, makeTrackArrowKeys } from "./internal/navigation.ts"
+
+const TrackArrowKeys = makeTrackArrowKeys("TrackArrowKeys")
 
 /**
  * Props for the direction the links run in.

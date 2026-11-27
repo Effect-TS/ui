@@ -221,6 +221,7 @@ import {
   idOf,
   idSelector,
   type Keyed,
+  ownStyle,
   withStyle
 } from "./internal/attributes.ts"
 import { detachedChannel } from "./internal/detached.ts"
@@ -230,12 +231,7 @@ import { lineUnder } from "./internal/inlineRect.ts"
 import { onEscape, Point, pointOf } from "./internal/interaction.ts"
 import { listenOutside } from "./internal/outside.ts"
 import { makeTrackPresence, returningFocus } from "./internal/presence.ts"
-import {
-  atDocumentOrigin,
-  inPlaceBox,
-  layered,
-  portalBox
-} from "./internal/topLayer.ts"
+import { layered, portalStyle } from "./internal/topLayer.ts"
 import {
   statusOf,
   transitionAttrs,
@@ -776,16 +772,6 @@ const watchPointer = (
     const onFocusOut = (event: FocusEvent) => {
       if (!within(event.relatedTarget)) send(PreviewCardMessage.BlurredPopup())
     }
-    let settle: ReturnType<typeof setTimeout> | undefined
-    const onLeftFocus = (event: FocusEvent) => {
-      if (!inside(event.target)) return
-      clearTimeout(settle)
-      settle = setTimeout(() => {
-        if (!inside(document.activeElement)) {
-          send(PreviewCardMessage.FocusedOutside())
-        }
-      }, 0)
-    }
     const check = () => {
       if (
         removed || current.active === null ||
@@ -801,12 +787,9 @@ const watchPointer = (
       Effect.sync(() => {
         listenOutside(document, signal, {
           open: () => true,
-          inside: (target) => inside(target),
-          pressed: () => send(PreviewCardMessage.PressedOutside())
-        })
-        document.addEventListener("focusout", onLeftFocus, {
-          capture: true,
-          signal
+          inside,
+          pressed: () => send(PreviewCardMessage.PressedOutside()),
+          left: () => send(PreviewCardMessage.FocusedOutside())
         })
         watchHoverArea(node, signal, () => current.triggers, (away) =>
           send(
@@ -832,7 +815,6 @@ const watchPointer = (
       () =>
         Effect.sync(() => {
           controller.abort()
-          clearTimeout(settle)
           page.disconnect()
         })
     )
@@ -1262,16 +1244,10 @@ export const PreviewCard = Html.component({
     )
 
     const topLayer = tracked.topLayer !== false
-    const portalStyle = !topLayer
-      ? inPlaceBox
-      : tracked.positionMethod === "absolute"
-      ? portalBox + ";" + atDocumentOrigin
-      : portalBox
+    const portalBox = portalStyle(topLayer, tracked.positionMethod)
     const portalPart = p.part("div", (b) => {
       const portal = layered(b.attr("id", cardId), topLayer, shown)
-        .forward((node) =>
-          node.attr("style", withStyle(node.elementAttrs.style, portalStyle))
-        )
+        .forward(ownStyle(portalBox))
       return shown
         ? portal.onMount(
           TrackPreviewCardPresence({
