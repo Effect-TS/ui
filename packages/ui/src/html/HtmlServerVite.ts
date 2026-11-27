@@ -50,6 +50,11 @@
  * `vite build --watch` isn't supported and fails before building. Use
  * `vite dev` to rebuild on changes.
  *
+ * Even with `serverOutDir` and no paths to prerender, `vite build` imports
+ * the built server entry in Node to read `prerender`, so entries targeting
+ * other runtimes (such as Cloudflare Workers) must be importable in Node at
+ * build time.
+ *
  * **Example** (Configuring the plugin)
  *
  * ```ts
@@ -169,11 +174,24 @@ interface DevServer {
   transformIndexHtml(url: string, html: string): Promise<string>
 }
 
+interface OutputOption {
+  readonly dir?: string | undefined
+}
+
 interface Environment {
   readonly config: {
     readonly root: string
     readonly cacheDir: string
-    readonly build: { readonly outDir: string; readonly watch?: unknown }
+    readonly build: {
+      readonly outDir: string
+      readonly watch?: unknown
+      readonly rolldownOptions?: {
+        readonly output?:
+          | OutputOption
+          | ReadonlyArray<OutputOption>
+          | undefined
+      } | undefined
+    }
   }
 }
 
@@ -242,6 +260,7 @@ export const plugin = (options: Options): Plugin => {
       environments: {
         ssr: {
           build: {
+            copyPublicDir: false,
             rolldownOptions: { input: { index: serverId } },
             ...(options.serverOutDir === undefined
               ? { write: false }
@@ -265,15 +284,17 @@ export const plugin = (options: Options): Plugin => {
         return [
           `import * as entry from ${JSON.stringify(options.entry)}`,
           `import { Static } from "@effect/ui/html/HtmlServer"`,
+          `import * as Context from "effect/Context"`,
           `import { flatMap, isEffect, runPromise } from "effect/Effect"`,
           `import { withLoggerDisabled } from "effect/http/HttpMiddleware"`,
           `import { toWebHandler } from "effect/http/HttpRouter"`,
+          `const Prerender = Context.Reference("@effect/ui/html/HtmlServerVite/Prerender", { defaultValue: () => false })`,
           `export const { handler, dispose } = toWebHandler(entry.default, {`,
           `  disableLogger: ${devServer !== undefined},`,
-          `  middleware: (app) => flatMap(Static, (isStatic) => isStatic ? withLoggerDisabled(app) : app)`,
+          `  middleware: (app) => flatMap(Prerender, (prerendering) => prerendering ? withLoggerDisabled(app) : app)`,
           `})`,
           `export const prerender = async () => isEffect(entry.prerender) ? runPromise(entry.prerender) : entry.prerender ?? []`,
-          `export const prerenderContext = Static.context(true)`
+          `export const prerenderContext = Context.add(Static.context(true), Prerender, true)`
         ].join("\n")
       }
       return undefined
@@ -405,29 +426,44 @@ export const plugin = (options: Options): Plugin => {
           "HtmlServerVite doesn't support `vite build --watch`. Use `vite dev` to rebuild on changes."
         )
       }
-      const { cacheDir, root } = ssr.config
-      const outDir = path.resolve(root, client.config.build.outDir)
-      const serverOutDir = options.serverOutDir === undefined
+      const { cacheDir } = ssr.config
+      const clientDirs = resolvedOutDirs(client)
+      const outDir = clientDirs[0]!
+      const serverDirs = options.serverOutDir === undefined
         ? undefined
-        : path.resolve(root, options.serverOutDir)
-      if (serverOutDir !== undefined && overlaps(outDir, serverOutDir)) {
-        throw new Error(
-          `HtmlServerVite: \`serverOutDir\` (${options.serverOutDir}) must not overlap the client \`outDir\` (${client.config.build.outDir}). Set \`build.outDir\` (for example \`"dist/client"\`) to a sibling directory.`
-        )
+        : resolvedOutDirs(ssr)
+      if (serverDirs !== undefined) {
+        const canonicalClient = await Promise.all(clientDirs.map(canonicalDir))
+        const canonicalServer = await Promise.all(serverDirs.map(canonicalDir))
+        for (const serverDir of canonicalServer) {
+          for (const clientDir of canonicalClient) {
+            if (overlaps(clientDir, serverDir)) {
+              throw new Error(
+                `HtmlServerVite: \`serverOutDir\` (${serverDir}) must not overlap the client \`outDir\` (${clientDir}). Set \`build.outDir\` (for example \`"dist/client"\`) to a sibling directory.`
+              )
+            }
+          }
+        }
       }
       await builder.build(client)
       templateFile = path.join(outDir, "index.html")
-      const output = (await builder.build(ssr)) as {
-        readonly output: ReadonlyArray<OutputFile>
-      }
-      const entry = output.output.find((file) => file.isEntry)!
-      if (serverOutDir !== undefined) {
-        await write(
-          serverOutDir,
-          entry.fileName.replace(/\.([cm]?)js$/, ".d.$1ts"),
-          declaration
+      const rawOutput = await builder.build(ssr)
+      const bundles = (Array.isArray(rawOutput) ? rawOutput : [rawOutput]) as
+        ReadonlyArray<{ readonly output: ReadonlyArray<OutputFile> }>
+      if (serverDirs !== undefined) {
+        await Promise.all(
+          bundles.map((bundle, index) => {
+            const bundleEntry = bundle.output.find((file) => file.isEntry)!
+            return write(
+              serverDirs[index] ?? serverDirs[0]!,
+              bundleEntry.fileName.replace(/\.([cm]?)js$/, ".d.$1ts"),
+              declaration
+            )
+          })
         )
       }
+      const output = bundles[0]!
+      const entry = output.output.find((file) => file.isEntry)!
       await fs.mkdir(cacheDir, { recursive: true })
       // Prerenders from a copy inside the project, so the bundle's external
       // imports resolve.
@@ -473,10 +509,40 @@ export const plugin = (options: Options): Plugin => {
   }
 }
 
+const resolvedOutDirs = (environment: Environment): ReadonlyArray<string> => {
+  const { build, root } = environment.config
+  const fallback = path.resolve(root, build.outDir)
+  const output = build.rolldownOptions?.output
+  if (output === undefined) return [fallback]
+  const outputs = Array.isArray(output) ? output : [output]
+  if (outputs.length === 0) return [fallback]
+  return outputs.map((item) =>
+    item.dir === undefined ? fallback : path.resolve(root, item.dir)
+  )
+}
+
+/** Resolves symlinks along the deepest existing ancestor of `dir`. */
+const canonicalDir = async (dir: string): Promise<string> => {
+  let current = path.resolve(dir)
+  const tail: Array<string> = []
+  while (true) {
+    try {
+      return path.join(await fs.realpath(current), ...tail)
+    } catch {
+      const parent = path.dirname(current)
+      if (parent === current) return path.join(current, ...tail)
+      tail.unshift(path.basename(current))
+      current = parent
+    }
+  }
+}
+
+const withSep = (dir: string): string =>
+  dir.endsWith(path.sep) ? dir : `${dir}${path.sep}`
+
 /** Whether one resolved directory is the other, or inside it. */
 const overlaps = (a: string, b: string): boolean =>
-  `${a}${path.sep}`.startsWith(`${b}${path.sep}`) ||
-  `${b}${path.sep}`.startsWith(`${a}${path.sep}`)
+  withSep(a).startsWith(withSep(b)) || withSep(b).startsWith(withSep(a))
 
 const fileName = (pathname: string, status: number): string => {
   if (status === 404) {

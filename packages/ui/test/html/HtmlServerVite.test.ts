@@ -1,5 +1,7 @@
+import { HtmlServer } from "@effect/ui/html"
 import { plugin } from "@effect/ui/html/HtmlServerVite"
 import { describe, expect, it, vi } from "@effect/vitest"
+import { Context, Logger } from "effect"
 import { once } from "node:events"
 import * as fs from "node:fs/promises"
 import * as os from "node:os"
@@ -99,16 +101,27 @@ describe("HtmlServerVite.plugin", () => {
     "emits a web handler into serverOutDir alongside prerendered pages",
     async () => {
       const dir = await fs.mkdtemp(path.join(fixtureRoot, ".out-"))
+      const publicDir = path.join(dir, "public")
       const clientOutDir = path.join(dir, "client")
       const serverOutDir = path.join(dir, "server")
       try {
+        await fs.mkdir(publicDir, { recursive: true })
+        await fs.writeFile(path.join(publicDir, "robots.txt"), "User-agent: *\n")
         const builder = await createBuilder(
           config({
+            publicDir,
             build: { outDir: clientOutDir, emptyOutDir: true },
             plugins: [plugin({ entry: "/src/entry.server.ts", serverOutDir })]
           })
         )
         await builder.buildApp()
+
+        expect(
+          await fs.readFile(path.join(clientOutDir, "robots.txt"), "utf8")
+        ).toBe("User-agent: *\n")
+        await expect(
+          fs.access(path.join(serverOutDir, "robots.txt"))
+        ).rejects.toThrow()
 
         const home = await fs.readFile(
           path.join(clientOutDir, "index.html"),
@@ -127,7 +140,10 @@ describe("HtmlServerVite.plugin", () => {
         const server = (await import(
           pathToFileURL(path.join(serverOutDir, "index.js")).href
         )) as {
-          readonly handler: (request: Request) => Promise<Response>
+          readonly handler: (
+            request: Request,
+            context?: Context.Context<never>
+          ) => Promise<Response>
           readonly dispose: () => Promise<void>
         }
         try {
@@ -141,6 +157,22 @@ describe("HtmlServerVite.plugin", () => {
             /<script type="module" crossorigin src="\/assets\/[^"]+\.js">/
           )
           expect(html).not.toContain("\"~static\"")
+
+          const logs: Array<unknown> = []
+          const capture = Logger.make(({ message }) => {
+            logs.push(message)
+          })
+          const staticLive = await server.handler(
+            new Request("http://localhost/people/2"),
+            Context.add(
+              HtmlServer.Static.context(true),
+              Logger.CurrentLoggers,
+              new Set([capture])
+            )
+          )
+          expect(staticLive.status).toBe(200)
+          expect(await staticLive.text()).toContain("\"~static\":true")
+          expect(logs.length).toBeGreaterThan(0)
 
           const missing = await server.handler(
             new Request("http://localhost/nowhere")
@@ -160,24 +192,69 @@ describe("HtmlServerVite.plugin", () => {
   it(
     "rejects overlapping serverOutDir and client outDir before building either environment",
     async () => {
-      for (
-        const [outDir, serverOutDir] of [
-          ["dist", "dist"],
-          ["dist", "dist/server"],
-          ["dist/client", "dist"]
-        ] as const
-      ) {
-        const builder = await createBuilder(
-          config({
-            build: { outDir },
-            plugins: [plugin({ entry: "/src/entry.server.ts", serverOutDir })]
-          })
-        )
-        const build = vi
-          .spyOn(builder, "build")
-          .mockRejectedValue(new Error("unexpected build"))
-        await expect(builder.buildApp()).rejects.toThrow(/serverOutDir/i)
-        expect(build).not.toHaveBeenCalled()
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "html-server-vite-"))
+      try {
+        const realClient = path.join(dir, "client")
+        const linkedClient = path.join(dir, "client-link")
+        await fs.mkdir(realClient, { recursive: true })
+        await fs.symlink(realClient, linkedClient)
+
+        const cases: ReadonlyArray<InlineConfig> = [
+          {
+            build: { outDir: "dist" },
+            plugins: [
+              plugin({ entry: "/src/entry.server.ts", serverOutDir: "dist" })
+            ]
+          },
+          {
+            build: { outDir: "dist" },
+            plugins: [
+              plugin({
+                entry: "/src/entry.server.ts",
+                serverOutDir: "dist/server"
+              })
+            ]
+          },
+          {
+            build: { outDir: "dist/client" },
+            plugins: [
+              plugin({ entry: "/src/entry.server.ts", serverOutDir: "dist" })
+            ]
+          },
+          {
+            build: { outDir: "dist/client" },
+            environments: {
+              ssr: {
+                build: { rolldownOptions: { output: { dir: "dist/client" } } }
+              }
+            },
+            plugins: [
+              plugin({
+                entry: "/src/entry.server.ts",
+                serverOutDir: "dist/server"
+              })
+            ]
+          },
+          {
+            build: { outDir: realClient },
+            plugins: [
+              plugin({
+                entry: "/src/entry.server.ts",
+                serverOutDir: path.join(linkedClient, "server")
+              })
+            ]
+          }
+        ]
+        for (const overrides of cases) {
+          const builder = await createBuilder(config(overrides))
+          const build = vi
+            .spyOn(builder, "build")
+            .mockRejectedValue(new Error("unexpected build"))
+          await expect(builder.buildApp()).rejects.toThrow(/serverOutDir/i)
+          expect(build).not.toHaveBeenCalled()
+        }
+      } finally {
+        await fs.rm(dir, { recursive: true, force: true })
       }
     }
   )
