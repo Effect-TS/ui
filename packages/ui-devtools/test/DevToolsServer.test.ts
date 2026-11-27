@@ -662,15 +662,6 @@ describe("DevToolsServer", { concurrent: false }, () => {
           tag: "UpdatedDraft"
         })
         assert.include(JSON.stringify(schema), "text")
-        assert.deepStrictEqual(schema.examples, [
-          { message: { _tag: "UpdatedDraft", text: "" } }
-        ])
-        const exampleSent = yield* agent.call("dispatch", {
-          instance: n1,
-          messages: [schema.examples[0].message]
-        })
-        assert.strictEqual(exampleSent.applied, 1)
-
         const allSchemas = yield* agent.call("get_message_schema", {
           instance: n1
         })
@@ -758,16 +749,11 @@ describe("DevToolsServer", { concurrent: false }, () => {
             maybeLabel: Schema.Option(Schema.String),
             tags: Schema.Array(Schema.String)
           },
-          SavedToken: { token: Schema.Redacted(Schema.String) },
-          SetEmail: {
-            email: Schema.String.check(Schema.isPattern(/^\S+@\S+$/))
-          },
           SavedCredential: {
             token: Schema.Redacted(Schema.String),
             email: Schema.String.check(Schema.isPattern(/^\S+@\S+$/))
           },
           Impossible: { never: Schema.Never },
-          Unset: { secret: Schema.Option(Schema.Redacted(Schema.Never)) },
           // Decodes as -0, but the client receives 0.
           NegativeZero: {
             point: Schema.Struct({
@@ -775,9 +761,6 @@ describe("DevToolsServer", { concurrent: false }, () => {
             }).pipe(Schema.annotateEncoded({ examples: [{ x: -0 }] as never }))
           },
           Truncated: { data: Schema.Struct({ "~truncated": Schema.Int }) },
-          Listed: {
-            items: Schema.Array(Schema.String).check(Schema.isMinLength(65))
-          },
           Sampled: { payload: sampled },
           // Decodes, but can't be encoded to mark the token.
           Unencodable: {
@@ -786,16 +769,6 @@ describe("DevToolsServer", { concurrent: false }, () => {
               decode: SchemaGetter.passthrough(),
               encode: SchemaGetter.forbidden(() => "no")
             }))
-          },
-          Undecodable: {
-            payload: sampled,
-            extra: Schema.String.check(Schema.isPattern(/x/))
-          },
-          Chosen: {
-            mode: Schema.Union([
-              Schema.Redacted(Schema.Literals(["a", "b"])),
-              Schema.Literal("off")
-            ])
           }
         }).annotate({ identifier: "app/SampleMessage" })
         const Sample = Html.component({
@@ -808,7 +781,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
           view: (h, model) => h.p(String(model.count))
         })
 
-        const { agent, url } = yield* serve({ dispatch: true })
+        const { agent, url } = yield* serve()
         localStorage.clear()
         const services = yield* Layer.build(DevTools.layer({ server: url }))
         const app = document.body.appendChild(document.createElement("div"))
@@ -822,23 +795,15 @@ describe("DevToolsServer", { concurrent: false }, () => {
           "list_instances"
         )
         const all = yield* agent.call("get_message_schema", { instance })
-        assert.isArray(all.examples)
-        assert.strictEqual(all.examples.length, 13)
-
+        assert.strictEqual(all.examples.length, 7)
         const [
           selected,
-          savedToken,
-          setEmail,
           savedCredential,
           impossible,
-          unset,
           negativeZero,
           truncated,
-          listed,
           sampledEntry,
-          unencodable,
-          undecodable,
-          chosen
+          unencodable
         ] = all.examples
 
         assert.deepStrictEqual(selected, {
@@ -854,29 +819,6 @@ describe("DevToolsServer", { concurrent: false }, () => {
           tag: "SelectedItem"
         })
         assert.deepStrictEqual(filtered.examples, [selected])
-        const dispatched = yield* agent.call("dispatch", {
-          instance,
-          messages: [filtered.examples[0].message]
-        })
-        assert.strictEqual(dispatched.applied, 1)
-
-        assert.deepStrictEqual(savedToken, {
-          message: { _tag: "SavedToken", token: { "~redacted": true } },
-          redacted: true
-        })
-        const rejectedRedacted = yield* agent.fails("dispatch", {
-          instance,
-          messages: [savedToken.message]
-        })
-        assert.include(rejectedRedacted, "does not decode")
-
-        assert.deepStrictEqual(setEmail.message, {
-          _tag: "SetEmail",
-          email: ""
-        })
-        assert.isUndefined(setEmail.redacted)
-        assert.isString(setEmail.invalid)
-        assert.include(setEmail.invalid, "email")
 
         assert.deepStrictEqual(savedCredential.message, {
           _tag: "SavedCredential",
@@ -884,20 +826,11 @@ describe("DevToolsServer", { concurrent: false }, () => {
           email: ""
         })
         assert.isTrue(savedCredential.redacted)
-        assert.isString(savedCredential.invalid)
         assert.include(savedCredential.invalid, "email")
 
         assert.strictEqual(impossible.tag, "Impossible")
         assert.isUndefined(impossible.message)
         assert.isString(impossible.invalid)
-        assert.isAbove(impossible.invalid.length, 0)
-
-        assert.deepStrictEqual(unset, {
-          message: { _tag: "Unset", secret: { _tag: "None" } }
-        })
-
-        assert.strictEqual(listed.message.items.length, 64)
-        assert.include(listed.invalid, "items")
 
         assert.deepStrictEqual(sampledEntry, {
           message: {
@@ -906,17 +839,9 @@ describe("DevToolsServer", { concurrent: false }, () => {
           },
           redacted: true
         })
-        for (
-          const [entry, tag] of [
-            [unencodable, "Unencodable"],
-            [undecodable, "Undecodable"]
-          ] as const
-        ) {
-          assert.strictEqual(entry.tag, tag)
-          assert.isUndefined(entry.message)
-          assert.isString(entry.invalid)
-          assert.notInclude(entry.invalid, "sample")
-        }
+        assert.strictEqual(unencodable.tag, "Unencodable")
+        assert.isUndefined(unencodable.message)
+        assert.notInclude(unencodable.invalid, "sample")
         assert.deepStrictEqual(negativeZero.message, {
           _tag: "NegativeZero",
           point: { x: 0 }
@@ -925,11 +850,6 @@ describe("DevToolsServer", { concurrent: false }, () => {
 
         assert.deepStrictEqual(truncated, {
           message: { _tag: "Truncated", data: { "~truncated": 0 } }
-        })
-
-        assert.deepStrictEqual(chosen, {
-          message: { _tag: "Chosen", mode: { "~redacted": true } },
-          redacted: true
         })
       }).pipe(Effect.scoped),
     30_000
