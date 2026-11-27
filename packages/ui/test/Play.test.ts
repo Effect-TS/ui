@@ -196,5 +196,16 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Play", (it) => {
         Case.make(SearchBox, { idle: { props: undefined } }).idle.props,
         {}
       )
+      const Nullable = Component.define({
+        name: "Nullable",
+        props: Schema.NullOr(Schema.String),
+        model: Schema.Struct({}),
+        message: Schema.Never
+      }).make({
+        init: () => ({}),
+        update: ($) => $.model,
+        view: (h) => h.el("p")
+      })
+      assert.isNull(Case.make(Nullable, { empty: { props: null } }).empty.props)
     }))
 })
