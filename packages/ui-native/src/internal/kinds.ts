@@ -53,9 +53,9 @@ const queueText = (n: NativeNode) => {
 }
 
 const setText = (n: NativeNode, value: unknown, host: ViewHost) => {
-  // Skip if removed or native already shows `value`; include `eventCount` so native accepts it.
   if (value === undefined || n.props.text === value) return
   host.set(n, "text", value)
+  // Native needs the latest event count to accept the update.
   host.set(n, "mostRecentEventCount", n.eventCount)
   // Fabric emits no diff when resetting to the last committed text, so send a command too.
   host.command(n, "setTextAndSelection", [n.eventCount, value, -1, -1])
