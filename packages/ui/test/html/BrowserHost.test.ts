@@ -1993,10 +1993,10 @@ describe("BrowserHost", { concurrent: false }, () => {
           )
           yield* tick
           expect(root.model()).toEqual([
-            `input {"value":"ka","checked":false,"files":[],"composing":true,"inputType":"insertCompositionText"}`,
+            `input {"value":"ka","checked":false,"files":[],"composing":true,"inputType":"insertCompositionText","selectionStart":2,"selectionEnd":2}`,
             `compositionend {"value":"ka"}`,
-            `change {"value":"ka","checked":false,"files":[],"composing":false,"inputType":""}`,
-            `input {"value":"auto","composing":false,"inputType":"insertReplacementText"}`,
+            `change {"value":"ka","checked":false,"files":[],"composing":false,"inputType":"","selectionStart":2,"selectionEnd":2}`,
+            `input {"value":"auto","composing":false,"inputType":"insertReplacementText","selectionStart":4,"selectionEnd":4}`,
             `compositionend {"value":"auto"}`
           ])
         }).pipe(Effect.scoped))

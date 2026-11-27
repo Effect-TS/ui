@@ -181,7 +181,10 @@ export class Host extends Context.Service<Host, {
     options: ScrollOptions
   ) => void
   readonly measure: (element: globalThis.Element) => Rect
-  readonly select: (element: globalThis.Element) => void
+  readonly select: (
+    element: globalThis.Element,
+    options?: SelectOptions | undefined
+  ) => void
   readonly requestSubmit: (element: globalThis.Element) => boolean
   readonly showPicker: (element: globalThis.Element) => boolean
 }>()("@effect/ui/html/Html/Host") {}
@@ -232,6 +235,19 @@ export interface ScrollOptions {
   readonly behavior?: "auto" | "instant" | "smooth" | undefined
   readonly block?: "start" | "center" | "end" | "nearest" | undefined
   readonly inline?: "start" | "center" | "end" | "nearest" | undefined
+}
+
+/**
+ * The options of `select`: the range to select, in UTF-16 code units. `end`
+ * defaults to `start`, which places the caret there.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface SelectOptions {
+  readonly start: number
+  readonly end?: number | undefined
 }
 
 // ---------------------------------------------------------------------------
@@ -311,17 +327,14 @@ export interface HoverPayload {
  * `readonly` field still counts. On element handlers `editable` describes the
  * event's target, not the element holding the handler.
  *
- * `selectionStart` and `selectionEnd` are the caret or selection of the
- * event's target, as the key finds it, when the target is a `textarea` or
- * an `input` whose type has a selection, such as `text` or `search`. They
- * are `null` for any other target, including an `email` or `number`
- * input, which browsers don't report a selection for.
+ * `selectionStart` and `selectionEnd` are the target's selection as the key
+ * finds it, as `SelectionPayload` describes.
  *
  * @stability experimental
  * @category events
  * @since 0.1.0
  */
-export interface KeyPayload {
+export interface KeyPayload extends SelectionPayload {
   readonly key: string
   readonly shift: boolean
   readonly ctrl: boolean
@@ -330,6 +343,25 @@ export interface KeyPayload {
   readonly composing: boolean
   readonly repeat: boolean
   readonly editable: boolean
+}
+
+/**
+ * The payload of `selectionchange` on an `input` or `textarea`, sent for
+ * every move of the caret or change of the selection, a script's included.
+ *
+ * **Details**
+ *
+ * `selectionStart` and `selectionEnd` are the event target's caret or
+ * selection, in UTF-16 code units, when the target is a `textarea` or an
+ * `input` whose type has a selection, such as `text` or `search`. They are
+ * `null` for any other target, including an `email` or `number` input,
+ * which browsers don't report a selection for.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface SelectionPayload {
   readonly selectionStart: number | null
   readonly selectionEnd: number | null
 }
@@ -347,11 +379,15 @@ export interface KeyPayload {
  * `""` for a `change`, and for an `input` the browser names no edit for,
  * such as choosing an option.
  *
+ * `selectionStart` and `selectionEnd` are the selection the edit left, as
+ * `SelectionPayload` describes. `selectionchange` follows a task later, so
+ * read the caret here to keep it in step with `value`.
+ *
  * @stability experimental
  * @category events
  * @since 0.1.0
  */
-export interface ValuePayload {
+export interface ValuePayload extends SelectionPayload {
   readonly value: string
   readonly composing: boolean
   readonly inputType: string
@@ -748,8 +784,10 @@ export type EventsOf<K extends string> =
   & (K extends "textarea" | "select"
     ? { readonly input: ValuePayload; readonly change: ValuePayload }
     : {})
-  & (K extends "input" | "textarea"
-    ? { readonly compositionend: CompositionPayload }
+  & (K extends "input" | "textarea" ? {
+      readonly compositionend: CompositionPayload
+      readonly selectionchange: SelectionPayload
+    }
     : {})
   & (K extends "form" ? { readonly submit: SubmitPayload; readonly reset: {} }
     : {})

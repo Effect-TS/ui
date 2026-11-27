@@ -141,7 +141,12 @@ type AnyComponent =
 
 type KeyDetails = Partial<Omit<Html.KeyPayload, "key">>
 
-type EditDetails = Partial<Pick<Html.InputPayload, "composing" | "inputType">>
+type EditDetails = Partial<
+  Pick<
+    Html.InputPayload,
+    "composing" | "inputType" | "selectionStart" | "selectionEnd"
+  >
+>
 
 /**
  * A cursor over one HTML scene: the scene's steps, plus a step per user
@@ -194,14 +199,17 @@ export interface Steps<C extends AnyComponent, Parts = never>
    * `input` also sends its current `checked`. `details` sets `composing`,
    * `false` otherwise, and `inputType`, `"insertText"` otherwise, so an
    * input method's text or an autofill's `"insertReplacementText"` can be
-   * sent too.
+   * sent too. It also sets `selectionStart` and `selectionEnd`, otherwise
+   * the caret at the end of `value` in a `textarea` or an `input` of type
+   * `text`, `search`, `url`, `tel` or `password`, and `null` elsewhere.
    */
   type(locator: Locator.Locator, value: string, details?: EditDetails): this
   /**
    * Sends `change`, as a field does once its edit is committed. A string is
    * the new value; an object also sets `checked` on an `input`, its current
    * `checked` otherwise, `files` on a file input, none otherwise, and
-   * `composing` and `inputType`, `false` and `""` otherwise.
+   * `composing` and `inputType`, `false` and `""` otherwise, and the
+   * selection, as `type` defaults it otherwise.
    * `change(locator, { files })` chooses files in a file input.
    */
   change(

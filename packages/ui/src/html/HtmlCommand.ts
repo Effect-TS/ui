@@ -82,6 +82,11 @@ const ScrollOptionsSchema = Schema.Struct({
   )
 })
 
+const SelectOptionsSchema = Schema.Struct({
+  start: Schema.Number,
+  end: Schema.optional(Schema.Number)
+})
+
 const onCommitOptions = <const In extends Command.ArgsInput>(
   args: In
 ): { readonly args: In } =>
@@ -171,12 +176,19 @@ export const Measure: Command.Factory<
  * @since 0.1.0
  */
 export const Select: Command.Factory<
-  { readonly ref: Renderer.Ref<any> },
+  {
+    readonly ref: Renderer.Ref<any>
+    readonly options?: Html.SelectOptions | undefined
+  },
   Found
 > = Command.make(
   "HtmlCommand.select",
-  onCommitOptions({ ref: Renderer.Ref }),
-  ({ ref }) => found(ref, (host, element) => host.select(element))
+  onCommitOptions({
+    ref: Renderer.Ref,
+    options: Schema.optional(SelectOptionsSchema)
+  }),
+  ({ options, ref }) =>
+    found(ref, (host, element) => host.select(element, options))
 )
 
 /**
@@ -300,15 +312,22 @@ export const measure = <N extends globalThis.Element, Msg>(
 > => Command.map(Measure.make({ ref }), f)
 
 /**
- * Selects all the text in the `input` or `textarea` `ref` names, once the
+ * Selects the text in the `input` or `textarea` `ref` names, once the
  * render the issuing `update` caused is committed, and sends `f`'s message.
+ * Without `options` it selects all the text; `{ start, end }` selects that
+ * range, and `{ start }` places the caret.
  *
  * **Details**
  *
- * It doesn't move focus: issue `focus` for that. The browser host first
- * writes the element's controlled `value` if the element shows something
- * else, such as a character `update` rejected, since writing it afterward
- * would drop the selection.
+ * The range is in UTF-16 code units, and the browser clamps it to the
+ * value's length. The value the same `update` set is in the field by then.
+ * An `input` type without a selection, such as `email` or `number`, is
+ * left as it is, and the result is still `{ found: true }`.
+ *
+ * Issue `focus` if the field needs focus: Safari focuses it, other browsers
+ * don't. The browser host first writes the element's controlled `value` if
+ * the element shows something else, such as a character `update`
+ * rejected, since writing it afterward would drop the selection.
  *
  * **Example** (Selecting a field's text once it has focus)
  *
@@ -322,15 +341,31 @@ export const measure = <N extends globalThis.Element, Msg>(
  * const command = HtmlCommand.select(Amount, () => Message.CompletedSelectAmount())
  * ```
  *
+ * **Example** (Placing the caret after an inserted suggestion)
+ *
+ * ```ts
+ * import { Html, HtmlCommand } from "@effect/ui/html"
+ * import { UiSchema } from "@effect/ui"
+ *
+ * const Message = UiSchema.TaggedEnum({ PlacedCaret: {} })
+ * const Query = Html.ref("Query", "textarea")
+ *
+ * const command = HtmlCommand.select(Query, () => Message.PlacedCaret(), { start: 14 })
+ * ```
+ *
  * @stability experimental
  * @category commands
  * @since 0.1.0
  */
 export const select = <N extends HTMLInputElement | HTMLTextAreaElement, Msg>(
   ref: Renderer.Ref<N>,
-  f: (result: Found) => Msg
+  f: (result: Found) => Msg,
+  options?: Html.SelectOptions
 ): Command.Mapped<Command.Issued<Found, never, Found, "Effect">, Msg> =>
-  Command.map(Select.make({ ref }), f)
+  Command.map(
+    Select.make(options === undefined ? { ref } : { ref, options }),
+    f
+  )
 
 /**
  * Submits the form of the element `ref` names, as a press on its submit

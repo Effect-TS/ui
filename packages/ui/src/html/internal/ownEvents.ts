@@ -46,6 +46,7 @@ export const bubblingEvents: ReadonlySet<string> = new Set([
   "input",
   "change",
   "compositionend",
+  "selectionchange",
   "submit",
   "reset",
   "slotchange"

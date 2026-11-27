@@ -307,7 +307,9 @@ export const planClickDefaults = (
       checked: type === "radio" ? true : HtmlLocator.checked(node) !== true,
       files: [],
       composing: false,
-      inputType: ""
+      inputType: "",
+      selectionStart: null,
+      selectionEnd: null
     }
     events.push({
       node,
@@ -368,15 +370,48 @@ const pathIn = (
   return undefined
 }
 
+/** The input types browsers report a selection for. */
+const selectingTypes: ReadonlySet<string> = new Set([
+  "text",
+  "search",
+  "url",
+  "tel",
+  "password"
+])
+
+/** `given`'s selection, else the caret at the end of `value` in a field with a selection. */
+const selectionAfter = (
+  node: Locator.Node,
+  value: string,
+  given: Partial<Html.SelectionPayload>
+): Html.SelectionPayload => {
+  const caret = node.tag === "textarea" ||
+      (node.tag === "input" && selectingTypes.has(inputType(node)))
+    ? value.length
+    : null
+  return {
+    selectionStart: given.selectionStart === undefined
+      ? caret
+      : given.selectionStart,
+    selectionEnd: given.selectionEnd === undefined ? caret : given.selectionEnd
+  }
+}
+
 /** @internal */
 export const inputPayload = (
   node: Locator.Node,
   value: string,
-  details?: Partial<Pick<Html.InputPayload, "composing" | "inputType">>
+  details: Partial<
+    Pick<
+      Html.InputPayload,
+      "composing" | "inputType" | "selectionStart" | "selectionEnd"
+    >
+  > = {}
 ): Html.ValuePayload | Html.InputPayload => {
   const edit = {
-    composing: details?.composing ?? false,
-    inputType: details?.inputType ?? "insertText"
+    composing: details.composing ?? false,
+    inputType: details.inputType ?? "insertText",
+    ...selectionAfter(node, value, details)
   }
   return node.tag === "input"
     ? { value, checked: HtmlLocator.checked(node) === true, files: [], ...edit }
@@ -389,11 +424,12 @@ export const changePayload = (
   given: string | Partial<Html.InputPayload>
 ): Html.ValuePayload | Html.InputPayload => {
   const input = typeof given === "string" ? { value: given } : given
+  const value = input.value ?? HtmlLocator.value(node) ?? ""
   const edit = {
     composing: input.composing ?? false,
-    inputType: input.inputType ?? ""
+    inputType: input.inputType ?? "",
+    ...selectionAfter(node, value, input)
   }
-  const value = input.value ?? HtmlLocator.value(node) ?? ""
   return node.tag === "input"
     ? {
       value,
