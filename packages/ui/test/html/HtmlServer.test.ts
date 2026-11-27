@@ -2142,6 +2142,53 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(rendered.state["~query"]).toEqual({})
     }))
 
+  it.effect(
+    "defers an instance whose view is too deep to render, instead of dying",
+    () =>
+      Effect.gen(function*() {
+        let depth = 1000
+        const Deep = Html.component({
+          name: "Deep",
+          model: Schema.Struct({}),
+          message: Schema.Never
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) => {
+            let node: View.Content<never> = h.span("leaf")
+            for (let i = 0; i < depth; i++) node = h.div(node)
+            return node
+          }
+        })
+        const Page = Html.component({
+          name: "Page",
+          model: Schema.Struct({}),
+          message: Schema.Never
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) =>
+            h.main(
+              Deep(h, { key: "d", props: {}, fallback: () => h.p("too deep") })
+            )
+        })
+
+        // Probe the runtime’s stack limit rather than assuming a fixed failure depth.
+        let rendered = yield* HtmlServer.renderToHtml(Page, {})
+        while (rendered.html.includes("leaf") && depth < 20_000) {
+          depth = Math.ceil(depth * 1.1)
+          rendered = yield* HtmlServer.renderToHtml(Page, {})
+        }
+        if (!rendered.html.includes("leaf")) {
+          expect(rendered.html).toContain(
+            "<!--[/Page/Deep[d]--><p>too deep</p><!--]/Page/Deep[d]-->"
+          )
+          expect(rendered.state["~deferred"]).toEqual(["/Page/Deep[d]"])
+        }
+      }),
+    60_000
+  )
+
   it.effect("shows the fallback of an instance whose Layer fails on the client, and adopts what follows it", () =>
     Effect.gen(function*() {
       let serving = true

@@ -870,43 +870,47 @@ const pendingIn = (rec: Kernel.Rec, out: Array<Pending>): void => {
   else if (rec.v._tag === "Child" && !rec.inst.closed) pendingOf(rec.inst, out)
 }
 
-const loadsOf = (
-  inst: Kernel.Instance,
-  out: Array<Load> = []
-): Array<Load> => {
-  if (inst.rendered !== undefined) loadsIn(inst.path, inst.rendered, out)
-  if (inst.kept !== undefined) {
-    for (const rec of inst.kept.parked()) loadsIn(inst.path, rec, out)
+const loadsOf = (root: Kernel.Instance): Array<Load> => {
+  const out: Array<Load> = []
+  // Stack entries are (mount path, Rec) pairs.
+  const todo: Array<any> = []
+  const enter = (inst: Kernel.Instance) => {
+    if (inst.kept !== undefined) {
+      const parked = inst.kept.parked()
+      for (let index = parked.length - 1; index >= 0; index--) {
+        todo.push(inst.path, parked[index])
+      }
+    }
+    if (inst.rendered !== undefined) todo.push(inst.path, inst.rendered)
+  }
+  enter(root)
+  while (todo.length > 0) {
+    const rec: Kernel.Rec = todo.pop()
+    let under: string = todo.pop()
+    const view = rec.v
+    const kids = rec.kids
+    if (kids === undefined) {
+      if (view._tag === "Child" && !rec.inst.closed) enter(rec.inst)
+      continue
+    }
+    if (view._tag === "Outlet") {
+      under = rec.inst.path + "/" + slotSegment(view.name)
+    } else if (
+      view._tag === "Child" && lazy.isLazy(view.component) &&
+      lazy.stateOf(view.component)._tag === "Loading"
+    ) {
+      // A kept child mounts under its holder.
+      if (view.alive !== undefined) under = rec.inst.path
+      out.push({
+        path: under + "/" + segment(view),
+        name: childName(view.component)
+      })
+    }
+    for (let index = kids.length - 1; index >= 0; index--) {
+      todo.push(under, kids[index])
+    }
   }
   return out
-}
-
-// `under` is the path a child drawn at `rec` mounts under.
-const loadsIn = (
-  under: string,
-  rec: Kernel.Rec,
-  out: Array<Load>
-): void => {
-  const view = rec.v
-  const kids = rec.kids
-  if (kids === undefined) {
-    if (view._tag === "Child" && !rec.inst.closed) loadsOf(rec.inst, out)
-    return
-  }
-  if (view._tag === "Outlet") {
-    under = rec.inst.path + "/" + slotSegment(view.name)
-  } else if (
-    view._tag === "Child" && lazy.isLazy(view.component) &&
-    lazy.stateOf(view.component)._tag === "Loading"
-  ) {
-    // A kept child mounts under its holder.
-    if (view.alive !== undefined) under = rec.inst.path
-    out.push({
-      path: under + "/" + segment(view),
-      name: childName(view.component)
-    })
-  }
-  for (const kid of kids) loadsIn(under, kid, out)
 }
 
 const onScheduler = (
