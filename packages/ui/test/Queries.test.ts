@@ -768,16 +768,6 @@ describe("a query without onChange", { concurrent: false }, () => {
   it.effect("traces each fetch under a span named after the query, and a command's work under its span", () => {
     const app = makeApp()
     const spans: Array<Tracer.Span> = []
-    // Indented under the recorded span it is a child of, with a fetch's trigger.
-    const depth = (span: Tracer.Span): number => {
-      const parent = Option.getOrUndefined(span.parent) as Tracer.Span
-      return spans.includes(parent) ? depth(parent) + 1 : 0
-    }
-    const line = (span: Tracer.Span) => {
-      const trigger = span.attributes.get("trigger")
-      return "  ".repeat(depth(span)) + span.name +
-        (trigger === undefined ? "" : ` (${trigger})`)
-    }
     return run(
       Layer.mergeAll(
         app.GetNote.toLayer(() =>
@@ -802,14 +792,23 @@ describe("a query without onChange", { concurrent: false }, () => {
             }
           })
         ))
-        assert.deepStrictEqual(spans.map(line), [
-          "notes/GetNote (watch)",
-          "  rpc GetNote",
-          "notes/Touch",
-          "  rpc Touch",
-          "notes/GetNote (invalidation)",
-          "  rpc GetNote"
-        ])
+        assert.deepStrictEqual(
+          spans.map((span) => [span.name, span.attributes.get("trigger")]),
+          [
+            ["notes/GetNote", "watch"],
+            ["rpc GetNote", undefined],
+            ["notes/Touch", undefined],
+            ["rpc Touch", undefined],
+            ["notes/GetNote", "invalidation"],
+            ["rpc GetNote", undefined]
+          ]
+        )
+        const [watch, watchRpc, touch, touchRpc, refetch, refetchRpc] = spans
+        const parentOf = (span: Tracer.Span) =>
+          Option.getOrUndefined(span.parent)
+        assert.strictEqual(parentOf(watchRpc!), watch)
+        assert.strictEqual(parentOf(touchRpc!), touch)
+        assert.strictEqual(parentOf(refetchRpc!), refetch)
       })
     )
   })

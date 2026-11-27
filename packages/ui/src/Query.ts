@@ -5570,7 +5570,11 @@ const buildCache = (
         if (existing !== undefined) resetIdle(existing)
         if (registered.list === undefined) {
           event(undefined)
-          return traced(registered, "get", buildOf(fetcher).fetcher(args))
+          return traced(
+            registered,
+            "get",
+            Effect.suspend(() => buildOf(fetcher).fetcher(args))
+          )
         }
         event({ page: 0, cursor: undefined })
         const count = existing === undefined
