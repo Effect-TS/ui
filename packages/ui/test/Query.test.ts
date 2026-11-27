@@ -2046,4 +2046,27 @@ describe("Query", () => {
       assert.strictEqual(registrations, 0)
     }).pipe(Effect.provide(reactivityLayer))
   })
+
+  it.effect("reactivityKeys without Reactivity in context reports ReactivityMissing once and keeps caching", () => {
+    const { GetUser, db, provide } = makeUsers({
+      staleTime: "1 minute",
+      reactivityKeys: ({ id }) => [`users:${id}`]
+    })
+    return Effect.gen(function*() {
+      const first = yield* Effect.forkScoped(GetUser.get({ id: "1" }))
+      yield* advance(10)
+      assert.deepStrictEqual(yield* Fiber.join(first), { id: "1", name: "Ann" })
+      const second = yield* Effect.forkScoped(GetUser.get({ id: "2" }))
+      yield* advance(10)
+      assert.deepStrictEqual(yield* Fiber.join(second), {
+        id: "2",
+        name: "Ann"
+      })
+      assert.strictEqual(db.calls, 2)
+      const problems = yield* TestQuery.expectProblem("ReactivityMissing")
+      assert.deepStrictEqual(problems.map((problem) => problem.query), [
+        "users/GetUser"
+      ])
+    }).pipe(provide)
+  })
 })
