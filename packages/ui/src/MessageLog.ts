@@ -2098,10 +2098,8 @@ const encodeCause = (cause: Cause.Cause<unknown>): typeof CauseWire.Type => ({
  * @category Wire
  * @since 0.1.0
  */
-export const redactSchema = <S extends Schema.Top>(schema: S): S | Schema.Top =>
-  holdsRedacted(schema.ast)
-    ? Schema.make<Schema.Top>(redactAST(schema.ast))
-    : schema
+export const redactSchema = (schema: Schema.Top): Schema.Top =>
+  holdsRedacted(schema.ast) ? Schema.make(redactAST(schema.ast)) : schema
 
 /**
  * Encodes any value as JSON, best effort, with the Wire's placeholders for

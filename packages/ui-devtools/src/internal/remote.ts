@@ -53,37 +53,21 @@ const tagOf = (schema: Json, definitions: Record<string, Json>): unknown => {
 // Bounds the padding for minLength and the items for minItems.
 const most = 64
 
-const placeholder: Json = Object.freeze({ "~redacted": true })
-
-const holdsPlaceholder = (value: Json): boolean =>
-  value === placeholder ||
-  (typeof value === "object" && value !== null &&
+const holdsPlaceholder = (value: unknown): boolean =>
+  typeof value === "object" && value !== null &&
+  (MessageLog.isPlaceholder(value) ||
     Object.values(value).some(holdsPlaceholder))
 
 // The redacting codec's encoding of a `Schema.Redacted`.
-const isPlaceholderSchema = (schema: Json | undefined): boolean =>
+const isPlaceholderSchema = (schema: Json): boolean =>
   isObject(schema) && isObject(schema.properties) &&
   Object.keys(schema.properties).length === 1 &&
   literalOf(schema.properties["~redacted"]) === true
-
-const at = (schema: Json | undefined, key: string): Json | undefined =>
-  isObject(schema) ? schema[key] : undefined
-
-const nth = (list: Json | undefined, i: number): Json | undefined =>
-  Array.isArray(list) ? list[i] : undefined
 
 interface Document {
   readonly schema: Json
   readonly definitions: Record<string, Json>
 }
-
-// Stands in for a redacting node the walk lost track of.
-const lost: Json = Object.freeze({})
-
-/** What `exampleOf` returns when a value may hold a secret it couldn't mark. */
-const unmasked: Json = Object.freeze({})
-
-const valueKeys = new Set(["const", "enum", "examples", "default"])
 
 /**
  * A value for a JSON Schema, or `undefined` when none is found: a constant,
@@ -91,89 +75,63 @@ const valueKeys = new Set(["const", "enum", "examples", "default"])
  * member that has one and one item in an array. A `$ref` already being
  * walked has none, so a recursive type stops at an empty array or a `None`.
  *
- * `redacted` is the same node in the redacting codec's document. The walk
- * follows it alongside and puts `placeholder` where it has a
- * `Schema.Redacted`, so the value is the plain one with the placeholders in.
- * When a value comes from a node whose redacting side holds a placeholder the
- * walk can't reach, such as an `examples` annotation above a
- * `Schema.Redacted`, it returns `unmasked`.
+ * With `redacting`, the schema is from the redacting codec's document, where
+ * each `Schema.Redacted` is its placeholder. There is no value when one would
+ * come from an `examples` or `default` annotation above a placeholder, which
+ * would show a sample in its place.
  */
 const exampleOf = (
   root: Json,
   definitions: Record<string, Json>,
-  redacted?: Document
+  redacting = false
 ): Json | undefined => {
   const open = new Set<string>()
-  let missed = false
-  const masks = (node: Json | undefined, seen: Set<string>): boolean => {
-    if (node === lost) return true
-    if (redacted === undefined) return false
-    if (Array.isArray(node)) return node.some((item) => masks(item, seen))
-    if (!isObject(node)) return false
-    if (typeof node.$ref === "string") {
-      if (seen.has(node.$ref)) return false
-      seen.add(node.$ref)
-      return masks(resolve(node, redacted.definitions), seen)
+  let unmasked = false
+  const masks = (node: Json | undefined, seen: Set<Json>): boolean => {
+    const schema = resolve(node, definitions)
+    if (typeof schema !== "object" || schema === null || seen.has(schema)) {
+      return false
     }
-    return isPlaceholderSchema(node) ||
-      Object.keys(node).some((key) =>
-        !valueKeys.has(key) && masks(node[key], seen)
-      )
+    seen.add(schema)
+    return isPlaceholderSchema(schema) ||
+      Object.values(schema).some((child) => masks(child, seen))
   }
-  const walk = (schema: Json, shadow: Json | undefined): Json | undefined => {
-    if (redacted !== undefined) shadow = resolve(shadow, redacted.definitions)
-    if (
-      isPlaceholderSchema(shadow) &&
-      JSON.stringify(schema) !== JSON.stringify(shadow)
-    ) {
-      return walk(schema, undefined) === undefined ? undefined : placeholder
-    }
-    const leaf = (value: Json | undefined) => {
-      if (value !== undefined && masks(shadow, new Set())) missed = true
-      return value
-    }
-    const sub = (node: Json | undefined) =>
-      node === undefined && masks(shadow, new Set()) ? lost : node
-    if (schema === true) return leaf(null)
+  const walk = (schema: Json): Json | undefined => {
     if (!isObject(schema)) return undefined
     if (typeof schema.$ref === "string") {
-      const name = schema.$ref.slice(schema.$ref.lastIndexOf("/") + 1)
-      if (open.has(name) || definitions[name] === undefined) return undefined
-      open.add(name)
-      const out = walk(definitions[name], shadow)
-      open.delete(name)
+      const target = resolve(schema, definitions)
+      if (open.has(schema.$ref) || target === undefined) return undefined
+      open.add(schema.$ref)
+      const out = walk(target)
+      open.delete(schema.$ref)
       return out
     }
-    if ("const" in schema) return leaf(schema.const)
-    if (Array.isArray(schema.enum)) return leaf(schema.enum[0])
-    if (Array.isArray(schema.examples) && schema.examples.length > 0) {
-      return leaf(schema.examples[0])
+    if ("const" in schema) return schema.const
+    if (Array.isArray(schema.enum)) return schema.enum[0]
+    const annotated = Array.isArray(schema.examples) &&
+      schema.examples.length > 0
+    if (annotated || "default" in schema) {
+      if (redacting && masks(schema, new Set())) unmasked = true
+      return annotated ? (schema.examples as Array<Json>)[0] : schema.default
     }
-    if ("default" in schema) return leaf(schema.default)
     const members = schema.anyOf ?? schema.oneOf
     if (Array.isArray(members)) {
-      const shadows = at(shadow, "anyOf") ?? at(shadow, "oneOf")
-      for (let i = 0; i < members.length; i++) {
-        const out = walk(members[i], sub(nth(shadows, i)))
+      for (const member of members) {
+        const out = walk(member)
         if (out !== undefined) return out
       }
       return undefined
     }
     if (Array.isArray(schema.allOf)) {
-      const merge = (node: Json | undefined) => {
-        if (!isObject(node) || !Array.isArray(node.allOf)) return node
-        const { allOf, ...rest } = node
-        return Object.assign(rest, ...allOf)
-      }
-      return walk(merge(schema)!, sub(merge(shadow)))
+      const { allOf, ...rest } = schema
+      return walk(Object.assign(rest, ...allOf))
     }
     if (isObject(schema.not)) return undefined
     const number = (key: string) =>
       typeof schema[key] === "number" ? schema[key] : undefined
-    const type = Array.isArray(schema.type) ? schema.type[0] : schema.type
-    switch (type) {
+    switch (schema.type) {
       case "string":
-        return leaf("a".repeat(Math.min(number("minLength") ?? 0, most)))
+        return "a".repeat(Math.min(number("minLength") ?? 0, most))
       case "number":
       case "integer": {
         let out = Math.max(0, number("minimum") ?? -Infinity)
@@ -182,19 +140,18 @@ const exampleOf = (
         out = Math.min(out, number("maximum") ?? Infinity)
         const below = number("exclusiveMaximum")
         if (below !== undefined && out >= below) out = below - 1
-        return leaf(out)
+        return out
       }
       case "boolean":
-        return leaf(false)
-      case "null":
-        return leaf(null)
+        return false
       case "array": {
         const out: Array<Json> = []
-        const prefix = Array.isArray(schema.prefixItems)
-          ? schema.prefixItems
-          : []
-        for (let i = 0; i < prefix.length; i++) {
-          const value = walk(prefix[i], sub(nth(at(shadow, "prefixItems"), i)))
+        for (
+          const item of Array.isArray(schema.prefixItems)
+            ? schema.prefixItems
+            : []
+        ) {
+          const value = walk(item)
           if (value === undefined) return undefined
           out.push(value)
         }
@@ -205,13 +162,12 @@ const exampleOf = (
           number("maxItems") ?? Infinity,
           out.length + most
         )
-        const item = schema.items === undefined ? true : schema.items
-        while (out.length < length) {
-          const value = walk(item, sub(at(shadow, "items")))
+        if (out.length < length) {
+          const value = walk(schema.items ?? {})
           if (value === undefined) {
             return out.length < minItems ? undefined : out
           }
-          out.push(value)
+          while (out.length < length) out.push(value)
         }
         return out
       }
@@ -220,10 +176,7 @@ const exampleOf = (
         const required = Array.isArray(schema.required) ? schema.required : []
         const properties = isObject(schema.properties) ? schema.properties : {}
         for (const key of Object.keys(properties)) {
-          const value = walk(
-            properties[key],
-            sub(at(at(shadow, "properties"), key))
-          )
+          const value = walk(properties[key])
           if (value !== undefined) out[key] = value
           else if (required.includes(key)) return undefined
         }
@@ -231,26 +184,25 @@ const exampleOf = (
           Object.keys(properties).length === 0 &&
           isObject(schema.additionalProperties)
         ) {
-          const value = walk(
-            schema.additionalProperties,
-            sub(at(shadow, "additionalProperties"))
-          )
+          const value = walk(schema.additionalProperties)
           if (value !== undefined) out.key = value
         }
         return out
       }
       default:
-        return leaf(null)
+        return null
     }
   }
-  const out = walk(root, redacted?.schema)
-  return missed && out !== undefined ? unmasked : out
+  const out = walk(root)
+  return unmasked ? undefined : out
 }
 
+/** The JSON codec `dispatch` decodes with. */
+const codecOf = (schema: Schema.Top) =>
+  Schema.toCodecJson(schema as Schema.Codec<unknown>)
+
 const documentOf = (schema: Schema.Top): Document =>
-  Schema.toJsonSchemaDocument(
-    Schema.toCodecJson(schema)
-  ) as unknown as Document
+  Schema.toJsonSchemaDocument(codecOf(schema)) as unknown as Document
 
 const membersOf = (document: Document): ReadonlyArray<Json> => {
   const root = resolve(document.schema, document.definitions)
@@ -274,81 +226,67 @@ const messageSchema = (
           tags.filter((t) => typeof t === "string").join(", ") + "."
       )
     }
+    const decode = Schema.decodeUnknownEffect(codecOf(schema))
     const redactedSchema = MessageLog.redactSchema(schema)
-    const redacted = redactedSchema === schema
+    const encodeRedacted = redactedSchema === schema
       ? undefined
-      : documentOf(redactedSchema)
-    const redactedMembers = redacted === undefined ? [] : membersOf(redacted)
-    const codec = Schema.toCodecJson(schema as Schema.Codec<unknown>)
-    const decode = Schema.decodeUnknownEffect(codec)
-    const encode = Schema.encodeUnknownEffect(codec)
-    const encodeRedacted = Schema.encodeUnknownEffect(
-      Schema.toCodecJson(redactedSchema as Schema.Codec<unknown>)
-    )
+      : Schema.encodeUnknownEffect(codecOf(redactedSchema))
+    // Read only by an example that can't be encoded, so it's built then.
+    let redacted: Document | undefined
     const example = (i: number): Effect.Effect<Json> => {
-      const none = (invalid: string) =>
-        Effect.succeed({
-          ...(typeof tags[i] === "string" ? { tag: tags[i] } : {}),
-          invalid
-        })
+      const name = tags[i]
+      const none = (invalid: string): Json => ({
+        ...(typeof name === "string" ? { tag: name } : {}),
+        invalid
+      })
       const message = exampleOf(members[i], document.definitions)
-      if (message === undefined) return none("No value fits this schema.")
-      // Without a decoded value to encode, the walk follows the redacting
-      // document beside the plain one to place the placeholders.
-      const walked = (
-        status: { invalid?: string }
-      ): Effect.Effect<Json> => {
-        if (redacted === undefined) {
-          return Effect.succeed({ message, ...status })
-        }
-        const shown = exampleOf(members[i], document.definitions, {
-          schema: redactedMembers[i],
-          definitions: redacted.definitions
-        })!
-        return shown === unmasked
+      if (message === undefined) {
+        return Effect.succeed(none("No value fits this schema."))
+      }
+      // `shown` is the example with each Schema.Redacted as its placeholder.
+      const entry = (shown: unknown, status?: { invalid: string }): Json =>
+        shown === undefined
           ? none(
             "No safe example: a Schema.Redacted's value here comes from an " +
-              "example, default or literal that can't be redacted."
+              "example or default that can't be redacted."
           )
-          : Effect.succeed({
-            message: shown,
-            ...(holdsPlaceholder(shown) ? { redacted: true } : {}),
-            ...status
-          })
+          : holdsPlaceholder(shown)
+          ? { message: shown as Json, redacted: true, ...status }
+          : { message, ...status }
+      // Without a decoded value to encode, the redacting document is walked.
+      const walked = (status?: { invalid: string }): Json => {
+        if (encodeRedacted === undefined) return { message, ...status }
+        redacted ??= documentOf(redactedSchema)
+        return entry(
+          exampleOf(membersOf(redacted)[i], redacted.definitions, true),
+          status
+        )
       }
       return decode(message, { errors: "all" }).pipe(
         Effect.matchEffect({
-          onFailure: (error) => walked({ invalid: error.message }),
-          // The log's codec marks each Schema.Redacted in the decoded value,
-          // whichever branch supplied it.
+          onFailure: (error) =>
+            Effect.succeed(walked({ invalid: error.message })),
           onSuccess: (value) =>
-            redacted === undefined
+            encodeRedacted === undefined
               ? Effect.succeed({ message })
-              : Effect.all([encode(value), encodeRedacted(value)]).pipe(
-                Effect.map(([plain, shown]): Json =>
-                  JSON.stringify(plain) === JSON.stringify(shown)
-                    ? { message }
-                    : { message: shown as Json, redacted: true }
-                ),
-                Effect.catch(() => walked({}))
-              )
+              : Effect.match(encodeRedacted(value), {
+                onFailure: () => walked(),
+                onSuccess: (shown) => entry(shown)
+              })
         })
       )
     }
-    return tag === undefined
-      ? Effect.map(
-        Effect.forEach(members, (_, i) => example(i)),
-        (examples) => ({
-          schema: document.schema,
-          definitions: document.definitions,
-          examples
-        })
-      )
-      : Effect.map(example(index), (entry) => ({
-        schema: members[index],
+    return Effect.map(
+      Effect.forEach(
+        tag === undefined ? members.map((_, i) => i) : [index],
+        example
+      ),
+      (examples) => ({
+        schema: tag === undefined ? document.schema : members[index],
         definitions: document.definitions,
-        examples: [entry]
-      }))
+        examples
+      })
+    )
   })
 
 export const makeHandler = (
@@ -403,9 +341,7 @@ export const makeHandler = (
       case "Dispatch":
         return Effect.gen(function*() {
           const found = yield* target(request.session, request.instance)
-          const decode = Schema.decodeUnknownEffect(
-            Schema.toCodecJson(found.message as Schema.Codec<unknown>)
-          )
+          const decode = Schema.decodeUnknownEffect(codecOf(found.message))
           const messages = yield* Effect.forEach(
             request.messages,
             (message, index) =>
