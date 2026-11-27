@@ -443,6 +443,41 @@ describe("Html", () => {
     })
   })
 
+  it("pointer gestures carry the pointer's id, and only a press can capture it", () => {
+    Html.component({
+      name: "Gestures",
+      model: Schema.String,
+      message: Msg
+    }).make({
+      init: () => "",
+      update: ($) => $.model,
+      view: (h) => {
+        const handler = ({ pointerId }: Html.PointerPayload) =>
+          pointerId === -1 ? undefined : Msg.Mounted()
+        expect(h.div.on).type.toBeCallableWith("pointermove", handler)
+        expect(h.div.on).type.toBeCallableWith("pointerup", handler)
+        expect(h.div.on).type.toBeCallableWith("pointercancel", handler)
+        expect(h.div.on).type.toBeCallableWith("pointerdown", handler, {
+          capturePointer: true
+        })
+        expect(h.circle.on).type.toBeCallableWith("pointermove", handler)
+        expect(h.circle.on).type.toBeCallableWith("pointerup", handler)
+        expect(h.circle.on).type.toBeCallableWith("pointercancel", handler)
+        expect(h.circle.on).type.toBeCallableWith("pointerdown", handler, {
+          capturePointer: true
+        })
+        expect<Html.PointerPayload["pointerId"]>().type.toBe<number>()
+        expect(h.div.on).type.not.toBeCallableWith("pointermove", handler, {
+          capturePointer: true
+        })
+        expect(h.circle.on).type.not.toBeCallableWith("click", handler, {
+          capturePointer: true
+        })
+        return h.div()
+      }
+    })
+  })
+
   it("controlled properties exist on the elements that have them", () => {
     Html.component({
       name: "Controlled",

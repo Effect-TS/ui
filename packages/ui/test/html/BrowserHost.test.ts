@@ -1344,11 +1344,13 @@ describe("BrowserHost", { concurrent: false }, () => {
               h.input.attr("aria-label", "First"),
               h.input.attr("aria-label", "Second")
             ),
-          h.button.on("click", ({ pointerType }) =>
-            Message.PointerClicked({ pointerType }))
-            .on("pointerdown", ({ button, pointerType }) =>
+          h.button.on("click", ({ pointerId, pointerType }) =>
+            Message.PointerClicked({
+              pointerType: `${pointerType} ${pointerId}`
+            }))
+            .on("pointerdown", ({ button, pointerId, pointerType }) =>
               Message.PointerClicked({
-                pointerType: `down ${button} ${pointerType}`
+                pointerType: `down ${button} ${pointerType} ${pointerId}`
               }))
             .children("Pointer"),
           h.input.attr("aria-label", "Keys")
@@ -1707,7 +1709,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         assert.strictEqual(app.querySelectorAll("p").length, 2)
       }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 
-    it.effect("a pointerdown reports its button and pointer, and a click the pointer of the pointerdown before it, or none from the keyboard", () =>
+    it.effect("a pointerdown reports its button, pointer and id, and a click the pointer of the pointerdown before it, or none from the keyboard, and no id", () =>
       Effect.gen(function*() {
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Events, {}, app)
@@ -1722,6 +1724,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         button.dispatchEvent(
           new PointerEvent("pointerdown", {
             bubbles: true,
+            pointerId: 2,
             pointerType: "touch"
           })
         )
@@ -1732,18 +1735,19 @@ describe("BrowserHost", { concurrent: false }, () => {
           new PointerEvent("pointerdown", {
             bubbles: true,
             button: 2,
+            pointerId: 3,
             pointerType: "pen"
           })
         )
         click(1)
         yield* tick
         expect(root.model()).toEqual([
-          "mouse",
-          "down 0 touch",
-          "touch",
-          "",
-          "down 2 pen",
-          "pen"
+          "mouse -1",
+          "down 0 touch 2",
+          "touch -1",
+          " -1",
+          "down 2 pen 3",
+          "pen -1"
         ])
       }).pipe(Effect.scoped))
 
@@ -2887,6 +2891,99 @@ describe("BrowserHost", { concurrent: false }, () => {
           "enter",
           "drop milk at 5,7 of 100x100",
           "leave"
+        ])
+      }).pipe(Effect.scoped))
+  })
+
+  describe("pointer gestures", () => {
+    const Divider = Html.component({
+      name: "Divider",
+      model: Schema.Array(Schema.String),
+      message: Schema.String
+    }).make({
+      init: (): ReadonlyArray<string> => [],
+      update: ($, message) => [...$.model, message],
+      view: (h) =>
+        h.div.attr("aria-label", "Divider")
+          .on("pointerdown", ({ button, pointerId }) =>
+            button === 0 ? `down ${pointerId}` : undefined, {
+            capturePointer: true
+          })
+          .on("pointermove", ({ pointerId, x }) =>
+            `move ${pointerId} ${x}`)
+          .on("pointerup", ({ pointerId }) =>
+            `up ${pointerId}`)
+          .on("pointercancel", ({ pointerId }) =>
+            `cancel ${pointerId}`)
+          .children(h.span("Grip"))
+    })
+    const pointer = (
+      element: Element,
+      name: string,
+      init: {
+        readonly pointerId: number
+        readonly x?: number
+        readonly button?: number
+      }
+    ) =>
+      element.dispatchEvent(
+        new PointerEvent(name, {
+          bubbles: true,
+          pointerId: init.pointerId,
+          button: init.button ?? 0,
+          clientX: init.x ?? 0,
+          pointerType: "mouse"
+        })
+      )
+    /** Records each `setPointerCapture` with the element it was called on. */
+    const captures = Effect.acquireRelease(
+      Effect.sync(() => {
+        const calls: Array<readonly [Element, number]> = []
+        const spy = vi.spyOn(Element.prototype, "setPointerCapture")
+          .mockImplementation(function(this: Element, pointerId: number) {
+            calls.push([this, pointerId])
+          })
+        return { calls, spy }
+      }),
+      ({ spy }) => Effect.sync(() => spy.mockRestore())
+    ).pipe(Effect.map(({ calls }) => calls))
+
+    it.effect("a press captures its pointer on the element with the handler, unless the handler sends nothing", () =>
+      Effect.gen(function*() {
+        const calls = yield* captures
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Divider, {}, app)
+        const divider = app.querySelector("[aria-label=Divider]")!
+        const grip = app.querySelector("span")!
+        pointer(grip, "pointerdown", { pointerId: 7 })
+        pointer(grip, "pointerdown", { pointerId: 8, button: 2 })
+        yield* tick
+        assert.deepStrictEqual(calls, [[divider, 7]])
+        expect(root.model()).toEqual(["down 7"])
+      }).pipe(Effect.scoped))
+
+    it.effect("moves are sent once per frame per pointer, with the latest position, and a queued one before its release", () =>
+      Effect.gen(function*() {
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Divider, {}, app)
+        const divider = app.querySelector("[aria-label=Divider]")!
+        pointer(divider, "pointerdown", { pointerId: 1 })
+        for (const x of [1, 2, 3]) {
+          pointer(divider, "pointermove", { pointerId: 1, x })
+        }
+        pointer(divider, "pointermove", { pointerId: 2, x: 9 })
+        yield* tick
+        // Queued, then released in the same task.
+        pointer(divider, "pointermove", { pointerId: 1, x: 4 })
+        pointer(divider, "pointermove", { pointerId: 1, x: 5 })
+        pointer(divider, "pointerup", { pointerId: 1, x: 5 })
+        yield* tick
+        expect(root.model()).toEqual([
+          "down 1",
+          "move 1 3",
+          "move 2 9",
+          "move 1 5",
+          "up 1"
         ])
       }).pipe(Effect.scoped))
   })
