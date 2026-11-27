@@ -543,9 +543,10 @@ const modifiers = ["Shift", "Control", "Alt", "Meta", "AltGraph"]
  *
  * **Details**
  *
- * The hold counts only while `element` is in a document, so one left behind
- * by a removed element doesn't keep the page's shortcuts off. Release it as
- * the modal starts closing.
+ * The hold counts only while `element` is in the document it was held in, so
+ * one left behind by a removed element doesn't keep the page's shortcuts off.
+ * A modal moved to another document needs a new hold there, and the old one
+ * released. Release it as the modal starts closing.
  *
  * @stability experimental
  * @category events

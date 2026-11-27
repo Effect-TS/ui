@@ -21,14 +21,17 @@ export const hold = (element: Element): () => void => {
 
 /**
  * Whether a held element is in `document`. One that left it, as when its
- * root is gone without releasing it, doesn't count until it's back.
+ * root is gone without releasing it or it moved to another document, doesn't
+ * count until it's back.
  *
  * @internal
  */
 export const open = (document: Document): boolean => {
   const holds = held.get(document)
   if (holds !== undefined) {
-    for (const { element } of holds) if (element.isConnected) return true
+    for (const { element } of holds) {
+      if (element.isConnected && element.ownerDocument === document) return true
+    }
   }
   return false
 }
