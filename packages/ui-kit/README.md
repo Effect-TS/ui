@@ -77,6 +77,7 @@ Test wrapper event mappings and the props they feed back with `HtmlPlay` on `Tes
 
 ## Other modules
 
+- [Dismissal](src/Dismissal.ts): puts a widget of your own, such as an inline editor, in the stack of layers the kit's dialogs keep, so Escape, a press outside, focus leaving it and Android's back gesture reach only the topmost layer. The `Dismissal.TrackDismissal` mount reports each request with its reason, and your Model decides whether to close.
 - [ListNavigation](src/ListNavigation.ts): resolves arrow keys, `Home` and `End` to list indexes, respecting orientation, text direction and looping. The caller moves focus or updates a highlight.
 - [Positioning](src/Positioning.ts): places a popup of your own against an anchor, as `Tooltip` places its popup. `Positioning.place` computes a position from rectangles, and the `Positioning.TrackPosition` mount keeps a positioner next to its anchor.
 - [Typeahead](src/Typeahead.ts): matches typed prefixes against enabled items and cycles on repeated letters. Store `Typeahead.State` in your Model, advance it with `Typeahead.step`, and use `Typeahead.waitReset` to schedule a reset message.

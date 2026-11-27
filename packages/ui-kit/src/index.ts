@@ -107,6 +107,12 @@ export * from "./DirectionProvider.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as Dismissal from "./Dismissal.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Drawer.ts"
 
 /**
