@@ -2,4 +2,4 @@
 "@effect/ui": patch
 ---
 
-`Query.Service` and `Query.InfiniteService` classes expose their `args`, `success` and `error` Schemas as typed statics. Their type parameters are now Schemas, like `Command.Service`'s.
+Expose typed `args`, `success` and `error` schemas on `Query.Service` and `Query.InfiniteService` classes, with `error` defaulting to `Schema.Never`. For infinite queries, `success` describes the array of pages, not a single page.

@@ -195,7 +195,6 @@ export declare namespace Query {
  *
  * A `Context.Service` holding the query's fetcher. Attach one with `toLayer`;
  * static methods look up the cache and require the query when they may fetch.
- * The `args`, `success` and `error` statics are the query's Schemas.
  *
  * @stability experimental
  * @category models
@@ -215,7 +214,10 @@ export interface Service<
   >,
   Query<Args["Type"], Success["Type"], Error["Type"]>
 {
-  /** The arguments Schema: the one given, a fields record's struct, or the empty struct. */
+  /**
+   * Preserves a supplied Schema; wraps a fields record in `Schema.Struct`.
+   * Defaults to an empty struct.
+   */
   readonly args: Args
   readonly success: Success
   /** Defaults to `Schema.Never`. */
@@ -790,9 +792,8 @@ export interface LoadedMore<Page> {
  *
  * It's a `Context.Service` whose value is the query's fetcher, which takes
  * the arguments and the cursor of the page to load, `None` for the first.
- * Its result is the page array, and its `success` static is that array's
- * Schema. It has the statics of a query, except `set`, and adds `loadMore`,
- * `reset` and `items`.
+ * The fetcher returns one page; `get` returns the page array. It has the
+ * statics of a query, except `set`, and adds `loadMore`, `reset` and `items`.
  *
  * @stability experimental
  * @category models
@@ -817,9 +818,11 @@ export interface InfiniteService<
   >,
   InfiniteQuery<Args["Type"], Page["Type"], Item, Error["Type"]>
 {
-  /** The arguments Schema, as for any query. */
   readonly args: Args
-  /** The page array's Schema. The page's is `success.value`. */
+  /**
+   * Wraps the supplied page Schema in `Schema.Array`; access the page Schema
+   * via `success.value`.
+   */
   readonly success: Schema.$Array<Page>
   /** Defaults to `Schema.Never`. */
   readonly error: Error
