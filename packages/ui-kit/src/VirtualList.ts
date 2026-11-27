@@ -1079,6 +1079,8 @@ const TrackVirtualList = Mount.makeStream(
           const top = box().top
           const placed = placement(top)
           anchor = null
+          // Above the list, keep the scroll offset rather than follow a row.
+          if (placed > 0.5) return
           for (const item of itemsOf()) {
             const rect = placedAt(item)
             if (rect.bottom > top + 0.5) {
