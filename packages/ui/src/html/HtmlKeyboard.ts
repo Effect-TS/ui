@@ -8,6 +8,7 @@
  */
 import type * as Html from "./Html.ts"
 import type * as HtmlSubscription from "./HtmlSubscription.ts"
+import * as keys from "./internal/keys.ts"
 
 /**
  * One row of a table for {@link shortcuts}: a key to match, the message to
@@ -37,6 +38,25 @@ export interface Shortcut<Msg> {
   readonly meta?: boolean | undefined
   readonly whileTyping?: boolean | undefined
   readonly repeat?: boolean | undefined
+}
+
+/**
+ * A row of `HtmlSubscription.keySequences` that takes several presses:
+ * `keys` in order, such as `["g", "l"]`, in place of a {@link Shortcut}'s
+ * `key`.
+ *
+ * **Details**
+ *
+ * The modifiers and guards apply to every press of the row, as they do to a
+ * {@link Shortcut}'s one press.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface Sequence<Msg> extends Omit<Shortcut<Msg>, "key"> {
+  readonly keys: readonly [string, ...ReadonlyArray<string>]
+  readonly key?: never
 }
 
 /**
@@ -111,17 +131,7 @@ export const shortcuts = <const Rows extends ReadonlyArray<Shortcut<unknown>>>(
     payload.composing
   ) return undefined
   for (const shortcut of table) {
-    if (
-      shortcut.key === payload.key &&
-      (shortcut.mod === true
-        ? payload.ctrl !== payload.meta
-        : payload.ctrl === (shortcut.ctrl ?? false) &&
-          payload.meta === (shortcut.meta ?? false)) &&
-      payload.alt === (shortcut.alt ?? false) &&
-      (shortcut.shift === undefined || payload.shift === shortcut.shift) &&
-      (!payload.editable || shortcut.whileTyping === true) &&
-      (!payload.repeat || shortcut.repeat === true)
-    ) {
+    if (keys.matches(shortcut, shortcut.key, payload)) {
       return shortcut.message as Rows[number]["message"]
     }
   }

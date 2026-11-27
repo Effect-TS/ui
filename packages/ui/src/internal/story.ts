@@ -177,6 +177,8 @@ export type Fields<Props, Model, Msg, Events> =
       | undefined
     readonly shared?: ReadonlyMap<Component.Definition.Any, unknown> | undefined
     readonly collected?: Collected | undefined
+    /** Listener state keyed by Subscription key, preserved across scene updates. */
+    readonly held?: ReadonlyMap<string, unknown> | undefined
   }
 
 // What a failed slot without a `fallback` shows.
@@ -455,6 +457,9 @@ interface Collected {
   readonly message: unknown
 }
 const collectedLast = new WeakMap<object, Collected>()
+
+/** @internal */
+export const heldBy = new WeakMap<object, ReadonlyMap<string, unknown>>()
 
 /**
  * Runs the story's component's `collects.onChange` for `reports`, and sends its message when it differs
@@ -777,6 +782,7 @@ export const record = <Props, Model, Msg, Events>(
   }
   if (fields.shared !== undefined) sharedGiven.set(story, fields.shared)
   if (fields.collected !== undefined) collectedLast.set(story, fields.collected)
+  if (fields.held !== undefined) heldBy.set(story, fields.held)
   return story
 }
 
@@ -802,6 +808,7 @@ export const update = <Props, Model, Msg, Events>(
     childStatus: childStatuses.get(story),
     shared: sharedGiven.get(story),
     collected: collectedLast.get(story),
+    held: heldBy.get(story),
     ...patch
   }
   // A defect in `view` fails the step that changed the Model, the query results, the props or what's pending.

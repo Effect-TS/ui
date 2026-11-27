@@ -57,7 +57,8 @@ const globalEventsOf = (
               document.documentElement,
               undefined
             ) as object),
-          defaultPrevented: event.defaultPrevented
+          defaultPrevented: event.defaultPrevented,
+          timeStamp: event.timeStamp
         },
         () => event.preventDefault()
       )

@@ -247,7 +247,14 @@ export interface Direct {
       f: (latest: Subscription.Subscription<unknown, unknown>) => void
     ) => void
   ) =>
-    | { readonly initial: Effect.Effect<void>; readonly close: () => void }
+    | {
+      readonly initial: Effect.Effect<void>
+      readonly close: () => void
+      /** Called with each later declaration for the key, as `subscriptions` re-runs. */
+      readonly update?: (
+        latest: Subscription.Subscription<unknown, unknown>
+      ) => void
+    }
     | undefined
 }
 

@@ -500,6 +500,124 @@ describe("HtmlSubscription.shortcuts", () => {
     }))
 })
 
+describe("HtmlSubscription.keySequences", () => {
+  it.effect("matches timed sequences, falls through on expiry or mismatch, and keeps prefixes across modifiers and repeats", () =>
+    Effect.gen(function*() {
+      const SequenceApp = Html.component({
+        name: "SequenceApp",
+        model: Schema.Struct({
+          enabled: Schema.Boolean,
+          log: Schema.Array(Schema.String)
+        }),
+        message: Schema.String
+      }).make({
+        init: () => ({ enabled: true, log: [] }),
+        update: ($, entry) =>
+          entry === "toggle"
+            ? { ...$.model, enabled: !$.model.enabled }
+            : { ...$.model, log: [...$.model.log, entry] },
+        view: (h, model) =>
+          h.div(
+            h.button.on("click", "toggle").children("Toggle"),
+            h.output(model.log.join(","))
+          ),
+        subscriptions: ({ model }) => [
+          model.enabled && HtmlSubscription.keySequences([
+            { key: "/", message: "search" },
+            { key: "l", message: "single-l" },
+            { keys: ["g", "l"], message: "list" },
+            { keys: ["g", "b"], message: "board" }
+          ])
+        ]
+      })
+
+      const scene = yield* HtmlScene.make(SequenceApp, {})
+      scene
+        .fireDocument("keydown", { key: "g", timeStamp: 0 })
+        .expectDefaultPrevented()
+        .expect(Locator.tag("output")).toHaveText("")
+        .fireDocument("keydown", { key: "l", timeStamp: 500 })
+        .expectDefaultPrevented()
+        .expect(Locator.tag("output")).toHaveText("list")
+        // Past the 1s window, the prefix expires and `l` falls through to the single-key row.
+        .fireDocument("keydown", { key: "g", timeStamp: 1000 })
+        .fireDocument("keydown", { key: "l", timeStamp: 2001 })
+        .expect(Locator.tag("output")).toHaveText("list,single-l")
+        .fireDocument("keydown", { key: "g", timeStamp: 3000 })
+        .fireDocument("keydown", { key: "/", timeStamp: 3100 })
+        .expect(Locator.tag("output")).toHaveText("list,single-l,search")
+        .fireDocument("keydown", { key: "b", timeStamp: 3200 })
+        .expectIgnored()
+        .fireDocument("keydown", { key: "g", timeStamp: 4000 })
+        .fireDocument("keydown", { key: "l", timeStamp: 4100, editable: true })
+        .expectIgnored()
+        // Modifier-only keydowns and auto-repeats keep the prefix.
+        .fireDocument("keydown", { key: "g", timeStamp: 5000 })
+        .fireDocument("keydown", { key: "Shift", timeStamp: 5200, shift: true })
+        .expectIgnored()
+        .fireDocument("keydown", { key: "g", timeStamp: 5400, repeat: true })
+        .expectIgnored()
+        .fireDocument("keydown", { key: "b", timeStamp: 5900 })
+        .expect(Locator.tag("output")).toHaveText(
+          "list,single-l,search,board"
+        )
+        .fireDocument("keydown", { key: "g", timeStamp: 6000 })
+        .click("Toggle")
+        .click("Toggle")
+        .fireDocument("keydown", { key: "b", timeStamp: 6100 })
+        .expectIgnored()
+        // A press without a `timeStamp`, as a custom source may send, counts as time 0.
+        .fireDocument("keydown", {
+          key: "g",
+          timeStamp: undefined as unknown as number
+        })
+        .fireDocument("keydown", { key: "l", timeStamp: 1001 })
+        .expect(Locator.tag("output")).toHaveText(
+          "list,single-l,search,board,single-l"
+        )
+    }))
+
+  it("rejects unreachable shadowed rows in development while allowing disjoint modifiers and guards", () => {
+    // `g b` takes a plain `g` first, so the typing row doesn't block `g l`.
+    assert.doesNotThrow(() =>
+      HtmlSubscription.keySequences([
+        { key: "g", mod: true, message: "find" },
+        { keys: ["g", "b"], message: "board" },
+        { key: "g", whileTyping: true, message: "typing-g" },
+        { keys: ["g", "l"], message: "list" }
+      ])
+    )
+    assert.throws(
+      () =>
+        HtmlSubscription.keySequences([
+          { key: "g", message: "g" },
+          { keys: ["g", "l"], message: "list" }
+        ]),
+      /"g".*"g l"/
+    )
+    assert.throws(
+      () =>
+        HtmlSubscription.keySequences([
+          { keys: ["g", "l"], message: "list" },
+          { key: "g", message: "g" }
+        ]),
+      /"g l".*"g"/
+    )
+    // The same row object twice, loose enough that a naive check would take seconds.
+    const row = {
+      keys: ["a", "b", "c", "d", "e"],
+      mod: true,
+      whileTyping: true,
+      repeat: true,
+      message: "first"
+    } as const
+    assert.throws(
+      () => HtmlSubscription.keySequences([row, row]),
+      /unreachable/
+    )
+  })
+})
+
 const FrameMessage = UiSchema.TaggedEnum({
   TickedFrame: { delta: Schema.Number },
   Toggled: {}

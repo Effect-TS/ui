@@ -2202,6 +2202,35 @@ describe("BrowserHost", { concurrent: false }, () => {
           ])
         }).pipe(Effect.scoped))
 
+      it.effect("document listeners receive the DOM event timeStamp", () =>
+        Effect.gen(function*() {
+          const app = yield* container
+          const Stamps = Html.component({
+            name: "Stamps",
+            model: Schema.Array(Schema.Number),
+            message: Schema.Number
+          }).make({
+            init: (): ReadonlyArray<number> => [],
+            update: ($, stamp) => [...$.model, stamp],
+            view: (h) => h.div(),
+            subscriptions: () => [
+              HtmlSubscription.onDocument(
+                "keydown",
+                ({ timeStamp }) => timeStamp
+              )
+            ]
+          })
+          const root = yield* BrowserHost.mountEffect(Stamps, {}, app)
+          yield* tick
+          const event = new KeyboardEvent("keydown", {
+            key: "g",
+            bubbles: true
+          })
+          document.body.dispatchEvent(event)
+          yield* tick
+          expect(root.model()).toEqual([event.timeStamp])
+        }).pipe(Effect.scoped))
+
       it.effect("a composing field's value isn't written until compositionend, including inside shadow DOM", () =>
         Effect.gen(function*() {
           const Typed = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })

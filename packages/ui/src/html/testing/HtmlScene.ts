@@ -267,8 +267,8 @@ export interface Steps<C extends AnyComponent, Parts = never>
   /**
    * Fires `event` on the document, as the browser host delivers it to the
    * component's `HtmlSubscription.onDocument` listeners. Missing payload
-   * fields default as `keydown` and `click` default them, and
-   * `defaultPrevented` to `false`.
+   * fields default as `keydown` and `click` default them,
+   * `defaultPrevented` to `false` and `timeStamp` to `0`.
    *
    * **Details**
    *
@@ -620,26 +620,37 @@ class StepsImpl extends internal.SceneCursor {
         let out = state
         let heard = false
         cancelled = fireGlobal.fire(event, given, (capture) => {
-          const declared = out.declared().map(globalEvents.listenerOf).find((
-            declared
-          ) =>
-            declared !== undefined && declared.target === target &&
-            declared.event === event &&
-            declared.capture === capture
-          )
-          if (declared === undefined) return []
+          const sub = out.declared().find((sub) => {
+            const declared = globalEvents.listenerOf(sub)
+            return declared !== undefined && declared.target === target &&
+              declared.event === event &&
+              declared.capture === capture
+          })
+          if (sub === undefined) return []
           heard = true
-          return [(payload, preventDefault) =>
-            globalEvents.run(
-              declared,
-              payload,
-              preventDefault,
-              (message, cancel) => {
-                cancel()
-                handled = true
-                out = engine.dispatch(out, message)
-              }
-            )]
+          return [(payload, preventDefault) => {
+            const before = engine.heldBy.get(out)?.get(sub.key)
+            const held: globalEvents.Held = { value: before }
+            // A press a held listener consumed is handled too, with no message.
+            handled = globalEvents.observe(() =>
+              globalEvents.run(
+                globalEvents.listenerOf(sub)!,
+                payload,
+                preventDefault,
+                (message, cancel) => {
+                  cancel()
+                  out = engine.dispatch(out, message)
+                },
+                held
+              )
+            ).handled || handled
+            if (held.value !== before) {
+              const next = new Map(engine.heldBy.get(out))
+              if (held.value === undefined) next.delete(sub.key)
+              else next.set(sub.key, held.value)
+              out = engine.update(out, { held: next })
+            }
+          }]
         })
         if (!heard) {
           throw new Error(
@@ -657,6 +668,23 @@ class StepsImpl extends internal.SceneCursor {
         defaultPrevented: cancelled
       })
     )
+  }
+  // A held listener's state ends with its entry, or once the key's declaration isn't held, as in the runtime.
+  protected override settled(
+    state: engine.State<any, any, any, any>,
+    step: string
+  ): engine.State<any, any, any, any> {
+    const held = engine.heldBy.get(state)
+    if (held !== undefined && held.size > 0) {
+      const kept = new Map<string, unknown>()
+      for (const sub of state.declared()) {
+        if (held.has(sub.key) && globalEvents.listenerOf(sub)?.held) {
+          kept.set(sub.key, held.get(sub.key))
+        }
+      }
+      if (kept.size < held.size) state = engine.update(state, { held: kept })
+    }
+    return super.settled(state, step)
   }
   frame(delta = 16): this {
     return this.fireDeclared(

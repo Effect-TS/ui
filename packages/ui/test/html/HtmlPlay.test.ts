@@ -375,4 +375,49 @@ describe("HtmlPlay", () => {
         /nothing listens for "keydown" on the document/
       )
     }).pipe(play))
+
+  it.effect("keySequences keeps its prefix across updates, and drops it when the key switches to shortcuts", () =>
+    Effect.gen(function*() {
+      const App = Html.component({
+        name: "KeySequencePlay",
+        model: Schema.Struct({
+          sequences: Schema.Boolean,
+          log: Schema.Array(Schema.String)
+        }),
+        message: Schema.String
+      }).make({
+        init: () => ({ sequences: false, log: [] }),
+        update: ($, entry) =>
+          entry === "switch"
+            ? { ...$.model, sequences: !$.model.sequences }
+            : { ...$.model, log: [...$.model.log, entry] },
+        view: (h, model) =>
+          h.div(
+            h.button.on("click", "switch").children("Switch"),
+            h.button.on("click", "ping").children("Ping"),
+            h.output(model.log.join(","))
+          ),
+        subscriptions: ({ model }) => [
+          model.sequences
+            ? HtmlSubscription.keySequences([{
+              keys: ["g", "l"],
+              message: "list"
+            }])
+            : HtmlSubscription.shortcuts([{ key: "/", message: "search" }])
+        ]
+      })
+
+      const p = yield* HtmlPlay.make(App, {})
+      // The keydown listener was attached for `shortcuts`.
+      yield* p.click("Switch")
+      yield* p.keydown("document", "g")
+      yield* p.click("Ping")
+      yield* p.keydown("document", "l")
+      yield* p.expect(log).toHaveText("ping,list")
+      yield* p.keydown("document", "g")
+      yield* p.click("Switch")
+      yield* p.click("Switch")
+      yield* p.keydown("document", "l")
+      yield* p.expectIgnored()
+    }).pipe(play))
 })
