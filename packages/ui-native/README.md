@@ -40,7 +40,13 @@ export default NativeMetro.withEffectUi(
 
 A release build (`NODE_ENV=production`, as `expo export` and Gradle's release tasks set it) is pre-bundled with Vite, which tree-shakes `effect` and `@effect/ui`, and Metro bundles the result with React Native. Packages with native code or assets are left to Metro: `react-native`, `expo`, and their scoped and prefixed packages by default, and any others named in the `external` option.
 
-Each platform in the `platforms` option (`["android", "ios"]` by default) gets its own pre-bundle, resolved the way Metro resolves modules: `title.android.ts` or `title.ios.ts` first, then `title.native.ts`, then `title.ts`, with Metro's `sourceExts` and `resolverMainFields`. An app's own `resolver.resolveRequest` runs first for each import, so a module it maps elsewhere, to a file or by renaming the import it passes to `context.resolveRequest`, ships as it does in development. It may resolve to a source file or an empty module; a package it resolves to assets belongs in `external`. A resolver that reads what `context.resolveRequest` returned, or passes it another platform, fails the release build, since Vite resolves that import afterwards and only for the platform being built. Other platforms, such as web, get the sources.
+Each platform in `platforms` (`["android", "ios"]` by default) gets a pre-bundle using Metro's `sourceExts` and `resolverMainFields`. For each source extension, resolution tries the platform suffix, then `.native`, then no suffix. Platforms without a pre-bundle, such as web, use the sources.
+
+An app's `resolver.resolveRequest` also runs for non-external imports in the pre-bundle:
+
+- Return a source file or an empty module. Put packages that resolve to assets in `external`.
+- Delegate to `context.resolveRequest` to let Vite resolve an import, including a renamed import or a changed origin.
+- Do not read the delegated result's `filePath` or request another platform. Either fails the release build: Vite resolves asynchronously and only for the build's platform.
 
 In development Metro serves the sources. Editing a module that exports only components swaps them in place and keeps their state; editing any other module reloads the app.
 

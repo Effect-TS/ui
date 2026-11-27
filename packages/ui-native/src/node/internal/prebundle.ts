@@ -1,14 +1,10 @@
-// The Vite build a release runs for each platform, before Metro bundles the
-// result with React Native.
 import * as Path from "node:path"
 import type { MetroConfig } from "../NativeMetro.ts"
 
 const native = /^(?:@?react-native|@?expo)(?:[-/]|$)/
 
-// What an app's resolver gets back from `context.resolveRequest`: the
-// request, which Vite resolves once the app's resolver returns it. Vite
-// resolves asynchronously, so a resolver that reads the file it resolved to
-// fails the build rather than ship another module.
+// Metro delegates synchronously; Vite resolves asynchronously. Return a
+// deferred request and reject filePath reads inside the app's resolver.
 interface Delegated {
   readonly type: "sourceFile"
   readonly filePath: string
@@ -90,7 +86,6 @@ export const prebundle = async (
               moduleName: string,
               requested: string | null
             ) => {
-              // Vite resolves for the build's platform only.
               if (requested !== platform) {
                 throw new Error(
                   `[@effect/ui-native] resolveRequest asked for ${moduleName} on platform ${requested}, but the pre-bundle for ${platform} resolves only for ${platform}`

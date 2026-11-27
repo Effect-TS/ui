@@ -3,6 +3,6 @@
 "@effect/ui": minor
 ---
 
-Add `@effect/ui-native`, which renders `@effect/ui` apps as React Native views through Fabric, without React. `NativeApp.register` runs an app on each surface native starts, and `NativeMetro.withEffectUi` configures Metro: release builds are pre-bundled with Vite per platform, which tree-shakes `effect`, and development builds get Fast Refresh. `examples/native` is an Expo app built with it.
+Add `@effect/ui-native` to render native views through Fabric without React, with Vite pre-bundling for releases and Fast Refresh in development.
 
-A `Renderer.Host` can set `hot: true` to let a hot-reload runtime other than Vite's swap the components mounted on it in place, keeping their state.
+Allow `Renderer.Host` to opt into state-preserving component replacement by a custom hot-reload runtime with `hot: true`.

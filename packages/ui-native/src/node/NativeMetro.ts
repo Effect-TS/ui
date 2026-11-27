@@ -156,7 +156,6 @@ export const withEffectUi = async <Config extends MetroConfig>(
     if (options?.prebundle === false) return { ...resolved, resolver }
     const entry = Path.resolve(root, options?.entry ?? mainOf(root))
     // Metro reads its files when it starts, so every platform is built now.
-    // Each pre-bundle records the file its entry resolved to for its platform.
     const bundles = Object.fromEntries(
       await Promise.all(
         (options?.platforms ?? ["android", "ios"]).map(async (platform) => [
@@ -170,8 +169,7 @@ export const withEffectUi = async <Config extends MetroConfig>(
       ...resolved,
       resolver: {
         ...resolver,
-        // Metro resolves the entry too, so the platform's pre-bundle takes
-        // its place. A platform with no pre-bundle, such as web, gets the sources.
+        // Match the resolved entry, including extensionless and platform entries.
         resolveRequest: (context, moduleName, platform) => {
           const found = (upstream ?? context.resolveRequest)(
             context,

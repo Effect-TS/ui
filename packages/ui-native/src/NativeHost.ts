@@ -160,7 +160,6 @@ export const make = (options: Options): {
     return out
   }
 
-  // Marks `n` changed, so that every ancestor is cloned with its children.
   const markDirty = (n: NativeNode | undefined) => {
     while (n !== undefined && !n.dirty) {
       n.dirty = true
@@ -181,8 +180,7 @@ export const make = (options: Options): {
     markDirty(n)
   }
 
-  // The view name `n` has where it sits now. Text inside text is a span,
-  // which Fabric calls virtual text.
+  // Fabric represents text nested inside text as virtual text.
   const viewNameOf = (n: NativeNode): string => {
     switch (n.type) {
       case "view":
@@ -204,8 +202,6 @@ export const make = (options: Options): {
     }
   }
 
-  // Builds the shadow node of `n` under the parent `parentTag`, cloning it
-  // only if it or a child changed.
   const build = (n: NativeNode, parentTag: number): unknown => {
     if (!n.dirty && n.parentTag === parentTag) return n.shadow
     n.dirty = false
@@ -216,11 +212,8 @@ export const make = (options: Options): {
       n.shadow !== undefined &&
       (viewName !== n.viewName || n.parentTag !== parentTag)
     ) {
-      // Native can't change a view's type, and a view keeps the parent it
-      // was created under, so a view that moved into or out of text, a
-      // scroll view that changed direction, and a view that moved to another
-      // parent are new views, and so are their descendants.
-      // Native looks a view up by tag, so a recreated one takes a fresh tag.
+      // Fabric fixes a view's type and parent at creation. Recreate it and
+      // its descendants with fresh tags when either changes.
       n.shadow = undefined
       n.tag = lastTag += 2
     }
@@ -293,10 +286,8 @@ export const make = (options: Options): {
           if (n.props.text === value) return
           setNative(n, "mostRecentEventCount", n.eventCount)
           setNative(n, "text", value)
-          // Fabric updates the field only when the tree's text changes, and
-          // the tree's can equal the new value after edits, as when a field
-          // is reset to its first text. React Native's TextInput sends the
-          // text by command too.
+          // Resetting to the tree's existing text produces no Fabric diff,
+          // even if the user edited the field. Send a command too, as TextInput does.
           if (n.shadow !== undefined) {
             ui.dispatchCommand(n.shadow, "setTextAndSelection", [
               n.eventCount,
@@ -309,9 +300,7 @@ export const make = (options: Options): {
         }
         case "horizontal": {
           setNative(n, name, value)
-          // As in React Native's ScrollView, a horizontal scroll view and its
-          // content view lay out in a row, so that the content view is as
-          // wide as its children. The content view's name follows too.
+          // Both views need row layout so horizontal content spans its children.
           const row = value === true ? "row" : undefined
           setNative(n, "flexDirection", row)
           if (n.inner !== undefined) setNative(n.inner, "flexDirection", row)
