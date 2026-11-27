@@ -744,7 +744,10 @@ describe("HtmlServer", { concurrent: false }, () => {
               h.option.children("a b")
             ),
             h.select.value("b0").children(
-              h.option.children("b", new Html.Element<never>("script").children("0")),
+              h.option.children(
+                "b",
+                new Html.Element<never>("script").children("0")
+              ),
               h.option.attr("value", "b0").children("Label")
             )
           )
