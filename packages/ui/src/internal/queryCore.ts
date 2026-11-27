@@ -173,14 +173,24 @@ export const addListener = <A>(listeners: Set<A>, listener: A): () => void => {
 export const makeSignal = (initial = true): SettableSignal => {
   let current = initial
   const listeners = new Set<(value: boolean) => void>()
+  let queue: Array<boolean> | undefined
   return {
     get: () => current,
     subscribe: (listener) => addListener(listeners, listener),
     set: (value) => {
       if (value === current) return
       current = value
-      for (const listener of Array.from(listeners)) {
-        if (listeners.has(listener)) listener(value)
+      if (queue !== undefined) return void queue.push(value)
+      queue = [value]
+      try {
+        for (let i = 0; i < queue.length; i++) {
+          const next = queue[i]
+          for (const listener of Array.from(listeners)) {
+            if (listeners.has(listener)) listener(next)
+          }
+        }
+      } finally {
+        queue = undefined
       }
     }
   }

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { UiSchema } from "@effect/ui"
+import { Query, Renderer, UiSchema } from "@effect/ui"
 import {
   BrowserHost,
   Html,
@@ -846,6 +846,63 @@ describe("onVisibility and onConnectivity", { concurrent: false }, () => {
           "visible:false",
           "online:false",
           "visible:true",
+          "online:true"
+        ])
+      }).pipe(Effect.provide(TestHost.layer()), Effect.scoped)
+
+      // Nested signal updates stay in order, and class-based signals keep `this`.
+      yield* Effect.gen(function*() {
+        const host = yield* TestHost.TestHost
+        const off = host.connectivity.subscribe((online) => {
+          if (!online) host.connectivity.set(true)
+        })
+        yield* Effect.addFinalizer(() => Effect.sync(off))
+        const root = yield* TestHost.mount(Status, {})
+        yield* TestHost.settle
+        yield* TestHost.setOnline(false)
+        yield* TestHost.settle
+        assert.deepStrictEqual(root.model()?.log, [
+          "visible:true",
+          "online:true",
+          "online:false",
+          "online:true"
+        ])
+      }).pipe(Effect.provide(TestHost.layer()), Effect.scoped)
+
+      yield* Effect.gen(function*() {
+        const { host } = yield* TestHost.TestHost
+        class CustomSignal implements Query.Signal {
+          private value = false
+          private readonly subscribers = new Set<(value: boolean) => void>()
+          get() {
+            return this.value
+          }
+          subscribe(listener: (value: boolean) => void) {
+            this.subscribers.add(listener)
+            return () => {
+              this.subscribers.delete(listener)
+            }
+          }
+          emit(next: boolean) {
+            this.value = next
+            for (const listener of this.subscribers) listener(next)
+          }
+        }
+        const custom = new CustomSignal()
+        const root = yield* Renderer.mount(
+          Status,
+          {},
+          host.createElement("#app")
+        ).pipe(
+          Effect.provideService(Html.Host, BrowserHost.htmlHost),
+          Effect.provideService(Query.Connectivity, custom)
+        )
+        yield* TestHost.settle
+        custom.emit(true)
+        yield* TestHost.settle
+        assert.deepStrictEqual(root.model()?.log, [
+          "visible:true",
+          "online:false",
           "online:true"
         ])
       }).pipe(Effect.provide(TestHost.layer()), Effect.scoped)

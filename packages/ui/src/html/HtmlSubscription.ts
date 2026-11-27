@@ -758,7 +758,7 @@ const makeAttachSignal = (
   const source = Context.get(context, reference)
   return attachValue(
     source.get(),
-    source.subscribe,
+    (listener) => source.subscribe(listener),
     sendLatest(emit, fail, enter, handlerOf)
   )
 }
