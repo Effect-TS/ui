@@ -1234,10 +1234,10 @@ export const make: {
  * `writes` of the success. The runtime applies them when the run's fiber
  * exits, before its message is sent.
  *
- * To publish `Reactivity` keys for queries that declare `reactivityKeys`, wrap
- * the handler's mutation effect with `Reactivity.mutation(keys)` so keys
- * publish only after success. Pick either `reactivityKeys` or `invalidates`
- * per query to avoid redundant refetches.
+ * To invalidate queries using `reactivityKeys`, wrap the handler's mutation
+ * with `Reactivity.mutation(keys)` so keys publish only on success. Pick
+ * either `Reactivity.mutation` or `invalidates` per query to avoid redundant
+ * refetches.
  *
  * Every run is owned by the instance that issued it and ends with it,
  * whatever its kind or mode. A save that must outlive a page is issued by a

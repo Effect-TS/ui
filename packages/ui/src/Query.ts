@@ -378,11 +378,10 @@ export declare namespace Service {
  * - `persist` saves the query's Successes and restores them after a reload,
  *   stale, when the app provides `QueryPersistence.layerKvs`. Without that
  *   Layer it does nothing.
- * - `reactivityKeys` derives `Reactivity.KeysInput` from the arguments. When
- *   `Reactivity.Reactivity` is in the cache's context, each live entry
- *   subscribes to those keys and invalidates when they are published,
- *   unregistering on collection or cache disposal. Pick either
- *   `reactivityKeys` or Command `invalidates` per query.
+ * - `reactivityKeys` maps arguments to `Reactivity.KeysInput` so each live
+ *   entry invalidates on matching publications when `Reactivity.Reactivity`
+ *   is in context. Pick either `reactivityKeys` or Command `invalidates` per
+ *   query.
  *
  * `toLayer` takes a fetcher function or an Effect that builds one once per
  * Layer build. Retries go inside the fetcher (`Effect.retry`); the cache never
@@ -1914,9 +1913,8 @@ export class HydrationDecodeFailed
 {}
 
 /**
- * A query declared `reactivityKeys`, and the cache was built without
- * `Reactivity.Reactivity` in context. Reported once per query; nothing
- * registers and the cache behaves as normal.
+ * A query declared `reactivityKeys` in a cache built without
+ * `Reactivity.Reactivity`. Reported once per query; nothing registers.
  *
  * @stability experimental
  * @category problems
@@ -2015,10 +2013,9 @@ export class Cache extends Context.Service<Cache, {
  *
  * `idleTimeToLive` is how long an entry stays once nothing watches it, 5
  * minutes by default; a query can override it. The cache takes `Visibility`,
- * `Connectivity`, `Problems`, the `Clock`, and optionally
- * `Reactivity.Reactivity` from where the Layer is built,
- * and is disposed with the Layer's Scope: fetches in flight are interrupted,
- * and the close waits for their cleanup.
+ * `Connectivity`, `Problems`, `Clock`, and optional `Reactivity.Reactivity`
+ * from where the Layer is built, and is disposed with the Layer's Scope:
+ * fetches in flight are interrupted, and the close waits for their cleanup.
  *
  * **Gotchas**
  *
