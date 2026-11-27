@@ -2102,8 +2102,9 @@ const build = (
         }),
       block: (key) =>
         Effect.flatMap(Effect.scope, (scope) => {
-          if (blocks.size === 0) options.onBlocked?.(true)
+          const first = blocks.size === 0
           blocks.set(key, (blocks.get(key) ?? 0) + 1)
+          if (first) options.onBlocked?.(true)
           return Scope.addFinalizer(
             scope,
             Effect.sync(() => {

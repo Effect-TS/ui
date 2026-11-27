@@ -22,7 +22,7 @@ import {
   Option,
   Scheduler,
   Schema,
-  type Scope,
+  Scope,
   Stream
 } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -769,6 +769,30 @@ describe("Router", { concurrent: false }, () => {
         yield* TestHost.settle
         assert.strictEqual(root.model()?.route._tag, "Home")
         assert.strictEqual(settled.length, 2)
+      })
+    )
+  })
+
+  it.effect("calls onBlocked on the first block and the last release, after blocked() changes", () => {
+    const calls: Array<[boolean, boolean]> = []
+    let router: Router.Router | undefined
+    const layer = Router.make({
+      routes: AppRoute,
+      history: Router.memoryHistory("/"),
+      onBlocked: (blocked) => calls.push([blocked, router!.blocked()])
+    })
+    return run(
+      layer,
+      Effect.gen(function*() {
+        router = yield* Router.Router
+        const outer = yield* Effect.scope
+        const a = yield* Scope.fork(outer)
+        const b = yield* Scope.fork(outer)
+        yield* router.block("a").pipe(Scope.provide(a))
+        yield* router.block("b").pipe(Scope.provide(b))
+        yield* Scope.close(a, Exit.void)
+        yield* Scope.close(b, Exit.void)
+        assert.deepStrictEqual(calls, [[true, true], [false, false]])
       })
     )
   })
