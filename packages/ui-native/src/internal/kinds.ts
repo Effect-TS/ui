@@ -37,15 +37,15 @@ const scroll: ViewKind = {
   }
 }
 
+// As React Native's `Text` sets them: native clips truncated text by
+// default, and VoiceOver skips text that isn't accessible.
+const textDefaults = { ellipsizeMode: "tail" }
+const iosTextDefaults = { ...textDefaults, accessible: true }
+
 const text: ViewKind = {
   // Fabric represents text nested inside text as virtual text.
   viewName: (n) => n.parent?.kind.text === true ? "RCTVirtualText" : "RCTText",
-  // As React Native's `Text` sets them: native clips truncated text by
-  // default, and VoiceOver skips text that isn't accessible.
-  defaults: (host) =>
-    host.os === "ios"
-      ? { ellipsizeMode: "tail", accessible: true }
-      : { ellipsizeMode: "tail" },
+  defaults: (host) => host.os === "ios" ? iosTextDefaults : textDefaults,
   text: true
 }
 

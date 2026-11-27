@@ -240,41 +240,48 @@ describe("NativeHost", () => {
     )
   })
 
-  it("sets React Native's text defaults and commits only changed object props", () => {
-    const fabric = FakeFabric.make()
-    const surface = (rootTag: number, os: string) => {
+  it("sets React Native's text and input defaults for the platform", () => {
+    const props = (os: string) => {
+      const fabric = FakeFabric.make()
       const { host, root } = NativeHost.make({
         ui: fabric.ui,
-        rootTag,
+        rootTag: 1,
         os,
         processColor: (c) => c
       })
-      const view = host.createElement("view")
-      host.setProp(view, "transform", [{ rotate: "45deg" }])
-      host.insertBefore(root, view, undefined)
       host.insertBefore(root, host.createElement("text"), undefined)
       host.insertBefore(root, host.createElement("input"), undefined)
       host.commit!()
-      return { host, view }
+      return fabric.committed().map((n) => n.props)
     }
-    surface(1, "android")
-    assert.deepStrictEqual(
-      fabric.committed().slice(1).map((n) => n.props),
-      [{ ellipsizeMode: "tail" }, { accessible: true }]
-    )
-    const { host, view } = surface(11, "ios")
-    const [shadow, text] = fabric.committed()
-    assert.deepStrictEqual(text!.props, {
-      ellipsizeMode: "tail",
-      accessible: true
-    })
+    assert.deepStrictEqual(props("android"), [
+      { ellipsizeMode: "tail" },
+      { accessible: true }
+    ])
+    assert.deepStrictEqual(props("ios"), [
+      { ellipsizeMode: "tail", accessible: true },
+      { accessible: true }
+    ])
+  })
 
-    host.setProp(view, "transform", [{ rotate: "45deg" }])
-    host.commit!()
-    assert.strictEqual(fabric.committed()[0], shadow)
-    host.setProp(view, "transform", [{ rotate: "90deg" }])
-    host.commit!()
-    assert.deepStrictEqual(fabric.committed()[0]!.props.transform, [
+  it("commits an object prop only when its value changes", () => {
+    const fabric = FakeFabric.make()
+    const { host, root } = NativeHost.make({
+      ui: fabric.ui,
+      rootTag: 1,
+      os: "android",
+      processColor: (c) => c
+    })
+    const view = host.createElement("view")
+    const rotate = (rotate: string) => {
+      host.setProp(view, "transform", [{ rotate }])
+      host.commit!()
+      return fabric.committed()[0]!
+    }
+    host.insertBefore(root, view, undefined)
+    const shadow = rotate("45deg")
+    assert.strictEqual(rotate("45deg"), shadow)
+    assert.deepStrictEqual(rotate("90deg").props.transform, [
       { rotate: "90deg" }
     ])
   })

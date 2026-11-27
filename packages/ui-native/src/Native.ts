@@ -44,15 +44,6 @@ export interface ProcessedColor {
 }
 
 /**
- * A length in density-independent pixels, a percentage, or `"auto"`.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export type Dimension = number | `${number}%` | "auto"
-
-/**
  * A length in density-independent pixels or a percentage.
  *
  * @stability experimental
@@ -60,6 +51,15 @@ export type Dimension = number | `${number}%` | "auto"
  * @since 0.1.0
  */
 export type Length = number | `${number}%`
+
+/**
+ * A {@link Length}, or `"auto"`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type Dimension = Length | "auto"
 
 /**
  * An angle in radians, or a string in degrees or radians.
@@ -415,10 +415,7 @@ export interface ViewStyle extends LayoutStyle {
   readonly transformOrigin?: readonly [Length, Length, number] | undefined
   readonly backgroundImage?: ReadonlyArray<Gradient> | undefined
   readonly backgroundSize?:
-    | ReadonlyArray<{
-      readonly x: Length | "auto"
-      readonly y: Length | "auto"
-    }>
+    | ReadonlyArray<{ readonly x: Dimension; readonly y: Dimension }>
     | undefined
   readonly backgroundPosition?: ReadonlyArray<Position> | undefined
   readonly backgroundRepeat?:
@@ -1104,7 +1101,7 @@ export interface Element<
    *
    * @since 0.1.0
    */
-  prop<K extends string>(
+  prop<K extends (keyof Props & string) | (string & {})>(
     name: K,
     value: K extends keyof Props ? Props[K] : unknown
   ): this

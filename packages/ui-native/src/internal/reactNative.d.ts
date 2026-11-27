@@ -1,8 +1,9 @@
 // The React Native modules ui-native reaches into, which ship no types.
 
-declare module "react-native/Libraries/StyleSheet/processColor" {
-  const processColor: (color: unknown) => any
-  export default processColor
+// The style processors: `processColor`, `processTransform` and so on.
+declare module "react-native/Libraries/StyleSheet/process*" {
+  const process: (value: any) => any
+  export default process
 }
 
 declare module "react-native/Libraries/Utilities/Platform" {
@@ -44,44 +45,4 @@ declare module "react-native/Libraries/Utilities/DevSettings" {
     readonly onFastRefresh: () => void
   }
   export default DevSettings
-}
-
-declare module "react-native/Libraries/StyleSheet/processBackgroundImage" {
-  const processBackgroundImage: (value: any) => any
-  export default processBackgroundImage
-}
-
-declare module "react-native/Libraries/StyleSheet/processBackgroundPosition" {
-  const processBackgroundPosition: (value: any) => any
-  export default processBackgroundPosition
-}
-
-declare module "react-native/Libraries/StyleSheet/processBackgroundRepeat" {
-  const processBackgroundRepeat: (value: any) => any
-  export default processBackgroundRepeat
-}
-
-declare module "react-native/Libraries/StyleSheet/processBackgroundSize" {
-  const processBackgroundSize: (value: any) => any
-  export default processBackgroundSize
-}
-
-declare module "react-native/Libraries/StyleSheet/processBoxShadow" {
-  const processBoxShadow: (value: any) => any
-  export default processBoxShadow
-}
-
-declare module "react-native/Libraries/StyleSheet/processFilter" {
-  const processFilter: (value: any) => any
-  export default processFilter
-}
-
-declare module "react-native/Libraries/StyleSheet/processTransform" {
-  const processTransform: (value: any) => any
-  export default processTransform
-}
-
-declare module "react-native/Libraries/StyleSheet/processTransformOrigin" {
-  const processTransformOrigin: (value: any) => any
-  export default processTransformOrigin
 }

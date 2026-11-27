@@ -160,7 +160,7 @@ export const transform: (
  */
 export const transformOrigin: (
   origin: string
-) => readonly [Native.Length, Native.Length, number] = processTransformOrigin
+) => NonNullable<Native.ViewStyle["transformOrigin"]> = processTransformOrigin
 
 /**
  * Parses a CSS `box-shadow`, or converts React Native's object form.

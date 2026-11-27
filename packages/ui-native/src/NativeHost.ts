@@ -356,9 +356,13 @@ export const make = (options: Options): {
 const same = (a: any, b: any): boolean => {
   if (a === b) return true
   if (!(a instanceof Object && b instanceof Object)) return false
-  const keys = Object.keys(a)
-  return keys.length === Object.keys(b).length &&
-    keys.every((key) => same(a[key], b[key]))
+  let extra = 0
+  for (const key in a) {
+    if (!same(a[key], b[key])) return false
+    extra--
+  }
+  for (const _ in b) extra++
+  return !extra
 }
 
 const markDirty = (n: NativeNode | undefined) => {
