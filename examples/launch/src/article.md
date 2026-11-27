@@ -128,8 +128,6 @@ Effect UI renders through a host instead of tying Components to the browser DOM.
 
 ## Also included
 
-Everything below ships in `@effect/ui` with zero dependencies beyond `effect`, giving you the rest of what you need to build a full app out of the box:
-
 - **Typed routing:** Define routes with Schema-typed path and search params in `Route`, then back navigation with `BrowserRouter.layer` in the browser, `Router.static` on the server and `Router.memory` in tests.
 - **Services per Component:** `Component.provide` gives services to a Component and everything below it. Its Commands and Subscriptions use them, and TypeScript reports a missing service at compile time.
 - **Code splitting:** Load a Component from a chunk of its own with `Component.lazy`. The browser loads the chunk the first time the Component renders, so it stays out of the initial bundle.
