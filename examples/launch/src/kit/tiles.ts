@@ -139,8 +139,6 @@ const sortableRows = [
 
 type CalendarParts = Component.Headless.Parts<typeof Calendar>
 
-// The weeks of a month, which the Calendar, RangeCalendar and DatePicker
-// pictures share.
 const monthGrid = <M>(
   h: Html.H<M>,
   month: CalendarParts["months"][number],

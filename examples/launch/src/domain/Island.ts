@@ -55,10 +55,7 @@ export const Frontmatter = Schema.Struct({
   updated: Schema.DateTimeUtcFromString
 })
 
-/**
- * The article's dates in the order the byline shows them. "Updated" is
- * left out while it is the day of publication.
- */
+/** Omits "Updated" when both timestamps are equal. */
 export const byline = (
   { published, updated }: typeof Frontmatter.Type
 ) =>

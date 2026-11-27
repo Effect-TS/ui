@@ -5,9 +5,7 @@ import {
   VirtualKeyboard
 } from "@effect/ui-kit"
 
-// The values behind the Positioning, VirtualKeyboard, ListNavigation and
-// Typeahead tiles, worked out by the kit's own pure functions. None of
-// these modules draws anything, so the tiles draw what these return.
+// These modules have no views; the tiles draw their pure functions' results.
 
 /** The box the Positioning tile places in, in pixels. */
 export const stage = { width: 72, height: 44 }
@@ -83,12 +81,7 @@ export const listItems = [
   { id: "c", width: 48, disabled: false }
 ] as const
 
-/**
- * The highlighted item's id in the ListNavigation tile, chosen by
- * `ListNavigation.available` and `ListNavigation.target`. At rest the
- * first item is active. Playing, ArrowDown skips the disabled middle
- * item and lands on the last.
- */
+/** Playing simulates ArrowDown, skipping the disabled middle item. */
 export const listActive = (on: boolean): string => {
   const enabled = listItems.filter(ListNavigation.available)
   const index = (on
@@ -108,14 +101,8 @@ export const typeaheadItems = [
   { label: "Gamma" }
 ] as const
 
-/** The key the Typeahead tile types. */
 export const typeaheadKey = "g"
 
-/**
- * The matched item's index in the Typeahead tile, computed by
- * `Typeahead.step`. At rest nothing matches. Playing, typing
- * `typeaheadKey` jumps straight to "Gamma".
- */
 export const typeaheadMatch = (on: boolean): number =>
   on
     ? Typeahead.step(Typeahead.initial, typeaheadKey, typeaheadItems)
