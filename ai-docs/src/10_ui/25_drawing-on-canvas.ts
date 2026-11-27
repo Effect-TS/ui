@@ -29,10 +29,10 @@ const SkyMessage = UiSchema.TaggedEnum({
 // A scene from the Model
 // ---------------------------------------------------------------------------
 
-// The scene is plain data: `Canvas.Rect`, `Circle`, `Path`, `Text` and a
-// nestable `Group` that translates, rotates, scales and fades what it holds.
-// The constructors skip validation, so building a scene every frame is cheap.
-// Each shape is a Schema too, so a Model can hold shapes.
+// The scene is plain data: `Canvas.Rect`, `Circle`, `Path`, `Text`, `Image`
+// and a nestable `Group` that translates, rotates, scales and fades what it
+// holds. The constructors skip validation, so building a scene every frame is
+// cheap. Each shape is a Schema too, so a Model can hold shapes.
 export const sceneOf = (
   comets: ReadonlyArray<typeof Comet.Type>
 ): ReadonlyArray<Canvas.Shape> => [
