@@ -2106,6 +2106,58 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(rendered.state["~query"]).toEqual({})
     }))
 
+  it.effect(
+    "defers an instance whose view is too deep to render, instead of dying",
+    () =>
+      Effect.gen(function*() {
+        const Deep = Html.component({
+          name: "Deep",
+          props: Schema.Struct({ depth: Schema.Number }),
+          model: Schema.Struct({}),
+          message: Schema.Never
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) => {
+            let node = h.span("leaf")
+            for (let i = 0; i < h.props.depth; i++) node = h.div(node)
+            return node
+          }
+        })
+        const Page = Html.component({
+          name: "Page",
+          props: Schema.Struct({ depth: Schema.Number }),
+          model: Schema.Struct({}),
+          message: Schema.Never
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) =>
+            h.main(
+              Deep(h, {
+                key: "d",
+                props: { depth: h.props.depth },
+                fallback: () => h.p("too deep")
+              })
+            )
+        })
+
+        // Deepen until the view no longer renders, so no stack depth is assumed. Each render must
+        // complete, through the default budget's idle check, and the last one must defer.
+        let depth = 1000
+        let rendered = yield* HtmlServer.renderToHtml(Page, { depth })
+        while (rendered.html.includes("leaf")) {
+          depth = Math.ceil(depth * 1.1)
+          rendered = yield* HtmlServer.renderToHtml(Page, { depth })
+        }
+        expect(rendered.html).toContain(
+          "<!--[/Page/Deep[d]--><p>too deep</p><!--]/Page/Deep[d]-->"
+        )
+        expect(rendered.state["~deferred"]).toEqual(["/Page/Deep[d]"])
+      }),
+    60_000
+  )
+
   it.effect("shows the fallback of an instance whose Layer fails on the client, and adopts what follows it", () =>
     Effect.gen(function*() {
       let serving = true
