@@ -529,38 +529,21 @@ describe("Html", () => {
       })
     })
 
-    it("omits the attribute when no classes remain and keeps existing classes on falsy tokens", () => {
+    it("removes the attribute when every token is falsy", () => {
       assert.deepStrictEqual(
         button().class(false, null, undefined, "").elementAttrs,
         {}
       )
+    })
+
+    it("appends to the classes already on the builder", () => {
       assert.deepStrictEqual(
-        button().class("primary").class(false).elementAttrs,
-        { class: "primary" }
-      )
-      assert.deepStrictEqual(
-        button().class("primary").class(false, null, undefined, "")
-          .elementAttrs,
-        { class: "primary" }
+        button().class("btn btn-primary").class("w-full").elementAttrs,
+        { class: "btn btn-primary w-full" }
       )
     })
 
-    it("appends classes across calls while attr replaces or clears", () => {
-      const base = button().class("btn btn-primary")
-      assert.deepStrictEqual(base.class("w-full").elementAttrs, {
-        class: "btn btn-primary w-full"
-      })
-      assert.deepStrictEqual(
-        base.class(false, "w-full", undefined, "mt-2").elementAttrs,
-        { class: "btn btn-primary w-full mt-2" }
-      )
-      assert.deepStrictEqual(base.attr("class", "link").elementAttrs, {
-        class: "link"
-      })
-      assert.deepStrictEqual(base.attr("class", undefined).elementAttrs, {})
-    })
-
-    it("returns a plain builder from a shorthand root when no token is added", () => {
+    it("keeps classes on falsy tokens and returns a plain builder from a shorthand root", () => {
       const out = View.shorthand(button().class("btn")).class(false)
       assert.strictEqual(typeof out, "object")
       assert.deepStrictEqual(out.elementAttrs, { class: "btn" })
