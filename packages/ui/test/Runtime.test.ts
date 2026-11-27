@@ -5454,6 +5454,60 @@ describe("Runtime", () => {
         provideHost
       ))
 
+    it.effect("readers of a mount's args wake in the order they began to wait", () =>
+      Effect.gen(function*() {
+        const gate = yield* Deferred.make<void>()
+        const seen: Array<string> = []
+        const Draw = Mount.make(
+          "Draw",
+          { args: { n: Schema.Number } },
+          (_node, _args, changes) =>
+            Effect.gen(function*() {
+              yield* Effect.forkScoped(
+                Stream.runForEach(changes, ({ n }) =>
+                  Effect.gen(function*() {
+                    seen.push(`A ${n}`)
+                    if (n === 1) yield* Deferred.await(gate)
+                  })),
+                { startImmediately: true }
+              )
+              yield* Effect.forkScoped(
+                Stream.runForEach(changes, ({ n }) =>
+                  Effect.sync(() => {
+                    seen.push(`B ${n}`)
+                  })),
+                { startImmediately: true }
+              )
+              return Component.noop
+            })
+        )
+        const Chart = Component.define({
+          name: "WaitOrder",
+          model: Schema.Number,
+          message: Schema.Number,
+          elements: Tiny
+        }).make({
+          init: () => 0,
+          update: (_, n) => n,
+          view: (h, n) => h.field.onMount(Draw({ n }))
+        })
+        const root = yield* TestHost.mount(Chart, {})
+        yield* TestHost.settle
+        root.send(1)
+        yield* TestHost.settle
+        yield* Deferred.succeed(gate, undefined)
+        yield* TestHost.settle
+        seen.length = 0
+        root.send(2)
+        yield* TestHost.settle
+        assert.deepStrictEqual(seen, ["B 2", "A 2"])
+      }).pipe(
+        Effect.provide(
+          Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })
+        ),
+        provideHost
+      ))
+
     it.effect("a render that adds, swaps or drops an element's mount starts and stops it", () =>
       Effect.gen(function*() {
         const events: Array<string> = []

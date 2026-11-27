@@ -28,7 +28,7 @@ export interface MountArgs {
   readonly readers: Set<Reader>
   /**
    * The order waiting readers get new args in. A reader joins at the end when it waits, and leaves when
-   * args are published while it isn't waiting.
+   * it wakes or stops waiting.
    */
   readonly order: Set<Reader>
 }
@@ -45,7 +45,6 @@ export const make = (args: unknown): MountArgs => ({
 export const publish = (self: MountArgs, args: unknown): void => {
   self.latest = args
   for (const reader of self.readers) {
-    if (reader.resume === undefined) self.order.delete(reader)
     if (reader.behind) reader.unread[reader.unread.length - 1] = args
     else {
       reader.behind = true
@@ -57,6 +56,7 @@ export const publish = (self: MountArgs, args: unknown): void => {
   for (const reader of self.order) {
     const resume = reader.resume
     if (resume === undefined || reader.unread.length === 0) continue
+    self.order.delete(reader)
     reader.resume = undefined
     // Args published before the reader's turn come after these.
     reader.behind = false
@@ -97,6 +97,7 @@ export const changes = (self: MountArgs): Stream.Stream<any> =>
         self.order.add(reader)
         return Effect.sync(() => {
           reader.resume = undefined
+          self.order.delete(reader)
         })
       }),
       // The close can come between the wake and this reader's turn.
