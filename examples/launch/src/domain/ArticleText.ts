@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { DateTime, Schema } from "effect"
 import { scenarios } from "../diagram/scenarios.ts"
 import { modules } from "../kit/components.ts"
 import {
@@ -156,7 +156,7 @@ export const toMarkdown = (source: string, snippets: Snippets) => {
         })
       )
       const meta = Schema.decodeUnknownSync(Frontmatter)(fields)
-      const dates = meta.updated === meta.published
+      const dates = DateTime.Equivalence(meta.published, meta.updated)
         ? `Published ${formatDate(meta.published)}`
         : `Published ${formatDate(meta.published)} · Updated ${
           formatDate(meta.updated)

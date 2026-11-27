@@ -1,4 +1,4 @@
-import { Schema, Struct } from "effect"
+import { DateTime, Schema, Struct } from "effect"
 import { ScenarioName } from "../diagram/scenarios.ts"
 import { Snippets } from "./Snippet.ts"
 
@@ -49,35 +49,17 @@ export const Islands = {
   Footer: Schema.Struct({})
 }
 
-const IsoDate = Schema.String.check(
-  Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)
-)
-
 export const Frontmatter = Schema.Struct({
   title: Schema.String,
-  published: IsoDate,
-  updated: IsoDate
+  published: Schema.DateTimeUtcFromString,
+  updated: Schema.DateTimeUtcFromString
 })
 export type Frontmatter = typeof Frontmatter.Type
 
-const months = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec"
-] as const
-
-/** Formats an ISO `YYYY-MM-DD` date as `Nov 26, 2026`, independent of locale. */
-export const formatDate = (iso: string): string => {
-  const [year, month, day] = iso.split("-")
-  const name = months[Number(month) - 1]
-  return name === undefined ? iso : `${name} ${Number(day)}, ${year}`
-}
+export const formatDate = (date: DateTime.Utc): string =>
+  DateTime.formatUtc(date, {
+    locale: "en-US",
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  })

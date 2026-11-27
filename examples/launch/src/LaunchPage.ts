@@ -12,7 +12,7 @@ import { fromDocument, fromHeading } from "#domain/Section"
 import { type Snippet, Snippets, textOf } from "#domain/Snippet"
 import { Head, Subscription, type View } from "@effect/ui"
 import { Html, Markdown } from "@effect/ui/html"
-import { Effect, Option, Schema, Stream } from "effect"
+import { DateTime, Effect, Option, Schema, Stream } from "effect"
 import source, { frontmatter } from "./article.md"
 import { Counter } from "./autocounter/Counter.ts"
 import { Page } from "./counter/effect/Page.ts"
@@ -35,6 +35,7 @@ const { published, title, updated } = Schema.decodeUnknownSync(
 )(
   frontmatter
 )
+const isUpdated = !DateTime.Equivalence(published, updated)
 
 const block = "mx-auto max-w-(--column)"
 
@@ -303,18 +304,20 @@ export const LaunchPage = Html.component({
             ).children(
               h.span.children(
                 "Published ",
-                h.time.attr("datetime", published).children(
-                  formatDate(published)
-                )
+                h.time.attr(
+                  "datetime",
+                  DateTime.formatIsoDateUtc(published)
+                ).children(formatDate(published))
               ),
-              updated !== published &&
+              isUpdated &&
                 h.span.attr("aria-hidden", "true").children("·"),
-              updated !== published &&
+              isUpdated &&
                 h.span.children(
                   "Updated ",
-                  h.time.attr("datetime", updated).children(
-                    formatDate(updated)
-                  )
+                  h.time.attr(
+                    "datetime",
+                    DateTime.formatIsoDateUtc(updated)
+                  ).children(formatDate(updated))
                 )
             )
           )

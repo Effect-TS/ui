@@ -1,6 +1,6 @@
 import { MarkdownParser } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
-import { Option, Schema } from "effect"
+import { DateTime, Option, Schema } from "effect"
 import { readFileSync } from "node:fs"
 import { toMarkdown } from "./domain/ArticleText.ts"
 import { formatDate, Frontmatter, Islands } from "./domain/Island.ts"
@@ -37,16 +37,25 @@ describe("article", () => {
   it("keeps frontmatter dates valid and in sync with index.html", () => {
     const raw = Option.getOrThrow(parsed.frontmatter)
     const meta = Schema.decodeUnknownSync(Frontmatter)(raw)
-    assert.isTrue(meta.updated >= meta.published)
-    assert.include(
-      indexHtml,
-      `<meta property="article:published_time" content="${meta.published}" />`
+    assert.isTrue(
+      DateTime.isGreaterThanOrEqualTo(meta.updated, meta.published)
     )
     assert.include(
       indexHtml,
-      `<meta property="article:modified_time" content="${meta.updated}" />`
+      `<meta property="article:published_time" content="${
+        DateTime.formatIsoDateUtc(meta.published)
+      }" />`
     )
-    assert.strictEqual(formatDate("2026-11-26"), "Nov 26, 2026")
+    assert.include(
+      indexHtml,
+      `<meta property="article:modified_time" content="${
+        DateTime.formatIsoDateUtc(meta.updated)
+      }" />`
+    )
+    assert.strictEqual(
+      formatDate(DateTime.makeUnsafe("2026-11-26")),
+      "Nov 26, 2026"
+    )
   })
 
   it("renders title and dates in the Markdown export", () => {
