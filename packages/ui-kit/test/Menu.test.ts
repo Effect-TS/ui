@@ -50,6 +50,23 @@ const standIn = {
   elements: Html,
   view: (menu: Parts, h: H) => {
     const filtering = h.props.query !== undefined
+    // Indicators and radios are built before their owners on purpose
+    const tick = menu.checkboxItemIndicator({
+      element: h.span.class("tick"),
+      value: "wrap"
+    })?.children("✓")
+    const dot = menu.radioItemIndicator({
+      element: h.span.class("dot"),
+      value: "small"
+    })?.children("•")
+    const radios = [
+      menu.radioItem({
+        element: entry(h, "small").attr("data-checked", "x"),
+        value: "small"
+      }).children(dot, "Small"),
+      menu.radioItem({ element: entry(h, "large"), value: "large" })
+        .children("Large")
+    ]
     const entries = [
       menu.group({ element: h.div.class("group"), group: "edit" }).children(
         menu.groupLabel({ element: h.div.class("group-label"), group: "edit" })
@@ -74,24 +91,10 @@ const standIn = {
         element: entry(h, "wrap").attr("aria-checked", "false"),
         value: "wrap",
         closeOnClick: true
-      }).children(
-        menu.checkboxItemIndicator({
-          element: h.span.class("tick"),
-          value: "wrap"
-        })?.children("✓"),
-        "Wrap lines"
-      ),
+      }).children(tick, "Wrap lines"),
       menu.checkboxItem({ element: entry(h, "minimap"), value: "minimap" })
         .children("Minimap"),
-      menu.radioGroup(h.div.class("sizes"))
-        .children(
-          menu.radioItem({
-            element: entry(h, "small").attr("data-checked", "x"),
-            value: "small"
-          }).children("Small"),
-          menu.radioItem({ element: entry(h, "large"), value: "large" })
-            .children("Large")
-        ),
+      menu.radioGroup(h.div.class("sizes")).children(radios),
       menu.linkItem({
         element: h.a.attrs({ "data-testid": "docs", href: "/docs" }),
         value: "docs"
@@ -389,6 +392,10 @@ describe("Menu", () => {
         "data-unchecked": ""
       })
       assert.isUndefined(scene.get(item("large")).attrs?.["data-checked"])
+      assert.deepInclude(scene.get(Locator.attr("class", "dot")).attrs, {
+        "aria-hidden": "true",
+        "data-checked": ""
+      })
       assert.deepInclude(scene.get(Locator.attr("class", "sizes")).attrs, {
         role: "group"
       })
@@ -960,66 +967,5 @@ describe("Menu", () => {
         if (exit._tag !== "Failure") assert.fail("expected failure")
         assert.include(String(exit.cause), "a part for")
       }
-    }))
-
-  it.effect("checked state and indicators do not depend on part construction order", () =>
-    Effect.gen(function*() {
-      const sizes = [
-        { value: "small", label: "Small" },
-        { value: "large", label: "Large" }
-      ]
-      const scene = yield* HtmlScene.make(
-        Menu,
-        {
-          open: true,
-          items: [
-            { value: "wrap", label: "Wrap lines", checked: true },
-            ...sizes.map((size) => ({
-              ...size,
-              checked: size.value === "large"
-            }))
-          ]
-        },
-        {
-          elements: Html,
-          view: (menu, h) => {
-            const tick = menu.checkboxItemIndicator({
-              element: h.span.class("tick"),
-              value: "wrap"
-            })?.children("✓")
-            const dot = menu.radioItemIndicator({
-              element: h.span.class("dot"),
-              value: "large"
-            })?.children("•")
-            const radios = sizes.map(({ label, value }) =>
-              menu.radioItem({
-                element: h.div.attr("data-testid", value),
-                value
-              }).children(value === "large" ? dot : null, label)
-            )
-            return h.div(
-              menu.checkboxItem({
-                element: h.div.attr("data-testid", "wrap"),
-                value: "wrap"
-              }).children(tick, "Wrap lines"),
-              menu.radioGroup(h.div).children(radios)
-            )
-          }
-        }
-      )
-      assert.deepStrictEqual(
-        sizes.map(({ value }) =>
-          scene.get(item(value)).attrs?.["aria-checked"]
-        ),
-        ["false", "true"]
-      )
-      assert.deepInclude(scene.get(Locator.attr("class", "dot")).attrs, {
-        "aria-hidden": "true",
-        "data-checked": ""
-      })
-      assert.deepInclude(scene.get(Locator.attr("class", "tick")).attrs, {
-        "aria-hidden": "true",
-        "data-checked": ""
-      })
     }))
 })
