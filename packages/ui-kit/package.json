@@ -65,7 +65,7 @@
   },
   "peerDependencies": {
     "@effect/ui": "workspace:^",
-    "effect": "^4.1.4"
+    "effect": "^4.1.6"
   },
   "devDependencies": {
     "@effect/ui": "workspace:^",

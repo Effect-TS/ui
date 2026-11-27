@@ -1580,11 +1580,17 @@ const watch = (
       found(anchor)
       cut(anchor)
       fit()
-      const field = input()
-      if (field !== null) {
-        field.focus({ preventScroll: true })
-      } else if (current.active !== null) focusActive(false)
-      else if (current.initialFocus) popup().focus({ preventScroll: true })
+      const focusIn = () => {
+        const field = input()
+        if (field !== null) field.focus({ preventScroll: true })
+        else if (current.active !== null) focusActive(false)
+        else if (current.initialFocus) popup().focus({ preventScroll: true })
+      }
+      focusIn()
+      // The default action of the press that opened it focuses the trigger.
+      frame(() => {
+        if (current.open && document.activeElement === anchor) focusIn()
+      })
       if (!current.started) {
         frame(() => frame(() => send(MenuMessage.RenderedFirstFrame())))
       }

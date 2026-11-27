@@ -1012,11 +1012,21 @@ const watch = (
       node.inert = false
       cut()
       if (current.inputInPopup) {
-        const input = popup().querySelector<HTMLElement>(
-          attrSelector("data-combobox-input", current.owner)
-        )
-        ;(current.touch || input === null ? popup() : input).focus({
-          preventScroll: true
+        const focusIn = () => {
+          const input = popup().querySelector<HTMLElement>(
+            attrSelector("data-combobox-input", current.owner)
+          )
+          ;(current.touch || input === null ? popup() : input).focus({
+            preventScroll: true
+          })
+        }
+        focusIn()
+        // The default action of the press that opened it focuses the trigger.
+        frame(() => {
+          if (
+            current.open &&
+            document.activeElement === find("data-combobox-trigger")
+          ) focusIn()
         })
       }
       if (!current.started) {
