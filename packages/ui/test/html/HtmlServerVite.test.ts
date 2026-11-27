@@ -94,7 +94,9 @@ describe("HtmlServerVite.plugin", () => {
 
   it("rejects watch builds before building either environment", async () => {
     const builder = await createBuilder(config({ build: { watch: {} } }))
-    const build = vi.spyOn(builder, "build")
+    const build = vi
+      .spyOn(builder, "build")
+      .mockRejectedValue(new Error("unexpected build"))
     await expect(builder.buildApp()).rejects.toThrow(
       /HtmlServerVite.*vite build --watch/
     )
