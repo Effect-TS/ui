@@ -14,9 +14,8 @@ export const attribute = (form: Element, name: string): string | null =>
   (Object.getPrototypeOf(form) as Element).getAttribute.call(form, name)
 
 /**
- * The submission's method in lowercase: the submitter's `formmethod`, else the
- * form's `method`. Anything but `post` and `dialog` is a GET, as in the
- * browser.
+ * Read the submitter's `formmethod` or the form's `method` in lowercase.
+ * Callers treat values other than `post` and `dialog` as GET.
  *
  * @internal
  */

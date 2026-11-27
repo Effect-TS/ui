@@ -2321,7 +2321,6 @@ describe("BrowserHost", { concurrent: false }, () => {
                 h.button.attrs({ type: "submit", formmethod: "dialog" })
                   .children("Close")
               ),
-              // The tag as the author wrote it isn't what makes it a form.
               h.el("FORM").attrs({ "aria-label": "Dialog", method: "dialog" }),
               h.form.attrs({ "aria-label": "Handled post", method: "post" })
                 .on("submit", "Submitted")

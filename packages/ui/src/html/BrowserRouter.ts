@@ -11,9 +11,11 @@
  *
  * Links are plain anchors with a printed route. A click is intercepted only
  * when the routes parse its href and it has no modifier key, `target` or
- * `download`. Anything else is a full page load. An unhandled
- * `<form method="get">` is intercepted by the same test, and any other form
- * submits natively. Following either to the current route sends a
+ * `download`. Anything else is a full page load. The router intercepts a
+ * form submission only if it is not already cancelled, uses GET, targets
+ * the same window and has a URL the routes parse. It leaves other
+ * submissions alone; the host still cancels handled and `dialog` forms.
+ * Following a link or form to the current route sends a
  * message without scrolling to the top, announcing or moving focus. A `#hash`
  * link still scrolls to its target, even when it's the current hash, and a
  * bare `#` stays in the URL and scrolls to the top. Both work the same in a
