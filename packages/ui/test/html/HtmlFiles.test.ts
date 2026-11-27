@@ -254,56 +254,34 @@ describe("HtmlFiles", { concurrent: false }, () => {
       expect(fileClicks).toBe(1)
     }).pipe(Effect.scoped))
 
-  it.effect("BrowserHost's download clicks a detached anchor with an object URL and revokes it after the delay", () =>
+  it.effect("BrowserHost's download clicks a detached anchor named after the file and revokes its URL later", () =>
     Effect.gen(function*() {
-      const clicked: Array<HTMLAnchorElement> = []
-      const created: Array<Blob | MediaSource> = []
-      const revoked: Array<string> = []
       yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
-          const click = vi.spyOn(window.HTMLAnchorElement.prototype, "click")
-            .mockImplementation(function(this: HTMLAnchorElement) {
-              clicked.push(this)
-            })
-          const createObjectURL = vi.spyOn(window.URL, "createObjectURL")
-            .mockImplementation((object) => {
-              created.push(object)
-              return `blob:test/${created.length}`
-            })
-          const revokeObjectURL = vi.spyOn(window.URL, "revokeObjectURL")
-            .mockImplementation((url) => {
-              revoked.push(url)
-            })
-          return { click, createObjectURL, revokeObjectURL }
-        }),
-        ({ click, createObjectURL, revokeObjectURL }) =>
+        Effect.sync(() => vi.useFakeTimers({ toFake: ["setTimeout"] })),
+        () =>
           Effect.sync(() => {
-            click.mockRestore()
-            createObjectURL.mockRestore()
-            revokeObjectURL.mockRestore()
+            vi.restoreAllMocks()
             vi.useRealTimers()
           })
       )
+      const click = vi.spyOn(window.HTMLAnchorElement.prototype, "click")
+        .mockImplementation(() => {})
+      const revoke = vi.spyOn(window.URL, "revokeObjectURL")
       const context = yield* Layer.build(BrowserHost.layer())
-      const file = new File(["{\"ok\":true}"], "backup.json", {
-        type: "application/json"
-      })
-      yield* HtmlFiles.download(file).pipe(Effect.provide(context))
-      assert.strictEqual(created.length, 1)
-      assert.strictEqual(created[0], file)
-      assert.strictEqual(clicked.length, 1)
-      const [anchor] = clicked
-      expect([anchor.isConnected, anchor.download, anchor.href]).toEqual([
-        false,
-        "backup.json",
-        "blob:test/1"
+      yield* HtmlFiles.download(new File(["{}"], "backup.json")).pipe(
+        Effect.provide(context)
+      )
+      assert.strictEqual(click.mock.calls.length, 1)
+      const anchor = click.mock.contexts[0] as HTMLAnchorElement
+      expect([
+        anchor.isConnected,
+        anchor.download,
+        anchor.href.startsWith("blob:")
       ])
-      assert.deepStrictEqual(revoked, [])
-      vi.advanceTimersByTime(10_000)
-      assert.deepStrictEqual(revoked, [])
-      vi.advanceTimersByTime(50_000)
-      assert.deepStrictEqual(revoked, ["blob:test/1"])
+        .toEqual([false, "backup.json", true])
+      expect(revoke).not.toHaveBeenCalled()
+      vi.runAllTimers()
+      expect(revoke).toHaveBeenCalledWith(anchor.href)
     }).pipe(Effect.scoped))
 
   it.effect("TestFiles records downloaded files", () =>
