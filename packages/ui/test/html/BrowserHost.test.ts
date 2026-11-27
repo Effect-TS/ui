@@ -4466,4 +4466,31 @@ describe("BrowserHost", { concurrent: false }, () => {
       ).pipe(Effect.provideService(Renderer.Renderer, { host: outer }))
       expect(root.model()).toEqual({ hasBrowserRenderer: true, heard: true })
     }).pipe(Effect.scoped))
+
+  it.effect("renders a native slot in a shadow root and delivers slotchange", () =>
+    Effect.gen(function*() {
+      const Card = Html.component({
+        name: "Card",
+        model: Schema.Number,
+        message: Schema.Literal("SlotChanged")
+      }).make({
+        init: () => 0,
+        update: ($) => $.model + 1,
+        view: (h) =>
+          h.slot.attr("name", "title").on("slotchange", "SlotChanged")
+      })
+      const host = yield* container
+      host.innerHTML = "<span slot=\"title\">Plan</span>"
+      const shadow = host.attachShadow({ mode: "open" })
+      const root = yield* BrowserHost.mountEffect(
+        Card,
+        {},
+        shadow as unknown as Element
+      )
+      const slot = shadow.querySelector<HTMLSlotElement>("slot")!
+      expect(slot.assignedElements()).toEqual([host.querySelector("span")])
+      slot.dispatchEvent(new Event("slotchange", { bubbles: true }))
+      yield* tick
+      expect(root.model()).toBe(1)
+    }).pipe(Effect.scoped))
 })
