@@ -4,6 +4,7 @@
  *
  * @internal
  */
+import { dev } from "#dev"
 import type * as Cause from "effect/Cause"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Component from "../Component.ts"
@@ -719,6 +720,68 @@ export class SceneCursor extends Cursor {
     }
     return this
   }
+  expectLazyReused(): this {
+    const step = this.name("expectLazyReused")
+    if (!dev) {
+      throw new Error(`${step}: requires a non-production build of @effect/ui`)
+    }
+    const store: View.LazyStore = { lazy: undefined }
+    const shared = engine.stableRootShared(this.state)
+    engine.viewOfFields(this.state, shared, store)
+    const lazies = store.lazy as View.Lazies | undefined
+    if (lazies === undefined) {
+      throw new Error(`${step}: the view didn't call h.lazy`)
+    }
+    const counts = new Map<string, number>()
+    lazies.missed = (entry, fn, args) => {
+      const reason = classifyLazyMiss(entry, lazies.round, fn, args)
+      counts.set(reason, (counts.get(reason) ?? 0) + 1)
+    }
+    engine.viewOfFields(this.state, shared, store)
+    engine.report(
+      step,
+      "h.lazy calls missed on a repeat render",
+      Array.from(
+        counts,
+        ([reason, count]) => count === 1 ? reason : `${reason} (${count} calls)`
+      )
+    )
+    return this
+  }
+}
+
+const fnName = (fn: Function): string => fn.name || "<anonymous>"
+
+const classifyLazyMiss = (
+  entry: View.LazyEntry | undefined,
+  round: number,
+  fn: Function,
+  args: ReadonlyArray<unknown>
+): string => {
+  const name = fnName(fn)
+  if (entry === undefined) {
+    return args.length === 0
+      ? `${name}: no entry (function identity changed or not called on first render)`
+      : `${name}: no entry for first argument`
+  }
+  if (entry.round === round) {
+    return `${name}: first argument shared with an earlier call (${
+      fnName(entry.fn)
+    })`
+  }
+  if (entry.fn !== fn) return `${name}: function changed`
+  const changed: Array<number> = []
+  const length = Math.max(entry.args.length, args.length)
+  for (let i = 0; i < length; i++) {
+    if (
+      i >= entry.args.length || i >= args.length || args[i] !== entry.args[i]
+    ) {
+      changed.push(i)
+    }
+  }
+  return changed.length === 1
+    ? `${name}: argument ${changed[0]} changed`
+    : `${name}: arguments ${changed.join(", ")} changed`
 }
 
 const describeInteraction = (state: engine.State<any, any, any, any>): string =>

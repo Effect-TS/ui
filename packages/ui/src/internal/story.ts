@@ -829,7 +829,7 @@ export const expandedView = (
   fields: Fields<any, any, any, any>
 ): View.Node<any, any> =>
   expandRoot(
-    viewOfFields(fields),
+    viewOfFields(fields, rootShared(fields.shared)),
     fields.component.definition.name,
     fields.childModels,
     storySlots.get(fields.component),
@@ -846,9 +846,18 @@ export const expandedView = (
     fields
   )
 
-/** The story's component's own view, before its headless children are expanded. */
-const viewOfFields = (
-  fields: Fields<any, any, any, any>
+/**
+ * The story's component's own view, before its headless children are expanded.
+ *
+ * @internal
+ */
+export const viewOfFields = (
+  fields: Pick<
+    Fields<any, any, any, any>,
+    "component" | "model" | "props" | "results" | "pending" | "running"
+  >,
+  shared: Component.SharedLookup,
+  lazy?: View.LazyStore
 ): View.Node<any, any> =>
   fields.component.view(
     fields.model,
@@ -856,8 +865,28 @@ const viewOfFields = (
     fields.running ?? runningOf(fields.pending),
     fields.results,
     undefined,
-    rootShared(fields.shared)
+    shared,
+    lazy
   )
+
+/**
+ * Memoizes required shared defaults per owner across back-to-back renders.
+ *
+ * @internal
+ */
+export const stableRootShared = (
+  story: State<any, any, any, any>
+): Component.SharedLookup => {
+  const lookup = rootShared(sharedGiven.get(story))
+  const cached = new Map<Component.Headless.Any, unknown>()
+  return (owner, optional) => {
+    if (optional === true) return lookup(owner, true)
+    if (cached.has(owner)) return cached.get(owner)
+    const value = lookup(owner, false)
+    cached.set(owner, value)
+    return value
+  }
+}
 
 const boundOf = componentQueries.boundOf
 
@@ -2117,7 +2146,8 @@ const outputs = (story: State<any, any, any, any>): Array<string> => [
     : [])
 ]
 
-const report = (
+/** @internal */
+export const report = (
   step: string,
   what: string,
   problems: ReadonlyArray<string>
@@ -2417,14 +2447,19 @@ export const withView = (
       running?: View.Running,
       queries?: Component.Results,
       _path?: string,
-      shared?: Component.SharedLookup
+      shared?: Component.SharedLookup,
+      lazy?: View.LazyStore
     ) => {
       const h = View.makeHelper(
         props,
         elements ?? component.elements,
         running,
-        owner.path
+        owner.path,
+        lazy
       )
+      // Only `expectLazyReused` passes a store and discards it after two renders.
+      const lazies = lazy?.lazy as View.Lazies | undefined
+      lazies?.begin()
       return View.toNode(
         childOf.expand(
           component.parts(model, props, { owner, running, queries, shared }),

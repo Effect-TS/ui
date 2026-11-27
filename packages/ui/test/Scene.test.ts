@@ -765,4 +765,198 @@ describe("Scene", () => {
       assert.isUndefined((scene as any).results)
       assert.isUndefined((scene as any).queries)
     }))
+
+  describe("expectLazyReused", () => {
+    const Row = Schema.Struct({ id: Schema.String })
+    const GridModel = Schema.Struct({
+      rows: Schema.Array(Row),
+      shifts: Schema.Array(Schema.Number),
+      weekStart: Schema.String
+    })
+    const initialGrid = {
+      rows: [{ id: "r1" }, { id: "r2" }, { id: "r3" }],
+      shifts: [8],
+      weekStart: "2026-11-23"
+    }
+    const nameCell = (h: Html.H<never>, row: typeof Row.Type) => h.span(row.id)
+    const hoursCell = (
+      h: Html.H<never>,
+      row: typeof Row.Type,
+      shifts: ReadonlyArray<number>,
+      weekStart: string
+    ) => h.li.key(row.id).children(`${row.id}:${shifts.length}:${weekStart}`)
+    const grid = (
+      view: (
+        h: Html.H<never>,
+        model: typeof GridModel.Type
+      ) => View.Content<never, any>
+    ) =>
+      Html.component({
+        name: "Grid",
+        model: GridModel,
+        message: Schema.Never
+      }).make({ init: () => initialGrid, update: ($) => $.model, view })
+
+    it.effect("passes on stable reuse with defaulted shared reads and throws when h.lazy is never called", () =>
+      Effect.gen(function*() {
+        const ThemeDef = Component.define({
+          name: "Theme",
+          model: Schema.Struct({ tone: Schema.String }),
+          message: Schema.Never,
+          shares: ({ model }) => ({ tone: model.tone })
+        })
+        const Light = ThemeDef.make({
+          init: () => ({ tone: "light" }),
+          update: ($) => $.model,
+          parts: () => ({})
+        })
+        const Dark = ThemeDef.make({
+          init: () => ({ tone: "dark" }),
+          update: ($) => $.model,
+          parts: () => ({})
+        })
+        const themedCell = <M>(
+          h: Html.H<M>,
+          row: typeof Row.Type,
+          shifts: ReadonlyArray<number>,
+          weekStart: string,
+          theme: { readonly tone: string }
+        ) =>
+          h.li.key(row.id).attr("data-tone", theme.tone).children(
+            `${row.id}:${shifts.length}:${weekStart}`
+          )
+        const Grid = Html.component({
+          name: "StableGrid",
+          model: GridModel,
+          message: Schema.Literal("load"),
+          reads: {
+            maybe: { owner: Light, optional: true },
+            light: Light,
+            dark: Dark
+          }
+        }).make({
+          init: () => ({ rows: [], shifts: [], weekStart: "" }),
+          update: () => initialGrid,
+          view: (h, model) =>
+            h.div(
+              h.button.on("click", "load").children("load"),
+              h.span(h.reads.maybe === undefined ? "none" : h.reads.maybe.tone),
+              h.ul(
+                model.rows.map((row) =>
+                  h.lazy(
+                    themedCell,
+                    row,
+                    h.reads.dark.tone === "dark"
+                      ? model.shifts
+                      : [...model.shifts],
+                    model.weekStart,
+                    h.reads.light
+                  )
+                )
+              )
+            )
+        })
+        const scene = yield* Scene.make(Grid, {})
+        scene.click("load")
+          .expectLazyReused()
+          .expect(Locator.tag("span")).toHaveText("none")
+          .expect(Locator.tag("li")).toHaveCount(3)
+
+        assert.throws(
+          () => Scene.start(grid((h) => h.p("plain")), {}).expectLazyReused(),
+          /Scene\.expectLazyReused:.*h\.lazy/i
+        )
+      }))
+
+    it("reports each miss reason and groups repeated misses across rows", () => {
+      const unstable = String(
+        assert.throws(
+          () =>
+            Scene.start(
+              grid((h, model) =>
+                h.ul(
+                  model.rows.map((row) =>
+                    h.lazy(hoursCell, row, [...model.shifts], model.weekStart)
+                  )
+                )
+              ),
+              {}
+            ).expectLazyReused(),
+          /Scene\.expectLazyReused:/
+        )
+      )
+      assert.match(unstable, /hoursCell.*argument 1\b.*\b3\b/i)
+      assert.strictEqual(unstable.match(/hoursCell/g)?.length, 1)
+
+      let render = 0
+      const optCell = (
+        h: Html.H<never>,
+        row: typeof Row.Type,
+        extra?: string
+      ) => h.li(extra ?? row.id)
+      const arity = String(
+        assert.throws(
+          () =>
+            Scene.start(
+              grid((h, model) =>
+                h.ul(
+                  render++ % 2 === 0
+                    ? h.lazy(optCell, model.rows[0]!)
+                    : h.lazy(optCell, model.rows[0]!, undefined)
+                )
+              ),
+              {}
+            ).expectLazyReused(),
+          /Scene\.expectLazyReused:/
+        )
+      )
+      assert.match(arity, /optCell.*argument 1\b/i)
+
+      const cases: ReadonlyArray<
+        readonly [
+          (
+            h: Html.H<never>,
+            model: typeof GridModel.Type
+          ) => View.Content<never, any>,
+          RegExp
+        ]
+      > = [
+        [
+          (h, model) =>
+            h.div(
+              model.rows.map((row) =>
+                h.div(
+                  h.lazy(nameCell, row),
+                  h.lazy(hoursCell, row, model.shifts, model.weekStart)
+                )
+              )
+            ),
+          /hoursCell.*first argument.*(shared|already|used)/i
+        ],
+        [
+          (h, model) => {
+            const rowView = (h: Html.H<never>, row: typeof Row.Type) =>
+              h.li(row.id)
+            return h.ul(model.rows.map((row) => h.lazy(rowView, row)))
+          },
+          /rowView.*function changed/i
+        ],
+        [
+          (h, model) =>
+            h.ul(
+              model.rows.map((row) =>
+                h.lazy(hoursCell, { ...row }, model.shifts, model.weekStart)
+              )
+            ),
+          /hoursCell.*no (prior |previous )?entry/i
+        ]
+      ]
+      for (const [view, expected] of cases) {
+        assert.throws(
+          () => Scene.start(grid(view), {}).expectLazyReused(),
+          expected
+        )
+      }
+    })
+  })
 })
