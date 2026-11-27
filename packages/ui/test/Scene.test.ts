@@ -765,4 +765,212 @@ describe("Scene", () => {
       assert.isUndefined((scene as any).results)
       assert.isUndefined((scene as any).queries)
     }))
+
+  describe("expectLazyReused", () => {
+    type Row = { readonly id: string; readonly name: string }
+    type Shift = { readonly id: string; readonly hours: number }
+
+    const RowSchema = Schema.Struct({
+      id: Schema.String,
+      name: Schema.String
+    })
+    const ShiftSchema = Schema.Struct({
+      id: Schema.String,
+      hours: Schema.Number
+    })
+    const GridModel = Schema.Struct({
+      rows: Schema.Array(RowSchema),
+      shifts: Schema.Array(ShiftSchema),
+      weekStart: Schema.String
+    })
+
+    const initialGrid = {
+      rows: [
+        { id: "r1", name: "Ada" },
+        { id: "r2", name: "Grace" },
+        { id: "r3", name: "Linus" }
+      ],
+      shifts: [{ id: "s1", hours: 8 }],
+      weekStart: "2026-11-23"
+    }
+
+    const nameCell = (h: Html.H<never>, row: Row) => h.span(row.name)
+
+    const hoursCell = (
+      h: Html.H<never>,
+      row: Row,
+      shifts: ReadonlyArray<Shift>,
+      weekStart: string
+    ) =>
+      h.li.key(row.id).children(
+        `${row.name}: ${
+          shifts.reduce((sum, s) => sum + s.hours, 0)
+        }h (${weekStart})`
+      )
+
+    it.effect("passes when every h.lazy call reuses its node on a repeat render", () =>
+      Effect.gen(function*() {
+        const Theme = Component.define({
+          name: "Theme",
+          model: Schema.Struct({ tone: Schema.String }),
+          message: Schema.Never,
+          shares: ({ model }) => ({ tone: model.tone })
+        }).make({
+          init: () => ({ tone: "light" }),
+          update: ($) => $.model,
+          parts: () => ({})
+        })
+        const themedCell = <M>(
+          h: Html.H<M>,
+          row: Row,
+          shifts: ReadonlyArray<Shift>,
+          weekStart: string,
+          theme: { readonly tone: string }
+        ) =>
+          h.li.key(row.id).attr("data-tone", theme.tone).children(
+            `${row.name}: ${shifts.length} (${weekStart})`
+          )
+        const Grid = Html.component({
+          name: "StableGrid",
+          model: GridModel,
+          message: Schema.Literal("load"),
+          reads: { theme: Theme }
+        }).make({
+          init: () => ({ rows: [], shifts: [], weekStart: "" }),
+          update: () => initialGrid,
+          view: (h, model) =>
+            h.div(
+              h.button.on("click", "load").children("load"),
+              h.ul(
+                model.rows.map((row) =>
+                  h.lazy(
+                    themedCell,
+                    row,
+                    model.shifts,
+                    model.weekStart,
+                    h.reads.theme
+                  )
+                )
+              )
+            )
+        })
+        const scene = yield* Scene.make(Grid, {})
+        scene.click("load")
+          .expectLazyReused()
+          .expect(Locator.tag("li")).toHaveCount(3)
+      }))
+
+    it("throws when the view calls h.lazy nowhere", () => {
+      const Plain = Html.component({
+        name: "Plain",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.p("plain")
+      })
+      const scene = Scene.start(Plain, {})
+      assert.throws(
+        () => scene.expectLazyReused(),
+        /Scene\.expectLazyReused:.*h\.lazy/i
+      )
+    })
+
+    it("reports unstable argument indices and groups repeated misses across rows", () => {
+      const UnstableGrid = Html.component({
+        name: "UnstableGrid",
+        model: GridModel,
+        message: Schema.Never
+      }).make({
+        init: () => initialGrid,
+        update: ($) => $.model,
+        view: (h, model) =>
+          h.ul(
+            model.rows.map((row) =>
+              h.lazy(hoursCell, row, [...model.shifts], model.weekStart)
+            )
+          )
+      })
+      const scene = Scene.start(UnstableGrid, {})
+      const error = assert.throws(
+        () => scene.expectLazyReused(),
+        /Scene\.expectLazyReused:/
+      )
+      const message = String(error)
+      assert.match(message, /hoursCell/)
+      assert.match(message, /argument\s+1\b/i)
+      assert.match(message, /\b3\b/)
+      assert.strictEqual(message.match(/hoursCell/g)?.length, 1)
+    })
+
+    it("reports shared first argument, changed function, and missing entry misses", () => {
+      const SharedKey = Html.component({
+        name: "SharedKey",
+        model: GridModel,
+        message: Schema.Never
+      }).make({
+        init: () => initialGrid,
+        update: ($) => $.model,
+        view: (h, model) =>
+          h.div(
+            model.rows.map((row) =>
+              h.div(
+                h.lazy(nameCell, row),
+                h.lazy(hoursCell, row, model.shifts, model.weekStart)
+              )
+            )
+          )
+      })
+      const sharedError = assert.throws(
+        () => Scene.start(SharedKey, {}).expectLazyReused(),
+        /Scene\.expectLazyReused:/
+      )
+      assert.match(String(sharedError), /hoursCell/)
+      assert.match(
+        String(sharedError),
+        /first argument.*(shared|already|used)/i
+      )
+
+      const InlineFn = Html.component({
+        name: "InlineFn",
+        model: GridModel,
+        message: Schema.Never
+      }).make({
+        init: () => initialGrid,
+        update: ($) => $.model,
+        view: (h, model) => {
+          const rowView = (h: Html.H<never>, row: Row) => h.li(row.name)
+          return h.ul(model.rows.map((row) => h.lazy(rowView, row)))
+        }
+      })
+      const fnError = assert.throws(
+        () => Scene.start(InlineFn, {}).expectLazyReused(),
+        /Scene\.expectLazyReused:/
+      )
+      assert.match(String(fnError), /rowView/)
+      assert.match(String(fnError), /function changed/i)
+
+      const FreshFirstArg = Html.component({
+        name: "FreshFirstArg",
+        model: GridModel,
+        message: Schema.Never
+      }).make({
+        init: () => initialGrid,
+        update: ($) => $.model,
+        view: (h, model) =>
+          h.ul(
+            model.rows.map((row) =>
+              h.lazy(hoursCell, { ...row }, model.shifts, model.weekStart)
+            )
+          )
+      })
+      const missingError = assert.throws(
+        () => Scene.start(FreshFirstArg, {}).expectLazyReused(),
+        /Scene\.expectLazyReused:/
+      )
+      assert.match(String(missingError), /hoursCell/)
+      assert.match(String(missingError), /no (prior |previous )?entry/i)
+    })
+  })
 })
