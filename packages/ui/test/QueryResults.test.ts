@@ -379,8 +379,8 @@ describe("Query results", () => {
   })
 
   /** a moves from 1 to 2 mid-fetch. Returns the fetches started before the clock moves on. */
-  const supersede = (app: ReturnType<typeof makeApp>) =>
-    Effect.gen(function*() {
+  const supersede = Effect.fnUntraced(
+    function*(app: ReturnType<typeof makeApp>) {
       const root = yield* TestHost.mount(app.List, { cards: ["a:1"] })
       yield* TestHost.settle
       yield* TestClock.adjust("5 millis")
@@ -390,7 +390,8 @@ describe("Query results", () => {
       yield* load
       assert.strictEqual(root.text(), "a=Bea")
       return { root, started }
-    })
+    }
+  )
 
   it.effect("changed args leave the old args' fetch running, and its result fills the cache", () => {
     const app = makeApp()

@@ -3085,6 +3085,8 @@ export interface DefineOptions<
             >
           ) => ArgsFor<S[K], M[K & keyof M]>
           readonly debounce?: Duration.Input | undefined
+          /** `true` interrupts the fetch of args this entry stops watching, when nothing else needs it. */
+          readonly interruptPrevious?: boolean | undefined
           /** `false` keeps the result out of history. */
           readonly restore?: false | undefined
           /** `true` opens changed args as `Initial`, not the last Success. */
@@ -3343,7 +3345,14 @@ export interface Define<V extends View.Elements> {
  * mount, the server render, args whose cache entry is fresh or already being
  * fetched, and a change to `undefined` go through at once. Args that change
  * again restart the wait. A `queryMany` query's new keys wait each on their
- * own.
+ * own. Args the entry stops watching have their fetch interrupted, as with
+ * `interruptPrevious`.
+ *
+ * An entry's `interruptPrevious: true` interrupts the fetch of args it stops
+ * watching, while the new args fetch at once. The fetch runs on, and fills
+ * the cache, when another watch, a `get` or a prefetch still needs it, or
+ * when the instance unmounts. With neither it nor `debounce`, a superseded
+ * fetch runs on and fills the cache.
  *
  * When an enabled `query` entry's args change, it keeps the last Success
  * with `waiting: true` until the new args have a result, including during
