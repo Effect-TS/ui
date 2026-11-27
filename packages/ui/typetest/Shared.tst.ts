@@ -310,6 +310,99 @@ describe("shared state", () => {
       }
     })
   })
+
+  it("takes a message codec for a shared key with receives, and none without", () => {
+    const maybeMessage = TipsMessage as typeof TipsMessage | undefined
+    expect(Component.sharedKey).type.toBeCallableWith({
+      name: "Bar",
+      schema: Schema.Boolean
+    })
+    expect(Component.sharedKey).type.toBeCallableWith({
+      name: "Bar",
+      schema: Schema.Boolean,
+      message: TipsMessage,
+      receives: ["Enter"]
+    })
+    expect(Component.sharedKey).type.not.toBeCallableWith({
+      name: "Bar",
+      schema: Schema.Boolean,
+      receives: ["Enter"]
+    })
+    expect(Component.sharedKey).type.not.toBeCallableWith({
+      name: "Bar",
+      schema: Schema.Boolean,
+      message: maybeMessage,
+      receives: ["Enter"]
+    })
+  })
+
+  it("drops a send to an optional owner whether it names the owner or its key", () => {
+    const BarMessage = UiSchema.TaggedEnum({ Pinged: {} })
+    const BarKey = Component.sharedKey({
+      name: "Bar",
+      schema: Schema.Boolean,
+      message: BarMessage,
+      receives: ["Pinged"]
+    })
+    const Bar = Component.define({
+      name: "Bar",
+      model: Schema.Boolean,
+      message: BarMessage,
+      shares: {
+        key: BarKey,
+        value: ({ model }) => model,
+        schema: Schema.Boolean,
+        receives: ["Pinged"]
+      }
+    }).make({ init: () => false, update: () => true })
+    // Another owner of the same name and types that adopts no key.
+    const OtherBar = Component.define({
+      name: "Bar",
+      model: Schema.Boolean,
+      message: BarMessage,
+      shares: {
+        value: ({ model }) => model,
+        schema: Schema.Boolean,
+        receives: ["Pinged"]
+      }
+    }).make({ init: () => false, update: () => true })
+    const byKeySendsOwner = Component.define({
+      name: "Reader",
+      model: Schema.Null,
+      message: BarMessage,
+      reads: { bar: { owner: BarKey, optional: true } }
+    }).make({
+      init: () => null,
+      update: ($) => $.send(Bar, BarMessage.Pinged()),
+      parts: () => ({})
+    })
+    const byOwnerSendsKey = Component.define({
+      name: "Reader",
+      model: Schema.Null,
+      message: BarMessage,
+      reads: { bar: { owner: Bar, optional: true } }
+    }).make({
+      init: () => null,
+      update: ($) => $.send(BarKey, BarMessage.Pinged()),
+      parts: () => ({})
+    })
+    const byKeySendsOther = Component.define({
+      name: "Reader",
+      model: Schema.Null,
+      message: BarMessage,
+      reads: { bar: { owner: BarKey, optional: true } }
+    }).make({
+      init: () => null,
+      update: ($) => $.send(OtherBar, BarMessage.Pinged()),
+      parts: () => ({})
+    })
+    expect<Component.Headless.Requirements<typeof byKeySendsOwner>>().type
+      .toBe<never>()
+    expect<Component.Headless.Requirements<typeof byOwnerSendsKey>>().type
+      .toBe<never>()
+    expect<Component.Headless.Requirements<typeof byKeySendsOther>>().type
+      .toBe<Component.Shared<"Bar">>()
+  })
 })
 
 describe("a component that reads its own kind", () => {
