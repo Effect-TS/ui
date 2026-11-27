@@ -191,7 +191,7 @@ describe("SortableList in a document", { concurrent: false }, () => {
       )
     }).pipe(Effect.scoped))
 
-  it.effect("pick-then-place survives Safari-style focusout before click, and pointer drag is scoped per list", () =>
+  it.effect("pick-then-place survives an iOS tap's focusout before click, and pointer drag is scoped per list", () =>
     Effect.gen(function*() {
       const Message = UiSchema.TaggedEnum({
         ReorderedFirst: { from: Schema.Number, to: Schema.Number },
@@ -219,7 +219,8 @@ describe("SortableList in a document", { concurrent: false }, () => {
         view: (h, model) =>
           h.div(
             SortableList(h, {
-              key: "first",
+              // Keys that differ only by case still get distinct drag types.
+              key: "list",
               props: { items: model.first },
               onEmit: {
                 Reordered: ({ from, to }) =>
@@ -241,7 +242,7 @@ describe("SortableList in a document", { concurrent: false }, () => {
                 )
             }),
             SortableList(h, {
-              key: "second",
+              key: "List",
               props: { items: model.second },
               onEmit: {
                 Reordered: ({ from, to }) =>
@@ -269,8 +270,8 @@ describe("SortableList in a document", { concurrent: false }, () => {
       const root = yield* BrowserHost.mountEffect(DualLists, {}, app)
       yield* tick
 
-      // Safari/iOS: tapping another handle blurs the current one with
-      // relatedTarget: null before the target handle's click arrives.
+      // iOS: a tap sends pointerdown, then a mousedown that blurs the
+      // current handle without focusing the tapped one, then the click.
       const handleA = byId("first-handle-a") as HTMLButtonElement
       const handleC = byId("first-handle-c") as HTMLButtonElement
       handleA.focus()
@@ -278,6 +279,9 @@ describe("SortableList in a document", { concurrent: false }, () => {
       yield* tick
 
       press(handleC, "touch")
+      handleC.dispatchEvent(
+        new MouseEvent("mousedown", { bubbles: true, cancelable: true })
+      )
       handleA.dispatchEvent(
         new FocusEvent("focusout", { bubbles: true, relatedTarget: null })
       )

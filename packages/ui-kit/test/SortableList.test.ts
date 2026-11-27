@@ -156,10 +156,10 @@ describe("SortableList", () => {
 
       // Later unrelated list edits must not rewrite the Dropped announcement.
       scene.props({ items: ["b", "a", "c", "d"] })
-      assert.notStrictEqual(
-        Locator.textOf(scene.get(status)),
-        "Dropped:a:2/4"
-      )
+      scene.expect(status).toHaveText("")
+      scene.subscription("changedItems", { _tag: "ChangedItems" })
+      scene.props({ items: ["b", "a", "c"] })
+      scene.expect(status).toHaveText("")
 
       // Moving backward places the indicator "before" the target item.
       scene.click(handle("c"))
@@ -226,6 +226,65 @@ describe("SortableList", () => {
       scene.expect(status).toHaveText("Cancelled:b:2/3")
     }))
 
+  it.effect("a press on a handle excuses only the focusout before its click", () =>
+    Effect.gen(function*() {
+      const scene = yield* HtmlScene.make(
+        SortableList,
+        { items: ["a", "b", "c"] },
+        standIn
+      )
+      const mouse = {
+        button: 0,
+        x: 0,
+        y: 0,
+        shift: false,
+        ctrl: false,
+        alt: false,
+        meta: false,
+        pointerType: "mouse"
+      } as const
+
+      // Safari and iOS blur on mousedown without focusing the button.
+      scene.click(handle("a"))
+      drain(scene)
+      scene.fire(handle("c"), "mousedown", mouse)
+      scene.fire(list, "focusout", { within: false, disabled: false })
+      assert.strictEqual(scene.get(list).attrs?.["data-moving"], "")
+      scene.click(handle("c")).emitted({ _tag: "Reordered", from: 0, to: 2 })
+      drain(scene)
+
+      // A press released off the handle sends no click; leaving then cancels.
+      scene.click(handle("b"))
+      drain(scene)
+      scene.fire(handle("c"), "mousedown", mouse)
+      scene.fireDocument("mouseup", mouse)
+      scene.fire(list, "focusout", { within: false, disabled: false })
+      assert.isUndefined(scene.get(list).attrs?.["data-moving"])
+      assert.deepStrictEqual(scene.current.emitted, [])
+    }))
+
+  it.effect("rows removed during a move clamp the drop", () =>
+    Effect.gen(function*() {
+      const scene = yield* HtmlScene.make(
+        SortableList,
+        { items: ["a", "b", "c"] },
+        standIn
+      )
+
+      // The indicator falls back to after "b", and so does the event.
+      scene.click(handle("a"))
+      drain(scene)
+      scene.keydown(handle("a"), "End")
+      drain(scene)
+      scene.props({ items: ["a", "b"] })
+      assert.strictEqual(
+        scene.get(item("b")).attrs?.["data-drop-position"],
+        "after"
+      )
+      scene.click(handle("a")).emitted({ _tag: "Reordered", from: 0, to: 1 })
+      drain(scene)
+    }))
+
   it.effect("horizontal orientation uses Left/Right arrows and respects DirectionProvider RTL", () =>
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(
@@ -275,6 +334,12 @@ describe("SortableList", () => {
       // Upper half of "b" when dragging "a" is a no-op (to === from).
       const dataA = dragDataOf(scene, item("a"))
       scene.fire(item("a"), "dragstart")
+      // A drag moves the row but doesn't toggle the handle.
+      assert.strictEqual(scene.get(item("a")).attrs?.["data-moving"], "")
+      assert.strictEqual(
+        scene.get(handle("a")).attrs?.["aria-pressed"],
+        "false"
+      )
       scene.fire(item("b"), "dragover", { x: 10, y: 5, width: 100, height: 40 })
       assert.isUndefined(scene.get(item("b")).attrs?.["data-drop-position"])
       scene.drop(item("b"), {

@@ -127,11 +127,14 @@ import * as Command from "@effect/ui/Command"
 import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
+import * as HtmlSubscription from "@effect/ui/html/HtmlSubscription"
 import * as Mount from "@effect/ui/Mount"
 import * as Renderer from "@effect/ui/Renderer"
+import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
 import * as Schema from "effect/Schema"
+import * as Stream from "effect/Stream"
 import { DirectionProvider } from "./DirectionProvider.ts"
 import { flag, type Keyed } from "./internal/attributes.ts"
 import {
@@ -226,6 +229,7 @@ export interface SortableListAnnouncement {
 const SortableListMessage = UiSchema.TaggedEnum({
   ClickedHandle: { id: Schema.String },
   PressedHandle: {},
+  ReleasedPointer: {},
   PressedKey: { key: Schema.String },
   LeftList: {},
   StartedDrag: { id: Schema.String },
@@ -235,6 +239,7 @@ const SortableListMessage = UiSchema.TaggedEnum({
   DroppedOnItem: { id: Schema.String, after: Schema.Boolean },
   DroppedOnList: {},
   EndedDrag: {},
+  ChangedItems: {},
   FoundDirection: { rtl: Schema.Boolean }
 })
 
@@ -242,8 +247,9 @@ type SortableListMessage = typeof SortableListMessage.Type
 
 // `moving.over`: a drag is over one of the list's drop targets.
 // `ended`: the last move's outcome, with the `count` of rows at that time.
-// `pressed`: a handle was pressed during a move, so the `focusout` a
-// press can cause before its click doesn't cancel.
+// `pressed`: a handle's `mousedown` during a move, until its `mouseup`.
+// Safari and iOS blur on that `mousedown` without focusing the button, so
+// the `focusout` it causes before the click doesn't cancel.
 const SortableListModel = Schema.Struct({
   moving: Schema.NullOr(Schema.Struct({
     id: Schema.String,
@@ -289,9 +295,11 @@ const landing = (from: number, over: number, after: boolean): number => {
 const fromOf = ($: SortableListUpdate) =>
   $.model.moving === null ? -1 : $.props.items.indexOf($.model.moving.id)
 
-const commit = ($: SortableListUpdate, to: number, focus: boolean) => {
+const commit = ($: SortableListUpdate, target: number, focus: boolean) => {
   const moving = $.model.moving!
   const from = $.props.items.indexOf(moving.id)
+  // Rows may have been removed since the landing place was chosen.
+  const to = Math.min(target, $.props.items.length - 1)
   const next = $.set({
     ...$.model,
     moving: null,
@@ -324,7 +332,7 @@ const cancel = ($: SortableListUpdate) => {
     ...$.model,
     moving: null,
     pressed: false,
-    ended: moving.dragging ? null : {
+    ended: moving.dragging || from < 0 ? null : {
       dropped: false,
       id: moving.id,
       from,
@@ -338,8 +346,15 @@ const dragging = ($: SortableListUpdate): boolean =>
   $.props.disabled !== true && $.model.moving?.dragging === true &&
   fromOf($) >= 0
 
-const dragTo = ($: SortableListUpdate, id: string, after: boolean) =>
-  landing(fromOf($), $.props.items.indexOf(id), after)
+// `undefined` when the row under the pointer is gone from `items`.
+const dragTo = (
+  $: SortableListUpdate,
+  id: string,
+  after: boolean
+): number | undefined => {
+  const over = $.props.items.indexOf(id)
+  return over < 0 ? undefined : landing(fromOf($), over, after)
+}
 
 const step = ($: SortableListUpdate, key: string) => {
   const moving = $.model.moving!
@@ -361,6 +376,27 @@ const step = ($: SortableListUpdate, key: string) => {
   )
 }
 
+// The last outcome still describes `items`: the row is where it landed, or
+// where it started when the consumer refused the move.
+const current = (
+  ended: NonNullable<SortableListModel["ended"]>,
+  items: ReadonlyArray<string>
+): boolean => {
+  const at = items.indexOf(ended.id)
+  return at >= 0 && ended.count === items.length &&
+    (at === ended.to || at === ended.from)
+}
+
+const releasedPointer = HtmlSubscription.onDocument(
+  "mouseup",
+  SortableListMessage.ReleasedPointer()
+)
+
+const changedItems = Subscription.make(
+  "changedItems",
+  Stream.make(SortableListMessage.ChangedItems())
+)
+
 const announcementOf = (
   model: SortableListModel,
   items: ReadonlyArray<string>,
@@ -376,16 +412,12 @@ const announcementOf = (
     }
   }
   const ended = model.ended
-  if (ended === null || ended.count !== count) return undefined
-  const at = items.indexOf(ended.id)
-  return at === ended.to || at === ended.from
-    ? {
-      _tag: ended.dropped ? "Dropped" : "Cancelled",
-      id: ended.id,
-      position: at + 1,
-      count
-    }
-    : undefined
+  return ended === null || !current(ended, items) ? undefined : {
+    _tag: ended.dropped ? "Dropped" : "Cancelled",
+    id: ended.id,
+    position: items.indexOf(ended.id) + 1,
+    count
+  }
 }
 
 /**
@@ -406,12 +438,13 @@ const announcementOf = (
  * - `list`: `data-orientation`, `data-moving` and `data-disabled`
  * - `item`: `draggable`, `data-moving` and `data-drop-position`
  * - `handle`: `type="button"`, `disabled`, `aria-disabled` (removed),
- *   `aria-pressed`, `data-moving` and `data-disabled`
+ *   `aria-pressed` (only for a move by handle, not a drag), `data-moving`
+ *   and `data-disabled`
  * - `status`: `role="status"`, `aria-live="polite"` and `aria-atomic="true"`
  *
  * `list` handles `focusout`, `dragenter`, `dragleave` and `drop`; `item`
  * handles `dragstart`, `dragover`, `dragleave`, `drop` and `dragend`;
- * `handle` handles `click`, `pointerdown` and `keydown`. Each is on a layer of
+ * `handle` handles `click`, `mousedown` and `keydown`. Each is on a layer of
  * its own, so the consumer's handlers still run. A row drags only rows of
  * the same list, and a drop in a gap between rows lands where the last row
  * hovered said. The list follows the nearest `DirectionProvider` above it
@@ -454,13 +487,13 @@ export const SortableList = Html.component({
       }
       return commit($, id === moving.id ? moving.to : at, true)
     },
-    PressedHandle: ($) =>
-      $.model.moving === null ? $.model : $.evolve({ pressed: true }),
     PressedKey: ($, { key }) =>
       $.model.moving === null || $.model.moving.dragging || fromOf($) < 0
         ? $.model
         : step($, key),
-    LeftList: ($) => $.model.pressed ? $.evolve({ pressed: false }) : cancel($),
+    PressedHandle: ($) => $.evolve({ pressed: true }),
+    ReleasedPointer: ($) => $.evolve({ pressed: false }),
+    LeftList: ($) => $.model.pressed ? $.model : cancel($),
     StartedDrag: ($, { id }) =>
       $.props.disabled === true || !$.props.items.includes(id)
         ? $.model
@@ -476,12 +509,12 @@ export const SortableList = Html.component({
           ended: null,
           pressed: false
         }),
-    DraggedOver: ($, { after, id }) =>
-      dragging($)
-        ? $.evolve({
-          moving: { ...$.model.moving!, to: dragTo($, id, after), over: true }
-        })
-        : $.model,
+    DraggedOver: ($, { after, id }) => {
+      const to = dragging($) ? dragTo($, id, after) : undefined
+      return to === undefined
+        ? $.model
+        : $.evolve({ moving: { ...$.model.moving!, to, over: true } })
+    },
     LeftDropTarget: ($) =>
       dragging($)
         ? $.evolve({ moving: { ...$.model.moving!, over: false } })
@@ -490,13 +523,22 @@ export const SortableList = Html.component({
       dragging($)
         ? $.evolve({ moving: { ...$.model.moving!, over: true } })
         : $.model,
-    DroppedOnItem: ($, { after, id }) =>
-      dragging($) ? commit($, dragTo($, id, after), false) : $.model,
+    DroppedOnItem: ($, { after, id }) => {
+      const to = dragging($) ? dragTo($, id, after) : undefined
+      return to === undefined ? $.model : commit($, to, false)
+    },
     DroppedOnList: ($) =>
       dragging($) ? commit($, $.model.moving!.to, false) : $.model,
     EndedDrag: ($) => $.model.moving?.dragging === true ? cancel($) : $.model,
+    ChangedItems: ($) => $.evolve({ ended: null }),
     FoundDirection: ($, { rtl }) => $.evolve({ rtl })
   },
+  subscriptions: ({ model, props }) => [
+    model.pressed && releasedPointer,
+    // Once `items` no longer matches the last outcome, forget it, so a later
+    // edit that restores the old count can't bring the announcement back.
+    model.ended !== null && !current(model.ended, props.items) && changedItems
+  ],
   parts: (p, model) => {
     const { items } = p.props
     const disabled = p.props.disabled === true
@@ -538,8 +580,9 @@ export const SortableList = Html.component({
       : undefined
     const keyboard = move !== undefined && !model.moving!.dragging
 
-    // Lowercase, as browsers report drag types.
-    const dragType = "application/x-sortable-list-" + p.id("drag").toLowerCase()
+    // Browsers lowercase drag types, so escape capitals to keep ids apart.
+    const dragType = "application/x-sortable-list-" +
+      p.id("drag").replace(/[A-Z_]/g, (c) => "_" + c.toLowerCase())
     const dropTarget: Html.DropTargetOptions = {
       accepts: [dragType],
       dropEffect: "move",
@@ -590,7 +633,7 @@ export const SortableList = Html.component({
         .attrs({
           type: "button",
           "aria-disabled": undefined,
-          "aria-pressed": String(move?.id === id),
+          "aria-pressed": String(keyboard && move.id === id),
           "data-moving": flag(move?.id === id),
           "data-disabled": flag(disabled)
         })
@@ -598,7 +641,7 @@ export const SortableList = Html.component({
         .ref(Handle.at(id))
         .on("click", SortableListMessage.ClickedHandle({ id }))
         .on(
-          "pointerdown",
+          "mousedown",
           () => keyboard ? SortableListMessage.PressedHandle() : undefined
         )
         .on(
