@@ -127,6 +127,38 @@ describe("BrowserHost", { concurrent: false }, () => {
       delete (document as { visibilityState?: unknown }).visibilityState
     }))
 
+  it.effect("the layer starts connectivity false when navigator.onLine is false and hears online", () =>
+    Effect.gen(function*() {
+      const original = Object.getOwnPropertyDescriptor(
+        window.navigator,
+        "onLine"
+      )
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          Object.defineProperty(window.navigator, "onLine", {
+            value: false,
+            configurable: true
+          })
+        }),
+        () =>
+          Effect.sync(() => {
+            if (original === undefined) {
+              delete (window.navigator as { onLine?: unknown }).onLine
+            } else {
+              Object.defineProperty(window.navigator, "onLine", original)
+            }
+          })
+      )
+      const context = yield* Layer.build(BrowserHost.layer())
+      const connectivity = Context.get(context, Query.Connectivity)
+      const seen: Array<boolean> = []
+      connectivity.subscribe((online) => seen.push(online))
+      assert.strictEqual(connectivity.get(), false)
+      window.dispatchEvent(new Event("online"))
+      assert.strictEqual(connectivity.get(), true)
+      assert.deepStrictEqual(seen, [true])
+    }).pipe(Effect.scoped))
+
   it.live("runs Commands on HtmlScheduler unless the caller provides a Scheduler", () =>
     Effect.gen(function*() {
       const posted: Array<string> = []
