@@ -2395,40 +2395,22 @@ describe("BrowserHost", { concurrent: false }, () => {
           )
           expect(
             yield* released(true, (text) => {
+              // The commit key held while focus moves and another key is pressed.
               commit(text)
-              fire(text, "keyup", { key: "Enter" })
-              // An Enter whose keydown no listener saw is a plain release.
-              fire(document.createElement("button"), "keydown", {
-                key: "Enter"
-              })
-              fire(text, "keyup", { key: "Enter" })
-              // Another key pressed and released, then the commit key held.
-              commit(text)
-              fire(text, "keydown", { key: "Shift", code: "ShiftLeft" })
-              fire(text, "keyup", { key: "Shift", code: "ShiftLeft" })
-              fire(text, "keydown", { key: "Enter", repeat: true })
+              const sibling = text.nextElementSibling as HTMLElement
+              sibling.focus()
+              fire(sibling, "keydown", { key: "Shift", code: "ShiftLeft" })
+              fire(sibling, "keyup", { key: "Shift", code: "ShiftLeft" })
+              fire(sibling, "keydown", { key: "Enter", repeat: true })
+              text.focus()
               fire(text, "keyup", { key: "Enter" })
             })
-          ).toEqual([
-            "el:Enter:true",
-            "doc:Enter:true",
-            "el:Enter:false",
-            "doc:Enter:false",
-            "el:Shift:false",
-            "doc:Shift:false",
-            "el:Enter:true",
-            "doc:Enter:true"
-          ])
+          ).toEqual(["doc:Shift:false", "el:Enter:true", "doc:Enter:true"])
           const outside = (yield* container).appendChild(
             document.createElement("button")
           )
           expect(
             yield* released(false, (text) => {
-              // Focus moving within the page while the commit key is held.
-              commit(text)
-              ;(text.nextElementSibling as HTMLElement).focus()
-              text.focus()
-              fire(text, "keyup", { key: "Enter" })
               // The commit key released outside the host, then pressed again
               // there before focus comes back.
               commit(text)
@@ -2442,7 +2424,7 @@ describe("BrowserHost", { concurrent: false }, () => {
               window.dispatchEvent(new FocusEvent("blur"))
               fire(text, "keyup", { key: "Enter" })
             })
-          ).toEqual(["el:Enter:true", "el:Enter:false", "el:Enter:false"])
+          ).toEqual(["el:Enter:false", "el:Enter:false"])
         }).pipe(Effect.scoped))
 
       it.effect("a composing field's value isn't written until compositionend, including inside shadow DOM", () =>

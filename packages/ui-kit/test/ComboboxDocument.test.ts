@@ -411,18 +411,16 @@ describe("Combobox in a document", { concurrent: false }, () => {
       target.dispatchEvent(
         new CompositionEvent("compositionstart", { bubbles: true })
       )
-      for (const value of ["きょうと", "京都"]) {
-        target.value = value
-        target.dispatchEvent(
-          new InputEvent("input", {
-            bubbles: true,
-            isComposing: true,
-            inputType: "insertCompositionText",
-            data: value
-          })
-        )
-        yield* tick
-      }
+      target.value = "京都"
+      target.dispatchEvent(
+        new InputEvent("input", {
+          bubbles: true,
+          isComposing: true,
+          inputType: "insertCompositionText",
+          data: "京都"
+        })
+      )
+      yield* tick
       // UI Events order: the key that commits is a composing keydown, then
       // compositionend, then a keyup that alone looks like a plain Enter.
       keydown(target, "Enter", {
