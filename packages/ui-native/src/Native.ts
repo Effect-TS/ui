@@ -2,6 +2,9 @@
  * The React Native element vocabulary: `view`, `text`, `scroll` and
  * `input`, rendered by `NativeHost` as Fabric's native views.
  *
+ * Other modules add native views with {@link defineView}, so an app's host
+ * holds only the views it renders.
+ *
  * @stability experimental
  * @since 0.1.0
  */
@@ -9,6 +12,7 @@ import * as Component from "@effect/ui/Component"
 import * as Renderer from "@effect/ui/Renderer"
 import * as View from "@effect/ui/View"
 import * as Context from "effect/Context"
+import { kinds } from "./internal/kinds.ts"
 import type { NativeNode } from "./NativeHost.ts"
 
 /**
@@ -249,15 +253,28 @@ export interface ValuePayload {
 }
 
 /**
- * The events of a `view` and a `text`. A press ends on the element, or
- * at most 20 points outside it.
+ * An element's position and size in its parent, in points.
  *
  * @stability experimental
  * @category events
  * @since 0.1.0
  */
-export interface PressEvents {
+export interface LayoutPayload {
+  readonly layout: Rect
+}
+
+/**
+ * The events of a `view` and a `text`. A press ends on the element, or
+ * at most 20 points outside it. `layout` fires when layout changes the
+ * element's position or size.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface ViewEvents {
   readonly press: PressPayload
+  readonly layout: LayoutPayload
 }
 
 /**
@@ -267,7 +284,7 @@ export interface PressEvents {
  * @category events
  * @since 0.1.0
  */
-export interface ScrollEvents extends PressEvents {
+export interface ScrollEvents extends ViewEvents {
   readonly scroll: ScrollPayload
 }
 
@@ -284,6 +301,7 @@ export interface InputEvents {
   readonly submit: ValuePayload
   readonly focus: {}
   readonly blur: {}
+  readonly layout: LayoutPayload
 }
 
 /**
@@ -320,12 +338,113 @@ export class Host extends Context.Service<Host, {
   ) => void
   /** `undefined` until the node has been committed. */
   readonly measure: (node: NativeNode) => Rect | undefined
+  /** Runs a native command, such as `scrollToEnd`. Does nothing before the node's first commit. */
+  readonly command: (
+    node: NativeNode,
+    name: string,
+    args?: ReadonlyArray<unknown> | undefined
+  ) => void
 }>()("@effect/ui-native/Native/Host") {}
 
 declare module "@effect/ui/Command" {
   interface FrameworkServices {
     readonly NativeHost: Host
   }
+}
+
+/**
+ * Operations available to a {@link ViewKind}'s hooks.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface ViewHost {
+  /** `Platform.OS` of the running app. */
+  readonly os: string
+  /** Sets a Fabric prop for the next commit, processing `*Color` values. */
+  readonly set: (node: NativeNode, name: string, value: unknown) => void
+  /** Converts a colour for Fabric, for colours nested inside a prop. */
+  readonly color: (value: unknown) => unknown
+  /** Dispatches a native command; no-op before the node's first commit. */
+  readonly command: (
+    node: NativeNode,
+    name: string,
+    args?: ReadonlyArray<unknown> | undefined
+  ) => void
+  /** Dispatches `event` to the node's own handler, if bound. */
+  readonly fire: (node: NativeNode, event: string, payload: unknown) => void
+}
+
+/**
+ * How the host renders an element: its Fabric view name, defaults, prop
+ * setters, and native event hooks.
+ *
+ * **Details**
+ *
+ * Props without a setter go straight to Fabric. Native events without a hook
+ * (such as `topLayout`) dispatch directly to the matching handler (`layout`)
+ * without bubbling, and binding that handler sets `onLayout: true` on Fabric.
+ *
+ * `value` is controlled: an `events` hook records what native currently shows
+ * so the `value` setter can skip no-ops, and if the Model rejects the edit the
+ * host calls the setter again with the last value after the event finishes.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface ViewKind {
+  /** Fabric component name, or a function of the node and host. */
+  readonly viewName: string | ((node: NativeNode, host: ViewHost) => string)
+  /** Initial Fabric props for every created node. */
+  readonly defaults?: Readonly<Record<string, unknown>> | undefined
+  /** Whether raw text may sit directly inside this view (nesting uses virtual text). */
+  readonly text?: boolean | undefined
+  /** Inner content container created automatically for children, as in `scroll`. */
+  readonly content?: Pick<ViewKind, "viewName" | "defaults"> | undefined
+  /** Custom prop setters by prop name. */
+  readonly props?:
+    | Readonly<
+      Record<string, (node: NativeNode, value: unknown, host: ViewHost) => void>
+    >
+    | undefined
+  /** Custom hooks by native event name (e.g. `topChange`). */
+  readonly events?:
+    | Readonly<
+      Record<string, (node: NativeNode, payload: any, host: ViewHost) => void>
+    >
+    | undefined
+}
+
+/**
+ * Registers `kind` for the builder returned by `make` and returns that
+ * builder. Construct the builder inside `make` so bundlers tree-shake the
+ * entire definition, builder included, when unused. Re-defining a tag replaces
+ * it (reloading under Fast Refresh).
+ *
+ * **Example** (An activity indicator)
+ *
+ * ```ts
+ * import { Native } from "@effect/ui-native"
+ *
+ * const spinner = Native.defineView(() => new Native.Element("spinner"), {
+ *   viewName: (_, host) =>
+ *     host.os === "ios" ? "ActivityIndicatorView" : "AndroidProgressBar",
+ *   defaults: { animating: true, styleAttr: "Normal", indeterminate: true }
+ * })
+ * ```
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const defineView = /* @__NO_SIDE_EFFECTS__ */ <
+  B extends View.ElementBuilder<any, any, any, any, any>
+>(make: () => B, kind: ViewKind): B => {
+  const builder = make()
+  kinds.set(builder.tag, kind)
+  return builder
 }
 
 /**
@@ -516,11 +635,11 @@ export class InputElement<
  * @since 0.1.0
  */
 export interface Tags<Msg> {
-  readonly view: View.Shorthand<ViewElement<Msg, never, PressEvents, "view">>
+  readonly view: View.Shorthand<ViewElement<Msg, never, ViewEvents, "view">>
   readonly scroll: View.Shorthand<
     ViewElement<Msg, never, ScrollEvents, "scroll">
   >
-  readonly text: View.Shorthand<TextElement<Msg, never, PressEvents, "text">>
+  readonly text: View.Shorthand<TextElement<Msg, never, ViewEvents, "text">>
   readonly input: InputElement<Msg, never, InputEvents, "input">
 }
 
