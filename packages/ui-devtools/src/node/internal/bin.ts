@@ -13,8 +13,8 @@ Runs the Effect UI DevTools MCP server. Pages connect with
 DevTools.layer({ server: "<url>" }), terminal apps with
 DevToolsHeadless.layer({ server: "<url>" }), agents with <url>/mcp.
 Open <url> in a browser to inspect the newest session.
---field names a top-level message or Command args field, such as commandId,
-for list_entries rows and the page to show.`
+Repeat --field to show top-level message or Command argument fields, such as
+commandId, in list_entries rows and the server's viewer.`
 
 const { values } = parseArgs({
   options: {

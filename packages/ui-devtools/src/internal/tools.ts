@@ -120,8 +120,8 @@ const ListEntries = read(Tool.make("list_entries", {
   description:
     "Lists log entries as rows without payloads, oldest first. Without after, returns the newest limit " +
     "rows. filter \"messages\" keeps updates, mounts and failures, \"commands\" adds Command runs. " +
-    "Rows carry the server's declared payload fields, and field's, as fields: top-level string, number " +
-    "and boolean values of an Update's message or a Command's args. " +
+    "Rows include available declared fields and the field used for filtering in a fields object. " +
+    "Only top-level string, number and boolean values from messages or Command args are included. " +
     "Read one entry with get_entry, its causal chain with get_chain.",
   parameters: Schema.Struct({
     session: SessionParam,

@@ -82,7 +82,6 @@ export const Field = Schema.Struct({
 
 export type Field = typeof Field.Type
 
-// Strings only, deduplicated, without empty names.
 export const fieldNames = (value: unknown): ReadonlyArray<string> =>
   Array.isArray(value)
     ? Array.from(
@@ -99,7 +98,6 @@ const commandOf = (session: Inspector.Session, issued: MessageLog.Issued) => {
   return isIssuing(issuing) ? issuing.commands[issued.index] : undefined
 }
 
-// An entry's one payload: an Update's message, or its Command's args.
 const payloadOf = (session: Inspector.Session, entry: Entry): unknown => {
   if (entry._tag === "Update") return entry.message
   if (entry._tag === "Failed" && entry.update !== undefined) {

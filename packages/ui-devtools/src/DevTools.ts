@@ -127,11 +127,11 @@ export type WebMcpOptions = internal.WebMcpOptions
  * one can resume it. With `DevToolsVite.plugin`, the page carries the URL
  * and the plugin's `size` and `fields`, so none of these options is needed.
  *
- * `fields` names top-level fields, such as `"commandId"`, to show on timeline
- * rows: from an `Update`'s message, and from the args of a Command run's
- * entries. Only string, number and boolean values are shown, so redacted
- * values never are. Click one to show only the entries with that value,
- * across every instance.
+ * `fields` selects top-level message and Command argument values to show
+ * on timeline rows, for example `{ fields: ["commandId"] }`. Only strings,
+ * numbers and booleans are shown; redacted values are omitted. Click a value
+ * to filter by its field name and value across instances. Other filters
+ * still apply.
  *
  * When the browser exposes WebMCP (`document.modelContext`), the Layer also
  * registers the DevTools tools directly in the page under the `effect_ui_`

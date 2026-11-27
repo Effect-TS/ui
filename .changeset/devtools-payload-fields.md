@@ -2,4 +2,4 @@
 "@effect/ui-devtools": minor
 ---
 
-Add a `fields` option to `DevTools.layer`, `DevToolsServer.layer` and `DevToolsVite.plugin` to show top-level message and Command args fields, such as `commandId`, on timeline and `list_entries` rows, and filter by one across instances in the overlay or with `list_entries`' new `field` parameter.
+Add `fields` to `DevTools.layer`, `DevToolsServer.layer` and `DevToolsVite.plugin` to display top-level message and Command argument values on timeline and `list_entries` rows. Filter by a field name and value across instances by clicking a timeline value or passing `field` to `list_entries`.

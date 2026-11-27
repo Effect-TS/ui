@@ -46,7 +46,7 @@ It follows the latest entry until one is selected, and remembers whether the pan
 
 `DevTools.layer` accepts `position`, `size` (1,000 shown entries by default) and `exclude` (message `_tag` values matched across every component). Excluded updates add no rows and coalesce per instance between shown entries so high-frequency bursts do not evict the buffer, while keeping the next shown entry's Model diff and Time travel state accurate. `exclude` is not a way to hide sensitive data: later entries still carry whatever an excluded message changed in the Model — use `Schema.Redacted` for sensitive values.
 
-`fields` names top-level fields, such as `DevTools.layer({ fields: ["commandId"] })`, to show on timeline rows: from an update's message, and from the Command args of a run's entries. Only string, number and boolean values are shown, so redacted values never are. Click one to show only the entries with that value across every instance; click it again, or the chip under the filters, to show everything.
+Use `DevTools.layer({ fields: ["commandId"] })` to show top-level message and Command argument values on timeline rows. Only string, number and boolean values are shown; redacted values are omitted. Click a value to filter by its field name and value across instances. Click it again, or click the chip under the filters, to clear the field filter. Other filters still apply.
 
 `exclude` sets the initial recording policy. To change it while the app runs, select an update and click **Stop recording** to exclude future updates with its message `_tag`. The **Not recording** strip under the filters lists stopped tags, including configured exclusions. Click a tag to resume recording it.
 

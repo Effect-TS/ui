@@ -211,9 +211,9 @@ const reasonOf = (error: unknown): string =>
  * The plugin applies to `vite dev` only, not to builds, previews or Vitest.
  * It adds a `<meta>` tag with the server's URL, `size` and `fields` to each
  * HTML page Vite serves, and `DevTools` reads it so the page sends its frames
- * there, takes the server's requests and shows the same fields. When the port is taken the plugin warns, adds
- * no `<meta>` tag, and `vite dev` runs on without the server, so a page never
- * connects to a server another project started.
+ * there, takes the server's requests and shows the same fields. If the port
+ * is taken, the plugin warns and omits the tag. Vite continues without the
+ * DevTools server, avoiding an automatic connection to another project's server.
  *
  * Unless `overlay: false` is passed, the plugin injects a small client module
  * that attaches the DevTools inspector overlay automatically for roots mounted

@@ -42,7 +42,6 @@ export interface Feed {
   readonly failures: () => number
   readonly open: boolean
   readonly position: () => Position
-  /** The payload fields timeline rows show. */
   readonly fields: ReadonlyArray<string>
   /** The message tags not recorded, when the page has a recorder to change. */
   readonly notRecording?: (() => ReadonlyArray<string>) | undefined
@@ -877,7 +876,7 @@ const FieldFilter = (h: H, field: Read.Field | null) =>
     )
   )
 
-// With one declared field the name is left to the title, to save width.
+// Save row width when only one field is declared; its name stays in the tooltip.
 const FieldButtons = (
   h: H,
   fields: ReadonlyArray<Read.Field>,

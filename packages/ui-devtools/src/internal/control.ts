@@ -81,7 +81,7 @@ export const decodeToServer = Schema.decodeUnknownOption(
 
 export const metaName = "effect-ui-devtools"
 
-// Single-quoted, so a field name like owner's can't end the attribute.
+// Escape JSON for a single-quoted HTML attribute.
 export const metaTag = (content: object): string =>
   "<meta name=\"" + metaName + "\" content='" +
   JSON.stringify(content).replace(/&/g, "&amp;").replace(/'/g, "&#39;") +

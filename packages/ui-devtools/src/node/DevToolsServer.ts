@@ -19,7 +19,7 @@
  * | --- | --- |
  * | `list_sessions` | the sessions held, whether each is connected, controllable and paused |
  * | `list_instances` | the instances of a session, with the state of their Command runs |
- * | `list_entries` | entries as rows without payloads, with the declared `fields` |
+ * | `list_entries` | entry summaries with declared payload fields and optional field filtering |
  * | `count_entries` | entries by entry and message `_tag` |
  * | `get_entry` | one entry's Wire frame |
  * | `get_chain` | the causal chain of an entry |
@@ -117,9 +117,9 @@ export interface Options {
   /** How many closed sessions are kept, 5 by default. */
   readonly keep?: number | undefined
   /**
-   * Top-level message and Command args fields, such as `"commandId"`, that
-   * `list_entries` rows and the server's page show. Give pages the same
-   * `fields` in `DevTools.layer`, or use `DevToolsVite.plugin`.
+   * Top-level message and Command argument fields to show in `list_entries`
+   * and the server's viewer, for example `["commandId"]`. Configure app
+   * overlays with the same `fields` in `DevTools.layer`, or use `DevToolsVite.plugin`.
    */
   readonly fields?: ReadonlyArray<string> | undefined
 }
