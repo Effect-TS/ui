@@ -612,7 +612,10 @@ props, and keep richer row content in the closure, looked up by id. The
 closure runs whenever the consumer renders, so wrap a headless child in a
 small normal component when the consumer renders often. Test one with
 `Story.parts`, which needs no runtime, and render it in a `Scene`, which
-runs it with a stand-in view for the consumer.
+runs it with a stand-in view for the consumer. A `Scene` of the consumer
+renders the child's parts but doesn't run its `update`: test what the
+consumer does with the child's events with `childEmit`, and that clicking a
+part emits them in a `Play`.
 
 Name the closure's argument after the component, in camel case and in full:
 `view: (listbox) => listbox.trigger(h.button)` for a `Listbox`, and

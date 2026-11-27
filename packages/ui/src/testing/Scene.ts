@@ -12,7 +12,10 @@
  * and every step follows the acknowledgement rule described in `Steps`. An
  * interaction that no handler turned into a message must be followed by
  * `expectIgnored()`. A child is a leaf: `childEmit` stands in for what it
- * emits, and anything that crosses into one is a `Play`. A child step
+ * emits, and anything that crosses into one is a `Play`. A headless child's
+ * parts render, but its `update` doesn't run, so a click on a part only the
+ * child handles throws: test what the component does with the child's events
+ * with `childEmit`, and that the part emits them in a `Play`. A child step
  * names the child by its component, then by its key when it has one:
  * `childEmit(Listbox, event)`, `childEmit(TodoItem, "t1", event)`.
  *
@@ -344,8 +347,8 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never>
   ): this
   /**
    * Sets the Model the headless child of `child` without a key is expanded
-   * from, in place of its `init` Model. The scene never runs the child's
-   * `update`.
+   * from, in place of its `init` Model. It changes what the scene renders,
+   * not which handlers run: the scene never runs the child's `update`.
    *
    * **Details**
    *

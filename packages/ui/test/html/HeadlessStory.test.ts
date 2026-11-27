@@ -247,7 +247,7 @@ describe("headless components in a story", () => {
       // Only the Menu handles a click on its trigger, and a story doesn't run the Menu's update.
       assert.throws(
         () => scene.click("Actions"),
-        /only \/Toolbar\/Menu\[actions\] handles "click"/
+        /only \/Toolbar\/Menu\[actions\] handles "click" at text "Actions"\. .*test what Toolbar does with the child's events with childEmit, or the interaction itself in a Play\.$/
       )
     }))
 
