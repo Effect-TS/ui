@@ -5437,18 +5437,16 @@ describe("Runtime", () => {
             Locator.fire(container.children[0]!, "click")
             yield* Effect.promise(() => Promise.resolve())
             dispatcher.flush()
-            if (mode === "update") {
-              assert.strictEqual(seen.at(-1), 1, `update at yield ${at}`)
-            } else {
-              assert.strictEqual(
-                reader?.pollUnsafe()?._tag,
-                "Success",
-                `close at yield ${at}`
-              )
-            }
+            const last = seen.at(-1)
+            const exit = reader?.pollUnsafe()?._tag
             yield* Scope.close(scope, Exit.void)
             reader?.interruptUnsafe()
             dispatcher.flush()
+            if (mode === "update") {
+              assert.strictEqual(last, 1, `update at yield ${at}`)
+            } else {
+              assert.strictEqual(exit, "Success", `close at yield ${at}`)
+            }
             if (checks < at) break
           }
         }
