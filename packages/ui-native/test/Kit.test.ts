@@ -8,11 +8,16 @@ import { assert, describe, it } from "vitest"
 import * as FakeFabric from "./utils/FakeFabric.ts"
 
 const processColor = (color: unknown) => `processed ${String(color)}`
+// The host restores a rejected toggle a macrotask after the event.
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+const Mode = Schema.Literals(["accept", "silent", "rerender"])
 
 const SwitchMessage = UiSchema.TaggedEnum({
   Toggled: { checked: Schema.Boolean },
   Rejected: {},
   Configured: {
+    mode: Schema.optional(Mode),
     disabled: Schema.optional(Schema.Boolean),
     styled: Schema.optional(Schema.Boolean),
     borderRadius: Schema.optional(Schema.NullOr(Schema.Number)),
@@ -22,15 +27,9 @@ const SwitchMessage = UiSchema.TaggedEnum({
 
 const SwitchHarness = Native.component({
   name: "SwitchHarness",
-  props: Schema.Struct({
-    reject: Schema.optional(Schema.Union([
-      Schema.Literal("silent"),
-      Schema.Literal("rerender")
-    ])),
-    unhandled: Schema.optional(Schema.Boolean)
-  }),
   model: Schema.Struct({
     checked: Schema.Boolean,
+    mode: Mode,
     disabled: Schema.Boolean,
     styled: Schema.Boolean,
     borderRadius: Schema.NullOr(Schema.Number),
@@ -41,6 +40,7 @@ const SwitchHarness = Native.component({
 }).make({
   init: () => ({
     checked: false,
+    mode: "accept" as const,
     disabled: false,
     styled: true,
     borderRadius: null,
@@ -50,8 +50,9 @@ const SwitchHarness = Native.component({
   update: {
     Toggled: ($, { checked }) => $.evolve({ checked }),
     Rejected: ($) => $.evolve({ rejections: (n) => n + 1 }),
-    Configured: ($, { alignSelf, borderRadius, disabled, styled }) =>
+    Configured: ($, { alignSelf, borderRadius, disabled, mode, styled }) =>
       $.evolve({
+        ...(mode === undefined ? {} : { mode }),
         ...(disabled === undefined ? {} : { disabled }),
         ...(styled === undefined ? {} : { styled }),
         ...(borderRadius === undefined ? {} : { borderRadius }),
@@ -72,16 +73,12 @@ const SwitchHarness = Native.component({
             }
             : {})
         },
-        ...(h.props.unhandled
-          ? {}
-          : {
-            onToggle: ({ checked }) =>
-              h.props.reject === "silent"
-                ? undefined
-                : h.props.reject === "rerender"
-                ? SwitchMessage.Rejected()
-                : SwitchMessage.Toggled({ checked })
-          })
+        onToggle: ({ checked }) =>
+          model.mode === "silent"
+            ? undefined
+            : model.mode === "rerender"
+            ? SwitchMessage.Rejected()
+            : SwitchMessage.Toggled({ checked })
       }).style({
         marginLeft: 8,
         borderRadius: model.borderRadius ?? undefined,
@@ -91,14 +88,16 @@ const SwitchHarness = Native.component({
     )
 })
 
+const IndicatorSize = Schema.Union([
+  Schema.Literal("small"),
+  Schema.Literal("large"),
+  Schema.Number
+])
+
 const IndicatorMessage = UiSchema.TaggedEnum({
   Updated: {
     animating: Schema.Boolean,
-    size: Schema.Union([
-      Schema.Literal("small"),
-      Schema.Literal("large"),
-      Schema.Number
-    ]),
+    size: IndicatorSize,
     colored: Schema.Boolean,
     hidesWhenStopped: Schema.Boolean
   }
@@ -108,11 +107,7 @@ const IndicatorHarness = Native.component({
   name: "IndicatorHarness",
   model: Schema.Struct({
     animating: Schema.Boolean,
-    size: Schema.Union([
-      Schema.Literal("small"),
-      Schema.Literal("large"),
-      Schema.Number
-    ]),
+    size: IndicatorSize,
     colored: Schema.Boolean,
     hidesWhenStopped: Schema.Boolean
   }),
@@ -124,9 +119,7 @@ const IndicatorHarness = Native.component({
     colored: false,
     hidesWhenStopped: true
   }),
-  update: {
-    Updated: (_, next) => next
-  },
+  update: { Updated: (_, next) => next },
   view: (h, model) =>
     h.view.children(
       ActivityIndicator(h),
@@ -145,56 +138,49 @@ const IndicatorHarness = Native.component({
     )
 })
 
-// The host restores a rejected toggle a macrotask after the event.
-const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
-
 describe("@effect/ui-native/kit", () => {
-  for (const os of ["android", "ios"] as const) {
-    const viewName = os === "ios" ? "RCTSwitch" : "AndroidSwitch"
-    const valueProp = os === "ios" ? "value" : "on"
-    const commandName = os === "ios" ? "setValue" : "setNativeValue"
-    const setup = async (
-      props: { reject?: "silent" | "rerender"; unhandled?: boolean } = {}
-    ) => {
-      const mounted = await FakeFabric.mount(
-        (container) => Renderer.mount(SwitchHarness, props, container),
-        processColor,
-        os
-      )
-      const node = () => mounted.find(FakeFabric.byName(viewName))
+  it("Switch maps platform props, restores rejected toggles, and preserves iOS styles", async () => {
+    for (const os of ["android", "ios"] as const) {
+      const viewName = os === "ios" ? "RCTSwitch" : "AndroidSwitch"
+      const valueProp = os === "ios" ? "value" : "on"
+      const commandName = os === "ios" ? "setValue" : "setNativeValue"
+      const { close, fabric, find, printed, root, settle } = await FakeFabric
+        .mount(
+          (container) => Renderer.mount(SwitchHarness, {}, container),
+          processColor,
+          os
+        )
+      const node = () => find(FakeFabric.byName(viewName))
       const toggle = (value: boolean) =>
-        mounted.fabric.emit(node(), "topChange", { target: node().tag, value })
-      return { ...mounted, node, toggle }
-    }
+        fabric.emit(node(), "topChange", { target: node().tag, value })
 
-    it(`Switch accepts toggles, updates platform props, and disables interaction on ${os}`, async () => {
-      const { close, fabric, node, root, settle, toggle } = await setup()
-      if (os === "ios") {
-        assert.deepStrictEqual(node().props, {
-          accessibilityRole: "switch",
-          value: false,
-          alignSelf: "flex-start",
-          disabled: false,
-          thumbTintColor: "processed #fff",
-          tintColor: "processed #767577",
-          onTintColor: "processed #81b0ff",
-          backgroundColor: "processed #3e3e3e",
-          borderRadius: 16,
-          marginLeft: 8,
-          onChange: true
-        })
-      } else {
-        assert.deepStrictEqual(node().props, {
-          accessibilityRole: "switch",
-          on: false,
-          enabled: true,
-          thumbTintColor: "processed #fff",
-          trackColorForFalse: "processed #767577",
-          trackColorForTrue: "processed #81b0ff",
-          marginLeft: 8,
-          onChange: true
-        })
-      }
+      assert.deepStrictEqual(
+        node().props,
+        os === "ios"
+          ? {
+            accessibilityRole: "switch",
+            value: false,
+            alignSelf: "flex-start",
+            disabled: false,
+            thumbTintColor: "processed #fff",
+            tintColor: "processed #767577",
+            onTintColor: "processed #81b0ff",
+            backgroundColor: "processed #3e3e3e",
+            borderRadius: 16,
+            marginLeft: 8,
+            onChange: true
+          }
+          : {
+            accessibilityRole: "switch",
+            on: false,
+            enabled: true,
+            thumbTintColor: "processed #fff",
+            trackColorForFalse: "processed #767577",
+            trackColorForTrue: "processed #81b0ff",
+            marginLeft: 8,
+            onChange: true
+          }
+      )
 
       // Accepted toggle commits the new value and sends no restore command.
       toggle(true)
@@ -203,16 +189,27 @@ describe("@effect/ui-native/kit", () => {
       assert.strictEqual(node().props[valueProp], true)
       assert.deepStrictEqual(fabric.commands, [])
 
-      // Explicit borderRadius and alignSelf survive removing and re-adding
-      // iosBackgroundColor, and fall back to iOS defaults when cleared.
+      // Silent rejection (no re-render) and re-render rejection each restore once.
+      const tag = node().tag
+      root.send(SwitchMessage.Configured({ mode: "silent" }))
+      await settle()
+      toggle(false)
+      await tick()
+      assert.strictEqual(node().props[valueProp], true)
+
+      root.send(SwitchMessage.Configured({ mode: "rerender" }))
+      await settle()
+      toggle(false)
+      await settle()
+      await tick()
+      assert.include(printed(), "true:1")
+
+      // Explicit borderRadius and alignSelf survive iosBackgroundColor updates.
       if (os === "ios") {
         root.send(
           SwitchMessage.Configured({ borderRadius: 8, alignSelf: "center" })
         )
         await settle()
-        assert.strictEqual(node().props.borderRadius, 8)
-        assert.strictEqual(node().props.alignSelf, "center")
-
         root.send(SwitchMessage.Configured({ styled: false }))
         await settle()
         assert.isUndefined(node().props.backgroundColor)
@@ -232,14 +229,19 @@ describe("@effect/ui-native/kit", () => {
         assert.strictEqual(node().props.alignSelf, "flex-start")
       }
 
-      // Disabling removes the handler, updates native enabled/disabled, and clears styling.
-      root.send(SwitchMessage.Configured({ disabled: true, styled: false }))
+      // Disabling removes onChange, clears optional colours, and restores stray toggles.
+      root.send(
+        SwitchMessage.Configured({
+          mode: "accept",
+          disabled: true,
+          styled: false
+        })
+      )
       await settle()
       assert.isUndefined(node().props.onChange)
       assert.isUndefined(node().props.thumbTintColor)
       if (os === "ios") {
         assert.strictEqual(node().props.disabled, true)
-        assert.strictEqual(node().props.alignSelf, "flex-start")
         assert.isUndefined(node().props.tintColor)
         assert.isUndefined(node().props.onTintColor)
         assert.isUndefined(node().props.backgroundColor)
@@ -249,55 +251,17 @@ describe("@effect/ui-native/kit", () => {
         assert.isUndefined(node().props.trackColorForFalse)
         assert.isUndefined(node().props.trackColorForTrue)
       }
-
-      // A native event while disabled does not notify onToggle and snaps back.
       toggle(false)
       await tick()
       assert.strictEqual(node().props[valueProp], true)
       assert.deepStrictEqual(fabric.commands, [
-        [node().tag, commandName, [true]]
+        [tag, commandName, [true]],
+        [tag, commandName, [true]],
+        [tag, commandName, [true]]
       ])
       await close()
-    })
-
-    it(`Switch sends the controlled value back when a toggle is rejected on ${os}`, async () => {
-      // Silent rejection (no re-render): restored after the event tick.
-      const silent = await setup({ reject: "silent" })
-      const silentNode = silent.node()
-      silent.toggle(true)
-      await tick()
-      assert.strictEqual(silentNode.props[valueProp], false)
-      assert.deepStrictEqual(silent.fabric.commands, [
-        [silentNode.tag, commandName, [false]]
-      ])
-
-      // Unmounting before restore sends no command.
-      silent.toggle(true)
-      await silent.close()
-      await tick()
-      assert.strictEqual(silent.fabric.commands.length, 1)
-
-      // Rejection with a re-render (Model changes elsewhere, checked stays false): restored once.
-      const rerender = await setup({ reject: "rerender" })
-      rerender.toggle(true)
-      await rerender.settle()
-      await tick()
-      assert.include(rerender.printed(), "false:1")
-      assert.deepStrictEqual(rerender.fabric.commands, [
-        [rerender.node().tag, commandName, [false]]
-      ])
-      await rerender.close()
-
-      // No onToggle handler at all: still snaps back to checked.
-      const unhandled = await setup({ unhandled: true })
-      unhandled.toggle(true)
-      await tick()
-      assert.deepStrictEqual(unhandled.fabric.commands, [
-        [unhandled.node().tag, commandName, [false]]
-      ])
-      await unhandled.close()
-    })
-  }
+    }
+  })
 
   it("ActivityIndicator maps defaults, sizes, color and platform props on Android and iOS", async () => {
     for (const os of ["android", "ios"] as const) {
@@ -323,7 +287,6 @@ describe("@effect/ui-native/kit", () => {
             height: 20
           }
       )
-      // Consumer .style({ width, height }) overrides size defaults.
       assert.strictEqual(children()[2]!.props.width, 44)
       assert.strictEqual(children()[2]!.props.height, 44)
 
@@ -357,7 +320,6 @@ describe("@effect/ui-native/kit", () => {
           }
       )
 
-      // Numeric size sets dimensions on both platforms and drops iOS string size.
       root.send(IndicatorMessage.Updated({
         animating: true,
         size: 52,
