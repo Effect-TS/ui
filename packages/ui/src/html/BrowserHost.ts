@@ -378,16 +378,24 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
 export const layer = (options?: {
   readonly document?: Document | undefined
 }): Layer.Layer<Renderer.Renderer | Html.Host> =>
-  Layer.effectContext(Effect.gen(function*() {
-    const document = options?.document ?? globalThis.document
-    const { host, held } = build(document)
-    yield* Effect.addFinalizer(() => Effect.sync(host.dispose))
-    return Context.add(
-      yield* documentServices.make(document, htmlHost, held),
-      Renderer.Renderer,
-      { host }
+  Layer.effectContext(
+    Effect.map(
+      documentOf(options?.document ?? globalThis.document),
+      ([, context]) => context
     )
-  }))
+  )
+
+// What every mount on one document can share: the host and the document's services.
+const documentOf = Effect.fnUntraced(function*(document: Document) {
+  const built = build(document)
+  yield* Effect.addFinalizer(() => Effect.sync(built.host.dispose))
+  const context = Context.add(
+    yield* documentServices.make(document, htmlHost, built.held),
+    Renderer.Renderer,
+    { host: built.host }
+  )
+  return [built, context] as const
+})
 
 /**
  * Passes when a root shows HTML or is host-neutral, and otherwise names the
@@ -577,38 +585,12 @@ export const mountRoot = (
   props: unknown,
   container: globalThis.Element,
   options: MountOptions<any, any, any> | undefined,
-  hydrate: hydrateRun.Hydrating | undefined
+  hydrate: hydrateRun.Hydrating | undefined,
+  shared?: Effect.Success<ReturnType<typeof documentOf>>
 ): Effect.Effect<Renderer.Root<any, any, any>, never, Scope.Scope> =>
-  Effect.flatMap(
-    documentOf(container.ownerDocument),
-    (shared) => mountIn(shared, component, props, container, options, hydrate)
-  )
-
-// What every mount on one document can share: the host and the document's services.
-const documentOf = Effect.fnUntraced(function*(document: Document) {
-  const built = build(document)
-  yield* Effect.addFinalizer(() => Effect.sync(built.host.dispose))
-  const context = Context.add(
-    yield* documentServices.make(document, htmlHost, built.held),
-    Renderer.Renderer,
-    { host: built.host }
-  )
-  return { ...built, context }
-})
-
-const mountIn = (
-  { context, raw, make, hold }: Effect.Success<ReturnType<typeof documentOf>>,
-  component: Component.Any,
-  props: unknown,
-  container: globalThis.Element,
-  options: MountOptions<any, any, any> | undefined,
-  hydrate: hydrateRun.Hydrating | undefined
-): Effect.Effect<
-  runtime.Root & Renderer.Root<any, any, any>,
-  never,
-  Scope.Scope
-> =>
   Effect.gen(function*() {
+    const [{ raw, make, hold }, context] = shared ??
+      (yield* documentOf(container.ownerDocument))
     const outer = yield* Effect.context<Scope.Scope>()
     const attached = hot.devTools(container)
     const hotSession = hot.open(component, container, options?.key)
@@ -638,6 +620,9 @@ const mountIn = (
       ),
       mountContext
     )
+    // A `defineElement` instance, which passes its Layer's `shared`, isn't offered to `Controllables`:
+    // a paused copy of its element would mount itself.
+    if (shared !== undefined) return root
     const controlled = controllable(
       component,
       root,
@@ -705,36 +690,6 @@ export interface DefineElementOptions<
   readonly document?: Document | undefined
 }
 
-interface Hosted extends HTMLElement {
-  "~set": Record<string, unknown>
-  "~seen": Record<string, string | null>
-  "~root": Renderer.Root<any, any, any> | undefined
-  "~close": (() => void) | undefined
-  "~shadow": ShadowRoot | undefined
-}
-
-interface Definition {
-  readonly props: Record<string, unknown>
-  readonly connect: (element: Hosted) => void
-  readonly attribute: (
-    element: Hosted,
-    name: string,
-    value: string | null
-  ) => void
-  readonly update: (element: Hosted) => void
-}
-
-// A tag stays registered after its Layer is released, since `customElements` can't undefine it, so the
-// next Layer for the tag takes it over.
-interface Slot {
-  active: Definition | undefined
-  readonly observed: string
-  readonly connected: Set<Hosted>
-  readonly proto: object
-}
-
-const slots = new WeakMap<CustomElementRegistry, Map<string, Slot>>()
-
 /**
  * A Layer that defines `tag` as a custom element showing `component`, for
  * as long as the Layer is built. It provides no service.
@@ -766,10 +721,9 @@ const slots = new WeakMap<CustomElementRegistry, Map<string, Slot>>()
  *
  * Moving an element within the document keeps its root. Removing it closes
  * its Scope a microtask later, and releasing the Layer closes every
- * instance's. The tag stays defined: its elements show nothing until a Layer
- * for the tag is built again, which must have the same `attributes`.
- * Building a second Layer for a tag while one is built, or for a tag
- * something else defined, is a defect.
+ * instance's. The tag stays defined, as `customElements` can't undefine
+ * it, and its elements show nothing from then on. Building a Layer for a tag
+ * that is already defined is a defect. DevTools can't pause an instance.
  *
  * **Example** (Publishing a form as a web component)
  *
@@ -820,7 +774,11 @@ export const defineElement = <
   Layer.effectDiscard(Effect.gen(function*() {
     const document = options.document ?? globalThis.document
     const view = document.defaultView!
-    const registry = view.customElements
+    if (view.customElements.get(tag) !== undefined) {
+      return yield* Effect.die(
+        new Error(`BrowserHost.defineElement: <${tag}> is already defined`)
+      )
+    }
     const attributes = (options.attributes ?? {}) as Record<
       string,
       Schema.Codec<unknown, string>
@@ -836,45 +794,100 @@ export const defineElement = <
       )
     }
     const observed = [...decoders.keys()]
-    let tags = slots.get(registry)
-    if (tags === undefined) slots.set(registry, tags = new Map())
-    let slot = tags.get(tag)
-    if (
-      slot === undefined
-        ? registry.get(tag) !== undefined
-        : slot.active !== undefined || slot.observed !== observed.join()
-    ) {
-      return yield* Effect.die(
-        new Error(
-          slot?.active === undefined && slot !== undefined
-            ? `BrowserHost.defineElement: <${tag}> was defined with other attributes, which can't change without a reload`
-            : `BrowserHost.defineElement: <${tag}> is already defined`
-        )
-      )
-    }
+    const props = options.props as Record<string, unknown>
+    const keys = new Set([...Object.keys(props), ...Object.keys(attributes)])
     const shared = yield* documentOf(document)
     const context = yield* Effect.context<Scope.Scope>()
     const scope = Context.get(context, Scope.Scope)
+    let live = true
+    yield* Effect.addFinalizer(() => Effect.sync(() => live = false))
     const shadow = options.shadow === true ? {} : options.shadow || undefined
     const sheets = (shadow?.styles ?? []).map((css) => {
       const sheet = new view.CSSStyleSheet()
       sheet.replaceSync(css)
       return sheet
     })
-    const props = options.props as Record<string, unknown>
-    const keys = new Set([...Object.keys(props), ...Object.keys(attributes)])
-    // Each instance's root path is keyed, so instances' element ids don't collide.
+    // Each instance's root is keyed, so instances' element ids don't collide.
     let mounts = 0
-    const propsOf = (element: Hosted) => ({ ...props, ...element["~set"] })
-    const update = (element: Hosted) =>
-      element["~root"]?.setProps(propsOf(element))
-    const active: Definition = {
-      props,
-      update,
-      attribute: (element, name, value) => {
+    class Defined extends (view.HTMLElement as typeof HTMLElement) {
+      static observedAttributes = observed
+      "~set": Record<string, unknown> = {}
+      "~seen": Record<string, string | null> = {}
+      "~root": Renderer.Root<any, any, any> | undefined
+      "~scope": Scope.Closeable | undefined
+      readonly "~shadow" = shadow &&
+        Object.assign(this.attachShadow({ mode: shadow.mode ?? "open" }), {
+          adoptedStyleSheets: sheets
+        })
+      "~props"() {
+        return { ...props, ...this["~set"] }
+      }
+      "~update"() {
+        if (live) this["~root"]?.setProps(this["~props"]())
+      }
+      connectedCallback() {
+        if (this["~root"] !== undefined || !live) return
+        // happy-dom's upgrade doesn't report the attributes an element already has, which browsers do.
+        for (const name of observed) {
+          const value = this.getAttribute(name)
+          if (value !== (this["~seen"][name] ?? null)) {
+            this.attributeChangedCallback(name, null, value)
+          }
+        }
+        // Properties set before the upgrade shadow the accessors, and are applied after the attributes.
+        for (const key of keys) {
+          if (!Object.hasOwn(this, key)) continue
+          const value = (this as any)[key]
+          delete (this as any)[key]
+          ;(this as any)[key] = value
+        }
+        const container = this["~shadow"] || this
+        container.textContent = ""
+        const instance = this["~scope"] = Scope.forkUnsafe(scope, "sequential")
+        this["~root"] = Effect.runSyncWith(
+          Context.add(context, Scope.Scope, instance)
+        )(
+          mountRoot(
+            component as unknown as Component.Any,
+            this["~props"](),
+            container as globalThis.Element,
+            {
+              head: false,
+              key: String(mounts++),
+              fallback: options.fallback,
+              query: options.query,
+              onEmit: (event: Events) =>
+                this.dispatchEvent(
+                  new view.CustomEvent(event._tag.toLowerCase(), {
+                    detail: event,
+                    bubbles: true,
+                    composed: true
+                  })
+                )
+            },
+            undefined,
+            shared
+          )
+        )
+      }
+      // With `moveBefore()`, a move calls only this, so the root stays.
+      connectedMoveCallback() {}
+      disconnectedCallback() {
+        queueMicrotask(() => {
+          const instance = this["~scope"]
+          if (this.isConnected || instance === undefined) return
+          this["~root"] = this["~scope"] = undefined
+          Effect.runFork(Scope.close(instance, Exit.void))
+        })
+      }
+      attributeChangedCallback(
+        name: string,
+        _: unknown,
+        value: string | null
+      ) {
         const [key, decode] = decoders.get(name)!
-        element["~seen"][name] = value
-        if (value === null) delete element["~set"][key]
+        this["~seen"][name] = value
+        if (value === null) delete this["~set"][key]
         else {
           const exit = decode(value)
           if (exit._tag === "Failure") {
@@ -884,135 +897,26 @@ export const defineElement = <
             )
             return
           }
-          element["~set"][key] = exit.value
+          this["~set"][key] = exit.value
         }
-        update(element)
-      },
-      connect: (element) => {
-        if (element["~close"] !== undefined || copies.has(element)) return
-        // Attributes that changed while no Layer was built, or that an upgrade didn't report, then
-        // properties set before the upgrade.
-        for (const name of observed) {
-          const value = element.getAttribute(name)
-          if (value !== (element["~seen"][name] ?? null)) {
-            active.attribute(element, name, value)
-          }
-        }
-        for (const key of keys) {
-          if (!Object.hasOwn(element, key)) continue
-          const value = (element as any)[key]
-          delete (element as any)[key]
-          ;(element as any)[key] = value
-        }
-        let container: globalThis.Element | ShadowRoot = element
-        if (shadow !== undefined) {
-          container = element["~shadow"] ??= element.attachShadow({
-            mode: shadow.mode ?? "open"
-          })
-          container.adoptedStyleSheets = sheets
-        }
-        container.textContent = ""
-        const instance = Scope.forkUnsafe(scope, "sequential")
-        element["~root"] = Effect.runSyncWith(context)(
-          mountIn(
-            shared,
-            component as unknown as Component.Any,
-            propsOf(element),
-            container as globalThis.Element,
-            {
-              head: false,
-              key: String(mounts++),
-              fallback: options.fallback,
-              query: options.query,
-              onEmit: (event: Events) =>
-                element.dispatchEvent(
-                  new view.CustomEvent(event._tag.toLowerCase(), {
-                    detail: event,
-                    bubbles: true,
-                    composed: true
-                  })
-                )
-            },
-            undefined
-          ).pipe(Effect.provideService(Scope.Scope, instance))
-        )
-        element["~close"] = () => {
-          element["~root"] = element["~close"] = undefined
-          Effect.runFork(Scope.close(instance, Exit.void))
-        }
+        this["~update"]()
       }
     }
-    const fresh = slot === undefined
-    if (slot === undefined) {
-      const connected = new Set<Hosted>()
-      const Element = class extends (view.HTMLElement as typeof HTMLElement) {
-        static observedAttributes = observed
-        "~set": Record<string, unknown> = {}
-        "~seen": Record<string, string | null> = {}
-        "~root": Hosted["~root"]
-        "~close": Hosted["~close"]
-        "~shadow": Hosted["~shadow"]
-        connectedCallback() {
-          connected.add(this)
-          slot!.active?.connect(this)
-        }
-        // With `moveBefore()`, a move calls only this, so the root stays.
-        connectedMoveCallback() {}
-        disconnectedCallback() {
-          queueMicrotask(() => {
-            if (this.isConnected) return
-            connected.delete(this)
-            this["~close"]?.()
-          })
-        }
-        attributeChangedCallback(
-          name: string,
-          _: unknown,
-          value: string | null
-        ) {
-          slot!.active?.attribute(this, name, value)
-        }
-      }
-      slot = {
-        active: undefined,
-        observed: observed.join(),
-        connected,
-        proto: Element.prototype
-      }
-      tags.set(tag, slot)
-    }
-    const current = slot
-    current.active = active
-    yield* Effect.addFinalizer(() =>
-      Effect.sync(() => {
-        current.active = undefined
-        for (const element of current.connected) {
-          element["~root"] = element["~close"] = undefined
-        }
-      })
-    )
     for (const key of keys) {
-      Object.defineProperty(current.proto, key, {
+      Object.defineProperty(Defined.prototype, key, {
         configurable: true,
-        get(this: Hosted) {
+        get(this: Defined) {
           return Object.hasOwn(this["~set"], key)
             ? this["~set"][key]
-            : current.active?.props[key]
+            : props[key]
         },
-        set(this: Hosted, value: unknown) {
+        set(this: Defined, value: unknown) {
           this["~set"][key] = value
-          current.active?.update(this)
+          this["~update"]()
         }
       })
     }
-    if (fresh) {
-      registry.define(
-        tag,
-        current.proto.constructor as CustomElementConstructor
-      )
-      return
-    }
-    for (const element of current.connected) active.connect(element)
+    view.customElements.define(tag, Defined)
   })) as any
 
 /**
@@ -1241,9 +1145,6 @@ const painting = <
   }
 })
 
-// Paused copies of a container. A copy of a `defineElement` element doesn't mount its component.
-const copies = new WeakSet<globalThis.Node>()
-
 const controllable = (
   component: Component.Any,
   root: runtime.Root,
@@ -1254,13 +1155,7 @@ const controllable = (
   release: () => void
 ): Controllable => {
   const owner = Context.get(context, Scope.Scope)
-  // A root in a shadow root is hidden and copied with its host element, and painted into the copy's own
-  // shadow root.
-  const shadow = container.nodeType === 11
-    ? container as unknown as ShadowRoot
-    : undefined
-  const frame = (shadow?.host ?? container) as HTMLElement
-  const style = frame.style
+  const style = (container as HTMLElement).style
   let painted:
     | { readonly scope: Scope.Closeable; readonly copy: HTMLElement }
     | undefined
@@ -1306,21 +1201,14 @@ const controllable = (
     pause: (state) =>
       Effect.uninterruptible(Effect.gen(function*() {
         const scope = yield* Scope.fork(owner, "sequential")
-        const copy = frame.cloneNode(false) as HTMLElement
-        copies.add(copy)
+        const copy = container.cloneNode(false) as HTMLElement
         show(copy.style, hide())
         copy.setAttribute("inert", "")
-        ;(painted?.copy ?? frame).after(copy)
-        let target: globalThis.Node = copy
-        if (shadow !== undefined) {
-          const inner = copy.attachShadow({ mode: shadow.mode })
-          inner.adoptedStyleSheets = shadow.adoptedStyleSheets
-          target = inner
-        }
+        ;(painted?.copy ?? container).after(copy)
         const result = yield* runtime.paintDom(
           component,
           root.instance.props,
-          target,
+          copy,
           state,
           makePaintDom,
           [Html.name],
