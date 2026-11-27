@@ -37,8 +37,18 @@ class Running implements Kernel.Transitions {
     }
     return false
   }
+  quiet(f: () => void): () => void {
+    return () => {
+      this.stilled++
+      try {
+        f()
+      } finally {
+        this.stilled--
+      }
+    }
+  }
   wait(f: () => void): void {
-    this.waiting.push(f)
+    this.waiting.push(this.stilled > 0 ? this.quiet(f) : f)
   }
   hold(): boolean {
     const types = this.types
@@ -61,19 +71,7 @@ class Running implements Kernel.Transitions {
     this.waiting = []
     for (let index = 0; index < waiting.length; index++) {
       const f = waiting[index]!
-      defer(
-        tree,
-        quiet
-          ? () => {
-            this.stilled++
-            try {
-              f()
-            } finally {
-              this.stilled--
-            }
-          }
-          : f
-      )
+      defer(tree, quiet ? this.quiet(f) : f)
     }
   }
   resume(): void {

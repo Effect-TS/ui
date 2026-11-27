@@ -381,7 +381,7 @@ describe("view transitions", { concurrent: false }, () => {
       ])
     }).pipe(Effect.scoped))
 
-  it.effect("a child requesting a transition while a parent transition is pending does not animate a flagged pop", () =>
+  it.effect("a child requesting a transition while a parent transition is pending or holding does not animate a flagged pop", () =>
     Effect.gen(function*() {
       const transitions = yield* fakeTransitions()
       window.history.replaceState(null, "", "/")
@@ -412,7 +412,9 @@ describe("view transitions", { concurrent: false }, () => {
               "child-like"
             ]),
           ChangedRoute: ($, { route }) =>
-            $.evolve({ route }).viewTransition(["child-pop"])
+            route._tag === "Grid"
+              ? $.evolve({ route }).viewTransition(["child-pop"])
+              : $.evolve({ route })
         },
         subscriptions: ({ model }) => [
           Router.subscription(
@@ -459,6 +461,8 @@ describe("view transitions", { concurrent: false }, () => {
             h.button.on("click", Message.ClickedOpen()).children("Open"),
             h.button.on("click", Message.ClickedLayout({ layout: "list" }))
               .children("List"),
+            h.button.on("click", Message.ClickedLayout({ layout: "grid" }))
+              .children("Grid"),
             AnimatedChild(h, { props: { route: model.route } })
           )
       })
@@ -482,6 +486,7 @@ describe("view transitions", { concurrent: false }, () => {
       }
       transitions.started[0]!.update()
       runTasks()
+      // Parent transition pending (not started): pre-queued + route-delivered child requests stay still.
       HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "List" }))
       HtmlLocator.click(
         HtmlLocator.getByRole(app, "button", { name: "Detail 0" })
@@ -491,11 +496,35 @@ describe("view transitions", { concurrent: false }, () => {
       expect({
         parent: app.querySelector("p")!.textContent,
         child: app.querySelector("main > button:last-child")!.textContent,
-        started: transitions.started.length
+        started: transitions.started.map((started) => started.types)
       }).toEqual({
         parent: "Grid list",
         child: "Grid 1",
-        started: 1
+        started: [["to-detail"]]
+      })
+      // Parent transition already started (holding): child waiter queued during Back stays still on resume.
+      window.history.forward()
+      runTasks()
+      transitions.started[1]!.update()
+      runTasks()
+      HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Grid" }))
+      runTasks()
+      expect(transitions.started.map((started) => started.types)).toEqual([
+        ["to-detail"],
+        ["to-detail"],
+        ["layout-change"]
+      ])
+      yield* flaggedBack
+      transitions.started[2]!.update()
+      runTasks()
+      expect({
+        parent: app.querySelector("p")!.textContent,
+        child: app.querySelector("main > button:last-child")!.textContent,
+        started: transitions.started.map((started) => started.types)
+      }).toEqual({
+        parent: "Grid grid",
+        child: "Grid 1",
+        started: [["to-detail"], ["to-detail"], ["layout-change"]]
       })
     }).pipe(Effect.scoped))
 
