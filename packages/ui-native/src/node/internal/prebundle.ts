@@ -1,3 +1,4 @@
+import * as Fs from "node:fs"
 import * as Path from "node:path"
 import type { MetroConfig, ResolveRequest } from "../NativeMetro.ts"
 
@@ -60,6 +61,30 @@ const empty = "\0@effect/ui-native/empty"
 const stripScaleSuffix = (filePath: string): string =>
   filePath.replace(/@[\d.]+x(?=\.[^./\\]+$)/, "")
 
+// Resolves a bare package asset (e.g. `pkg/icon.png` or `@scope/pkg/icon.png`)
+// relative to its importer so scale-only assets in nested node_modules keep
+// their package location when Metro resolves them from the cache directory.
+const resolvePackageAsset = (
+  specifier: string,
+  importer: string
+): string | undefined => {
+  const parts = specifier.split("/")
+  const pkgLen = specifier[0] === "@" ? 2 : 1
+  if (parts.length <= pkgLen) return undefined
+  const pkgName = parts.slice(0, pkgLen).join("/")
+  const subpath = parts.slice(pkgLen).join("/")
+  let dir = Path.dirname(importer)
+  while (true) {
+    const candidate = Path.join(dir, "node_modules", pkgName)
+    if (Fs.existsSync(candidate)) {
+      return Path.join(Fs.realpathSync(candidate), subpath)
+    }
+    const parent = Path.dirname(dir)
+    if (parent === dir) return undefined
+    dir = parent
+  }
+}
+
 /**
  * Pre-bundles `entry` for `platform` under the project's
  * `node_modules/.cache`. Returns the file written, and the file `entry`
@@ -109,11 +134,7 @@ export const prebundle = async (
       name: "@effect/ui-native:metro",
       enforce: "pre",
       async resolveId(source, importer, options) {
-        if (
-          importer === undefined || source[0] === "\0" || isExternal(source)
-        ) {
-          return null
-        }
+        if (importer === undefined || source[0] === "\0") return null
         // Metro registers every scale of an asset left to it by absolute
         // path, and emits the files.
         const leave = (id: string) => {
@@ -123,6 +144,10 @@ export const prebundle = async (
             )
           }
           return { id, external: "absolute" as const }
+        }
+        if (isExternal(source)) {
+          if (isAsset(source) && options.kind === "require-call") leave(source)
+          return { id: source, external: true }
         }
         const delegated = new Set<Delegated>()
         const found = resolveRequest(
@@ -161,7 +186,9 @@ export const prebundle = async (
               moduleName[0] === "." || Path.isAbsolute(moduleName)
                 ? Path.resolve(Path.dirname(origin), moduleName)
                 : (await this.resolve(moduleName, origin, { skipSelf: true }))
-                  ?.id ?? moduleName
+                  ?.id ??
+                  resolvePackageAsset(moduleName, origin) ??
+                  moduleName
             )
           }
           if (moduleName === source && origin === importer) return null
@@ -209,8 +236,7 @@ export const prebundle = async (
         // its interop, as it does for the rest of the app.
         formats: ["es"],
         fileName: () => file
-      },
-      rollupOptions: { external: isExternal }
+      }
     }
   })
   const output = Array.isArray(result) ? result[0] : result

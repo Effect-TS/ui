@@ -196,14 +196,27 @@ NativeApp.register(NativeApp.mount(App, {}))
   it(
     "leaves asset imports external by absolute path, handles assetFiles, and rejects require of assets",
     async () => {
-      // Scale-only asset (no 1x file on disk) plus a resolveRequest assetFiles alias.
+      // Scale-only relative asset, nested scale-only package asset, and a resolveRequest assetFiles alias.
       write("src/mark@2x.png", "png-2x")
       write("src/badge@2x.png", "png-badge")
+      write(
+        "node_modules/nested-consumer/package.json",
+        JSON.stringify({ name: "nested-consumer", main: "index.js" })
+      )
+      write(
+        "node_modules/nested-consumer/index.js",
+        `import icon from "private-images/icon.png"\nexport default icon\n`
+      )
+      write(
+        "node_modules/nested-consumer/node_modules/private-images/icon@2x.png",
+        "png-nested-2x"
+      )
       write(
         "src/assets-entry.ts",
         `import mark from "./mark.png"
 import badge from "./badge"
-export default [mark, badge]
+import nestedIcon from "nested-consumer"
+export default [mark, badge, nestedIcon]
 `
       )
       const config = await NativeMetro.withEffectUi({
@@ -223,22 +236,31 @@ export default [mark, badge]
       const bundle = readBundle(config, "src/assets-entry.ts", "android")
       assert.include(bundle, Path.join(root, "src/mark.png"))
       assert.include(bundle, Path.join(root, "src/badge.png"))
+      assert.include(
+        bundle,
+        Path.join(
+          root,
+          "node_modules/nested-consumer/node_modules/private-images/icon.png"
+        )
+      )
       assert.notInclude(bundle, "data:image")
 
-      write(
-        "src/require-asset.ts",
-        `declare const require: (id: string) => number
-export default require("./mark.png")
+      for (const target of ["./mark.png", "expo-icons/mark.png"]) {
+        write(
+          "src/require-asset.ts",
+          `declare const require: (id: string) => number
+export default require("${target}")
 `
-      )
-      const error = await NativeMetro.withEffectUi({
-        projectRoot: root,
-        resolver: { sourceExts: ["ts", "js"], assetExts: ["png"] }
-      }, { entry: "src/require-asset.ts", platforms: ["android"] }).then(
-        () => undefined,
-        (err: Error) => err
-      )
-      assert.include(error?.message, "static `import`")
+        )
+        const error = await NativeMetro.withEffectUi({
+          projectRoot: root,
+          resolver: { sourceExts: ["ts", "js"], assetExts: ["png"] }
+        }, { entry: "src/require-asset.ts", platforms: ["android"] }).then(
+          () => undefined,
+          (err: Error) => err
+        )
+        assert.include(error?.message, "static `import`")
+      }
     },
     30_000
   )

@@ -43,7 +43,17 @@ vi.mock("react-native/Libraries/TurboModule/TurboModuleRegistry", () => ({
 }))
 
 const Message = UiSchema.TaggedEnum({
-  SetMode: { mode: Schema.Literals(["asset", "inline", "clear", "noEvents"]) },
+  SetMode: {
+    mode: Schema.Literals([
+      "asset",
+      "inline",
+      "undefKey",
+      "acceptHeader",
+      "multi",
+      "clear",
+      "noEvents"
+    ])
+  },
   Bump: {},
   Loaded: { width: Schema.Number, height: Schema.Number },
   Progressed: { loaded: Schema.Number, total: Schema.Number },
@@ -65,11 +75,26 @@ describe("Image and ImageBackground", () => {
       name: "mark",
       type: "png"
     })
+    const unsized = env.registerAsset({
+      httpServerLocation: "/assets/src/assets",
+      scales: [1],
+      hash: "u1",
+      name: "vec",
+      type: "xml"
+    })
 
     const Screen = Native.component({
       name: "Screen",
       model: Schema.Struct({
-        mode: Schema.Literals(["asset", "inline", "clear", "noEvents"]),
+        mode: Schema.Literals([
+          "asset",
+          "inline",
+          "undefKey",
+          "acceptHeader",
+          "multi",
+          "clear",
+          "noEvents"
+        ]),
         tick: Schema.Number,
         events: Schema.Array(Schema.String)
       }),
@@ -110,7 +135,25 @@ describe("Image and ImageBackground", () => {
               uri: "https://example.com/a.png",
               headers: { Authorization: "Bearer tok" }
             }
-          }).style({ resizeMode: "contain" })
+          }).style({ resizeMode: "contain", overflow: "visible" })
+          : model.mode === "undefKey"
+          ? Image(h, {
+            source: { uri: "https://example.com/b.png", width: undefined }
+          })
+          : model.mode === "acceptHeader"
+          ? Image(h, {
+            source: {
+              uri: "https://example.com/b.png",
+              headers: { Accept: "image/webp" }
+            }
+          })
+          : model.mode === "multi"
+          ? Image(h, {
+            source: [
+              unsized,
+              { uri: "https://example.com/hi.png", width: 200, height: 100 }
+            ]
+          })
           : model.mode === "clear"
           ? Image(h, { source: "https://example.com/b.png" })
           : Image(h, { source: "https://example.com/c.png" }).on(
@@ -172,6 +215,7 @@ describe("Image and ImageBackground", () => {
     }])
     assert.deepStrictEqual(img().props.headers, { Authorization: "Bearer tok" })
     assert.strictEqual(img().props.resizeMode, "contain")
+    assert.strictEqual(img().props.overflow, "visible")
     assert.isUndefined(img().props.shouldNotifyLoadEvents)
 
     const before = img()
@@ -179,13 +223,36 @@ describe("Image and ImageBackground", () => {
     await settle()
     assert.strictEqual(img(), before)
 
-    // Switching to a string URL clears Android headers; press-only keeps shouldNotifyLoadEvents unset.
+    // Removing style overrides restores defaults; clearing Android headers sends an empty map.
     root.send(Message.SetMode({ mode: "clear" }))
     await settle()
     assert.deepStrictEqual(img().props.source, [{
       uri: "https://example.com/b.png"
     }])
-    assert.isUndefined(img().props.headers)
+    assert.deepStrictEqual(img().props.headers, {})
+    assert.strictEqual(img().props.resizeMode, "cover")
+    assert.strictEqual(img().props.overflow, "hidden")
+
+    // Source equality checks key membership, not just key count.
+    root.send(Message.SetMode({ mode: "undefKey" }))
+    await settle()
+    root.send(Message.SetMode({ mode: "acceptHeader" }))
+    await settle()
+    assert.deepStrictEqual(img().props.headers, { Accept: "image/webp" })
+
+    // Multi-source candidates always carry numeric width/height for Android.
+    root.send(Message.SetMode({ mode: "multi" }))
+    await settle()
+    assert.deepStrictEqual(img().props.source, [
+      {
+        __packager_asset: true,
+        uri: "src_assets_vec",
+        width: 0,
+        height: 0,
+        scale: 1
+      },
+      { uri: "https://example.com/hi.png", width: 200, height: 100 }
+    ])
 
     root.send(Message.SetMode({ mode: "noEvents" }))
     await settle()

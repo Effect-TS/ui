@@ -110,6 +110,19 @@ export interface ImageURISource {
 }
 
 /**
+ * A URI image source with explicit dimensions, required for candidates in a
+ * multi-source array so native can pick among them.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface SizedImageURISource extends ImageURISource {
+  readonly width: number
+  readonly height: number
+}
+
+/**
  * A single image source: a Metro asset ID from a static `import`, a URI
  * string, or a structured {@link ImageURISource}.
  *
@@ -120,14 +133,16 @@ export interface ImageURISource {
 export type SingleImageSource = number | string | ImageURISource
 
 /**
- * What `Image` accepts as `source`: one source, or an array of candidates for
- * native to choose from.
+ * What `Image` accepts as `source`: one source, or an array of sized
+ * candidates for native to choose from.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export type ImageSource = SingleImageSource | ReadonlyArray<SingleImageSource>
+export type ImageSource =
+  | SingleImageSource
+  | ReadonlyArray<number | SizedImageURISource>
 
 /**
  * Style properties of an `Image`.
@@ -216,6 +231,8 @@ export interface ImageOptions {
   readonly resizeMultiplier?: number | undefined
 }
 
+const emptyHeaders: Readonly<Record<string, string>> = {}
+
 const normalizeSources = (
   value: unknown,
   os: string
@@ -234,6 +251,20 @@ const normalizeSources = (
       : source
     if (one !== undefined) out.push(one)
   }
+  // Android's ReactImageView reads width and height with getDouble on every
+  // entry when given 2+ candidates, which throws on missing keys.
+  if (out.length > 1) {
+    for (let i = 0; i < out.length; i++) {
+      const entry = out[i]!
+      if (entry.width === undefined || entry.height === undefined) {
+        out[i] = {
+          ...entry,
+          width: entry.width ?? 0,
+          height: entry.height ?? 0
+        }
+      }
+    }
+  }
   return out
 }
 
@@ -242,13 +273,17 @@ const normalizeSources = (
 const same = (a: unknown, b: unknown): boolean => {
   if (a === b) return true
   if (
-    typeof a !== "object" || typeof b !== "object" || a === null || b === null
+    typeof a !== "object" || typeof b !== "object" || a === null ||
+    b === null ||
+    Array.isArray(a) !== Array.isArray(b)
   ) {
     return false
   }
   let count = 0
   for (const key in a) {
-    if (!same((a as any)[key], (b as any)[key])) return false
+    if (!Object.hasOwn(b, key) || !same((a as any)[key], (b as any)[key])) {
+      return false
+    }
     count++
   }
   for (const _ in b) count--
@@ -287,12 +322,21 @@ const image = Native.defineView(
     // Fabric defaults resizeMode to stretch; React Native defaults to cover + hidden.
     defaults: { resizeMode: "cover", overflow: "hidden" },
     props: {
+      resizeMode: (n, value, host) =>
+        host.set(n, "resizeMode", value ?? "cover"),
+      overflow: (n, value, host) => host.set(n, "overflow", value ?? "hidden"),
       source(n, value, host) {
         const sources = normalizeSources(value, host.os)
         if (same(n.props.source, sources)) return
         host.set(n, "source", sources)
         if (host.os === "android") {
-          host.set(n, "headers", sources?.[0]?.headers)
+          // ReactImageManager.setHeaders ignores null, so clear previously set
+          // headers with an empty map rather than undefined.
+          const headers = sources?.[0]?.headers
+          if (headers !== undefined) host.set(n, "headers", headers)
+          else if (n.props.headers !== undefined) {
+            host.set(n, "headers", emptyHeaders)
+          }
         }
       }
     }
