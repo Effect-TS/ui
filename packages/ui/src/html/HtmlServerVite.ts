@@ -674,7 +674,7 @@ const findPackage = async (
     const dir = path.join(current, sub)
     const json: PackageJson | null | undefined = await fs
       .readFile(path.join(dir, "package.json"), "utf8")
-      .then(JSON.parse)
+      .then((text) => JSON.parse(text.replace(/^\uFEFF/, "")))
       .catch(() => undefined)
     if (json) return { dir, json }
     const parent = path.dirname(current)
