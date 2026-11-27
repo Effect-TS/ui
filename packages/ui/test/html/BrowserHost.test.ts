@@ -2176,6 +2176,53 @@ describe("BrowserHost", { concurrent: false }, () => {
           ])
         }).pipe(Effect.scoped))
 
+      it.effect("a keyup reports composing when the keydown of the same key composed, with only keyup handled", () =>
+        Effect.gen(function*() {
+          const Released = Html.component({
+            name: "Released",
+            model: Schema.Array(Schema.String),
+            message: Schema.String
+          }).make({
+            init: (): ReadonlyArray<string> => [],
+            update: ($, entry) => [...$.model, entry],
+            view: (h) =>
+              h.input.attr("aria-label", "Text").on(
+                "keyup",
+                ({ composing, key }) => `el:${key}:${composing}`
+              ),
+            subscriptions: () => [
+              HtmlSubscription.onDocument(
+                "keyup",
+                ({ composing, key }) => `doc:${key}:${composing}`
+              )
+            ]
+          })
+          const app = yield* container
+          const root = yield* BrowserHost.mountEffect(Released, {}, app)
+          yield* tick
+          const text = HtmlLocator.getByRole(app, "textbox", { name: "Text" })
+          const fire = (type: string, init: KeyboardEventInit) =>
+            text.dispatchEvent(
+              new KeyboardEvent(type, { bubbles: true, code: "Enter", ...init })
+            )
+          // Chrome on Windows reports the keydown that commits as "Process", and
+          // its keyup, after compositionend, as a plain Enter.
+          fire("keydown", { key: "Process", isComposing: true, keyCode: 229 })
+          text.dispatchEvent(
+            new CompositionEvent("compositionend", { bubbles: true })
+          )
+          fire("keyup", { key: "Enter", keyCode: 13 })
+          fire("keydown", { key: "Enter", keyCode: 13 })
+          fire("keyup", { key: "Enter", keyCode: 13 })
+          yield* tick
+          expect(root.model()).toEqual([
+            "el:Enter:true",
+            "doc:Enter:true",
+            "el:Enter:false",
+            "doc:Enter:false"
+          ])
+        }).pipe(Effect.scoped))
+
       it.effect("a composing field's value isn't written until compositionend, including inside shadow DOM", () =>
         Effect.gen(function*() {
           const Typed = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
