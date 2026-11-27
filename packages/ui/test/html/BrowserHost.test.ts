@@ -935,31 +935,19 @@ describe("BrowserHost", { concurrent: false }, () => {
 
     it.effect("a focused row keeps focus when a keyed reorder moves it", () =>
       Effect.gen(function*() {
-        const Focusable = Html.component({
-          name: "Focusable",
-          model: Schema.Array(Schema.String),
-          message: ListMessage
-        }).make({
-          init: (): ReadonlyArray<string> => ["one", "two", "three"],
-          update: (_, message) => message.rows,
-          view: (h, rows) =>
-            h.ul(
-              rows.map((row) =>
-                h.li.key(row).attr("tabindex", "0").children(row)
-              )
-            )
-        })
         const app = yield* container
-        const root = yield* BrowserHost.mountEffect(Focusable, {}, app)
-        const one = app.querySelector("li")!
-        one.focus()
-        expect(document.activeElement).toBe(one)
-        root.send(ListMessage.Set({ rows: ["two", "three", "one"] }))
+        const root = yield* BrowserHost.mountEffect(Lists, {}, app)
+        const ul = app.querySelector("ul")!
+        const a = ul.firstElementChild as HTMLElement
+        a.tabIndex = 0
+        a.focus()
+        expect(document.activeElement).toBe(a)
+        root.send(ListMessage.Set({ rows: ["b", "c", "a"] }))
         yield* tick
-        expect(Array.from(app.querySelectorAll("li"), (li) => li.textContent))
-          .toEqual(["two", "three", "one"])
-        expect(app.querySelector("ul")!.lastElementChild).toBe(one)
-        expect(document.activeElement).toBe(one)
+        expect(Array.from(ul.children, (li) => li.textContent))
+          .toEqual(["b", "c", "a"])
+        expect(ul.lastElementChild).toBe(a)
+        expect(document.activeElement).toBe(a)
       }).pipe(Effect.scoped))
 
     it.effect("a keyed reorder uses moveBefore when the parent supports it", () =>
@@ -969,17 +957,10 @@ describe("BrowserHost", { concurrent: false }, () => {
         const ul = app.querySelector("ul")!
         const a = ul.firstElementChild!
         const moved: Array<[globalThis.Node, globalThis.Node | null]> = []
-        Object.defineProperty(ul, "moveBefore", {
-          configurable: true,
-          value(
-            this: globalThis.Element,
-            node: globalThis.Node,
-            before: globalThis.Node | null
-          ) {
-            moved.push([node, before])
-            this.insertBefore(node, before)
-          }
-        })
+        ul.moveBefore = (node, before) => {
+          moved.push([node, before])
+          ul.insertBefore(node, before)
+        }
         root.send(ListMessage.Set({ rows: ["b", "c", "a"] }))
         yield* tick
         expect(moved).toEqual([[a, null]])

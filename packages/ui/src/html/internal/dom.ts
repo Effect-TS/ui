@@ -121,9 +121,7 @@ const ignore = () => {}
 
 type Node = globalThis.Node & {
   $r?: Kernel.Rec
-  moveBefore?:
-    | ((node: globalThis.Node, child: globalThis.Node | null) => void)
-    | undefined
+  moveBefore?: ParentNode["moveBefore"]
 }
 
 /** @internal */
@@ -829,17 +827,14 @@ export const makeHost = (
       // `dragend` brings `dragstart` with it.
       if (eventOptions.dragstart !== undefined) listen("dragend")
     },
-    insert(parent, node, before) {
+    insert(parent: Node, node, before) {
       if (node.parentNode !== parent) parent.insertBefore(node, before)
-      else if ((parent as Node).moveBefore !== undefined) {
-        ;(parent as Node).moveBefore!(node, before)
-      } else {
+      else if (parent.moveBefore !== undefined) parent.moveBefore(node, before)
+      else {
         const focused = (node.getRootNode() as Document | ShadowRoot)
-          .activeElement as HTMLElement | null | undefined
+          .activeElement as HTMLElement | null
         parent.insertBefore(node, before)
-        if (focused != null && node.contains(focused)) {
-          focused.focus({ preventScroll: true })
-        }
+        if (node.contains(focused)) focused!.focus({ preventScroll: true })
       }
     },
     remove(parent, node) {
