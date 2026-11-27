@@ -49,4 +49,35 @@ export const Islands = {
   Footer: Schema.Struct({})
 }
 
-export const Frontmatter = Schema.Struct({ title: Schema.String })
+const IsoDate = Schema.String.check(
+  Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)
+)
+
+export const Frontmatter = Schema.Struct({
+  title: Schema.String,
+  published: IsoDate,
+  updated: IsoDate
+})
+export type Frontmatter = typeof Frontmatter.Type
+
+const months = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec"
+] as const
+
+/** Formats an ISO `YYYY-MM-DD` date as `Nov 26, 2026`, independent of locale. */
+export const formatDate = (iso: string): string => {
+  const [year, month, day] = iso.split("-")
+  const name = months[Number(month) - 1]
+  return name === undefined ? iso : `${name} ${Number(day)}, ${year}`
+}

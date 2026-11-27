@@ -1,8 +1,10 @@
 import type { Html } from "@effect/ui/html"
 import {
+  Activity,
   ArrowLeft,
   ArrowRight,
   ArrowUpRight,
+  Blocks,
   Bot,
   Check,
   ChevronDown,
@@ -17,11 +19,14 @@ import {
   Link,
   ListOrdered,
   Loader,
+  MousePointerClick,
   Pause,
   Play,
   Plug,
   RotateCcw,
   Scissors,
+  Server,
+  SlidersHorizontal,
   Split,
   Trash2,
   Workflow
@@ -29,7 +34,9 @@ import {
 
 // The Lucide icons the article draws, by the name it uses for each.
 const icons = {
+  activity: Activity,
   back: ArrowLeft,
+  blocks: Blocks,
   bot: Bot,
   check: Check,
   chevron: ChevronDown,
@@ -39,6 +46,7 @@ const icons = {
   database: Database,
   download: Download,
   external: ArrowUpRight,
+  filter: SlidersHorizontal,
   history: History,
   kept: CircleCheck,
   layers: Layers,
@@ -49,7 +57,9 @@ const icons = {
   pause: Pause,
   play: Play,
   plug: Plug,
+  pointer: MousePointerClick,
   reset: RotateCcw,
+  server: Server,
   split: Split,
   trash: Trash2,
   workflow: Workflow

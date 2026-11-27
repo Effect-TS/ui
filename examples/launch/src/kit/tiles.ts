@@ -12,16 +12,20 @@ import {
   Autocomplete,
   Avatar,
   Button,
+  Calendar,
   Checkbox,
   CheckboxGroup,
   Collapsible,
   Combobox,
   ContextMenu,
+  DateField,
+  DatePicker,
   Dialog,
   DirectionProvider,
   Drawer,
   Field,
   Fieldset,
+  FileDrop,
   Form,
   Input,
   Menu,
@@ -35,10 +39,12 @@ import {
   PreviewCard,
   Progress,
   RadioGroup,
+  RangeCalendar,
   ScrollArea,
   Select,
   Separator,
   Slider,
+  SortableList,
   Switch,
   Tabs,
   ToastProvider,
@@ -49,9 +55,17 @@ import {
   VirtualList
 } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
-import { Effect, Redacted, Schema, Stream } from "effect"
+import { DateTime, Effect, Redacted, Schema, Stream } from "effect"
 import type { Module } from "./components.ts"
-import { floating, keyboardCover, stage } from "./geometry.ts"
+import {
+  floating,
+  keyboardCover,
+  listActive,
+  listItems,
+  stage,
+  typeaheadItems,
+  typeaheadMatch
+} from "./geometry.ts"
 
 // The small picture in each tile of the kit wall. `on` is true while
 // the tile plays. Most pictures are the kit's own component, with `on`
@@ -65,15 +79,15 @@ import { floating, keyboardCover, stage } from "./geometry.ts"
 // presses. The dialogs also leave focus where it is as they open and
 // close. The picture is `inert`, so nothing in it takes focus.
 //
-// Positioning and VirtualKeyboard draw nothing themselves, so their
-// pictures draw what the kit computes: Positioning places a box with
-// the pure `place`, and VirtualKeyboard works out the keyboard's band
-// with the pure `step`, from made-up viewport sizes (see geometry.ts).
+// Positioning, VirtualKeyboard, ListNavigation, Typeahead and Dismissal
+// draw nothing themselves: the first four draw what the kit's pure
+// functions compute (see geometry.ts), and Dismissal shows a topmost
+// layer closing while the layer beneath it stays open.
 //
-// AlertDialog alone isn't the kit. It is always modal and always in
-// the top layer, so it would block the article. Its picture is plain
-// elements in the shape of its parts, and `data-playing` on the tile
-// drives them.
+// AlertDialog isn't drawn with the kit either: it is always modal and
+// always in the top layer, so it would block the article. Its picture is
+// plain elements in the shape of its parts, and `data-playing` on the
+// tile drives them.
 
 type Picture = <M>(h: Html.H<M>, on: boolean) => View.Content<M>
 
@@ -109,6 +123,18 @@ const packages = ["effect/ui", "effect/ui-kit"].map((
   value,
   label: value
 }))
+
+const nov2026 = DateTime.makeUnsafe("2026-11-01T00:00:00Z")
+const nov10 = DateTime.makeUnsafe("2026-11-10T00:00:00Z")
+const nov12 = DateTime.makeUnsafe("2026-11-12T00:00:00Z")
+const nov19 = DateTime.makeUnsafe("2026-11-19T00:00:00Z")
+const nov26 = DateTime.makeUnsafe("2026-11-26T00:00:00Z")
+
+const sortableRows = [
+  { id: "a", width: 34, accent: true },
+  { id: "b", width: 42, accent: false },
+  { id: "c", width: 28, accent: false }
+] as const
 
 // A popup drawn in place, with the side and the alignment the picture
 // gives it. In place, the collision boundary is the part of the page in
@@ -296,6 +322,47 @@ const pictures: Record<Module, Picture> = {
       .children(
         "Deploy"
       ),
+  Calendar: (h, on) =>
+    Calendar(h, {
+      key: "Calendar",
+      props: {
+        value: on ? nov26 : nov12,
+        month: nov2026,
+        today: nov26,
+        locale: "en-US"
+      },
+      onEmit: none,
+      view: (calendar) => {
+        const [month] = calendar.months
+        return calendar.root(h.div.class("kit-calendar")).children(
+          h.div.class("kit-calendar-head").children(
+            month.heading(h.span).children(bar(h, 24)),
+            h.span.class("kit-calendar-nav").children(
+              calendar.previous(h.button).children("‹"),
+              calendar.next(h.button).children("›")
+            )
+          ),
+          month.grid(h.table.class("kit-calendar-grid")).children(
+            h.tbody.children(
+              month.weeks.map((week, row) =>
+                h.tr.key(String(row)).children(
+                  week.map((date) =>
+                    month.cell({
+                      element: h.td.key(
+                        String(DateTime.toEpochMillis(date))
+                      ),
+                      date
+                    }).children(
+                      month.day({ element: h.button, date })
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      }
+    }),
   Checkbox: (h, on) =>
     Checkbox(h, {
       key: "Checkbox",
@@ -452,6 +519,76 @@ const pictures: Record<Module, Picture> = {
               )
           )
     }),
+  DateField: (h, on) =>
+    DateField(h, {
+      key: "DateField",
+      props: {
+        value: on ? nov26 : null,
+        locale: "en-US"
+      },
+      onEmit: none,
+      view: (dateField) =>
+        h.div.class("kit-input kit-typing-wrap").children(
+          dateField.input(
+            h.input.class("kit-typing").attr(
+              "placeholder",
+              dateField.pattern
+            )
+          )
+        )
+    }),
+  DatePicker: (h, on) =>
+    DatePicker(h, {
+      key: "DatePicker",
+      props: {
+        open: on,
+        value: nov26,
+        month: nov2026,
+        today: nov26,
+        locale: "en-US",
+        ...inTile,
+        sideOffset: 3
+      },
+      onEmit: none,
+      view: (datePicker) => {
+        const [month] = datePicker.months
+        return h.div.class("kit-overlay kit-top").children(
+          h.div.class("kit-input kit-datepicker-input").children(
+            datePicker.input(h.input),
+            datePicker.trigger(h.button).children("▾")
+          ),
+          datePicker.positioner(
+            h.div.class("kit-positioner kit-fade")
+          ).children(
+            datePicker.popup(
+              h.div.class("kit-popup kit-calendar-popup")
+            ).children(
+              datePicker.root(h.div.class("kit-calendar")).children(
+                month.grid(h.table.class("kit-calendar-grid"))
+                  .children(
+                    h.tbody.children(
+                      month.weeks.slice(0, 4).map((week, row) =>
+                        h.tr.key(String(row)).children(
+                          week.map((date) =>
+                            month.cell({
+                              element: h.td.key(
+                                String(DateTime.toEpochMillis(date))
+                              ),
+                              date
+                            }).children(
+                              month.day({ element: h.button, date })
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+              )
+            )
+          )
+        )
+      }
+    }),
   Dialog: (h, on) =>
     Dialog(h, {
       key: "Dialog",
@@ -511,6 +648,18 @@ const pictures: Record<Module, Picture> = {
           bar(h, 40)
         )
     }),
+  FileDrop: (h) =>
+    FileDrop(h, {
+      key: "FileDrop",
+      props: { accept: ["image/*"], multiple: true },
+      onEmit: none,
+      view: (fileDrop) =>
+        fileDrop.root(h.div.class("kit-file-drop")).children(
+          h.span.class("kit-file-chip"),
+          fileDrop.trigger(h.button.class("kit-file-trigger"))
+            .children(bar(h, 24))
+        )
+    }),
   Form: (h, on) =>
     Form(h, {
       key: "Form",
@@ -533,6 +682,20 @@ const pictures: Record<Module, Picture> = {
       Input(h, { props: { value: on ? "Hello, kit" : "" } })
         .class("kit-typing")
     ),
+  ListNavigation: (h, on) => {
+    const active = listActive(on)
+    return h.div.class("kit-list-nav").children(
+      h.div.class("kit-list-nav-rows").children(
+        listItems.map(({ disabled, id, width }) =>
+          h.div.key(id).class("kit-list-nav-row").attrs({
+            "data-active": id === active ? "" : undefined,
+            "data-disabled": disabled ? "" : undefined
+          }).children(bar(h, width, id === active))
+        )
+      ),
+      h.span.class("kit-keycap").children("↓")
+    )
+  },
   Menu: (h, on) =>
     Menu(h, {
       key: "Menu",
@@ -777,6 +940,50 @@ const pictures: Record<Module, Picture> = {
           )
         )
     }),
+  RangeCalendar: (h, on) =>
+    RangeCalendar(h, {
+      key: "RangeCalendar",
+      props: {
+        value: on
+          ? { start: nov10, end: nov19 }
+          : { start: nov10, end: nov12 },
+        month: nov2026,
+        today: nov26,
+        locale: "en-US"
+      },
+      onEmit: none,
+      view: (rangeCalendar) => {
+        const [month] = rangeCalendar.months
+        return rangeCalendar.root(h.div.class("kit-calendar"))
+          .children(
+            h.div.class("kit-calendar-head").children(
+              month.heading(h.span).children(bar(h, 24)),
+              h.span.class("kit-calendar-nav").children(
+                rangeCalendar.previous(h.button).children("‹"),
+                rangeCalendar.next(h.button).children("›")
+              )
+            ),
+            month.grid(h.table.class("kit-calendar-grid")).children(
+              h.tbody.children(
+                month.weeks.map((week, row) =>
+                  h.tr.key(String(row)).children(
+                    week.map((date) =>
+                      month.cell({
+                        element: h.td.key(
+                          String(DateTime.toEpochMillis(date))
+                        ),
+                        date
+                      }).children(
+                        month.day({ element: h.button, date })
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+      }
+    }),
   ScrollArea: (h, on) =>
     ScrollArea(h, {
       key: "ScrollArea",
@@ -855,6 +1062,34 @@ const pictures: Record<Module, Picture> = {
           )
         )
     }),
+  SortableList: (h, on) => {
+    const order = on
+      ? [sortableRows[1], sortableRows[0], sortableRows[2]]
+      : sortableRows
+    return SortableList(h, {
+      key: "SortableList",
+      props: { items: order.map(({ id }) => id) },
+      onEmit: none,
+      view: (sortableList) =>
+        h.div.class("kit-sortable-wrap").children(
+          sortableList.list(h.ul.class("kit-sortable")).children(
+            order.map(({ accent, id, width }) =>
+              sortableList.item({
+                element: h.li.class("kit-sortable-item"),
+                id
+              }).children(
+                sortableList.handle({
+                  element: h.button.class("kit-grip"),
+                  id
+                }),
+                bar(h, width, accent)
+              )
+            )
+          ),
+          sortableList.status(h.div.class("sr-only"))
+        )
+    })
+  },
   Switch: (h, on) =>
     Switch(h, {
       props: { checked: on },
@@ -970,6 +1205,31 @@ const pictures: Record<Module, Picture> = {
             bar(h, 18)
           )
     }),
+  Dismissal: (h) =>
+    h.div.class("kit-dismissal").children(
+      h.div.class("kit-layer kit-layer-back").children(bar(h, 28)),
+      h.div.class("kit-layer kit-layer-front").children(
+        bar(h, 24, true),
+        bar(h, 16)
+      ),
+      h.span.class("kit-keycap").children("esc")
+    ),
+  Typeahead: (h, on) => {
+    const match = typeaheadMatch(on)
+    return h.div.class("kit-typeahead").children(
+      h.div.class("kit-typeahead-rows").children(
+        typeaheadItems.map(({ label }, index) =>
+          h.div.key(label).class("kit-typeahead-row").attr(
+            "data-matched",
+            index === match.index ? "" : undefined
+          ).children(label)
+        )
+      ),
+      h.span.class("kit-keycap").children(
+        match.state.typed === "" ? "g" : match.state.typed
+      )
+    )
+  },
   Positioning: (h, on) => {
     const { anchor, box, side } = floating(on)
     const at = (

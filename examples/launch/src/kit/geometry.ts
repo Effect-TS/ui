@@ -1,8 +1,13 @@
-import { Positioning, VirtualKeyboard } from "@effect/ui-kit"
+import {
+  ListNavigation,
+  Positioning,
+  Typeahead,
+  VirtualKeyboard
+} from "@effect/ui-kit"
 
-// The numbers behind the Positioning and VirtualKeyboard tiles, worked out
-// by the kit's own pure functions. Neither module draws anything, so the
-// tiles draw what these return.
+// The values behind the Positioning, VirtualKeyboard, ListNavigation and
+// Typeahead tiles, worked out by the kit's own pure functions. None of
+// these modules draws anything, so the tiles draw what these return.
 
 /** The box the Positioning tile places in, in pixels. */
 export const stage = { width: 72, height: 44 }
@@ -71,3 +76,44 @@ export const keyboardCover = (on: boolean): number => {
   )
   return band === null ? 0 : band.inset / phone.layoutHeight
 }
+
+export const listItems = [
+  { id: "a", width: 42, disabled: false },
+  { id: "b", width: 32, disabled: true },
+  { id: "c", width: 48, disabled: false }
+] as const
+
+/**
+ * The highlighted item's id in the ListNavigation tile, chosen by
+ * `ListNavigation.available` and `ListNavigation.target`. At rest the
+ * first item is active. Playing, ArrowDown skips the disabled middle
+ * item and lands on the last.
+ */
+export const listActive = (on: boolean): string => {
+  const enabled = listItems.filter(ListNavigation.available)
+  const index = (on
+    ? ListNavigation.target("ArrowDown", {
+      at: 0,
+      last: enabled.length - 1,
+      orientation: "vertical",
+      loop: "wrap"
+    })
+    : 0) ?? 0
+  return enabled[index]!.id
+}
+
+export const typeaheadItems = [
+  { label: "Alpha" },
+  { label: "Beta" },
+  { label: "Gamma" }
+] as const
+
+/**
+ * The typed prefix and matched item index in the Typeahead tile,
+ * computed by `Typeahead.step`. At rest nothing is typed; playing,
+ * typing "g" jumps straight to "Gamma".
+ */
+export const typeaheadMatch = (on: boolean) =>
+  on
+    ? Typeahead.step(Typeahead.initial, "g", typeaheadItems, -1)
+    : { state: Typeahead.initial, index: -1 }

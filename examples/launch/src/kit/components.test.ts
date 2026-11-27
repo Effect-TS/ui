@@ -13,16 +13,16 @@ const article = readFileSync(new URL("article.md", app), "utf8")
 
 describe("kit components", () => {
   it("lists every module of the kit", () => {
-    const modules = readdirSync(kit)
+    const sourceModules = readdirSync(kit)
       .filter((file) => file.endsWith(".ts") && file !== "index.ts")
       .map((file) => file.slice(0, -".ts".length))
     assert.deepStrictEqual(
       [...modules].sort(),
-      modules.sort()
+      sourceModules.sort()
     )
   })
 
   it("is counted correctly in the article", () => {
-    assert.include(article, `${modules.length} components`)
+    assert.include(article, `${modules.length} modules`)
   })
 })

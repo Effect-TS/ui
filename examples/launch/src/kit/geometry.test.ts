@@ -1,5 +1,11 @@
 import { assert, describe, it } from "@effect/vitest"
-import { floating, keyboardCover, stage } from "./geometry.ts"
+import {
+  floating,
+  keyboardCover,
+  listActive,
+  stage,
+  typeaheadMatch
+} from "./geometry.ts"
 
 describe("kit geometry", () => {
   it("places the box below the anchor at rest, and flips it above when playing", () => {
@@ -30,5 +36,17 @@ describe("kit geometry", () => {
     const cover = keyboardCover(true)
     assert.isAbove(cover, 0.2)
     assert.isBelow(cover, 0.6)
+  })
+
+  it("skips the disabled row in ListNavigation when playing", () => {
+    assert.strictEqual(listActive(false), "a")
+    assert.strictEqual(listActive(true), "c")
+  })
+
+  it("jumps to the matching row in Typeahead when playing", () => {
+    assert.strictEqual(typeaheadMatch(false).index, -1)
+    const playing = typeaheadMatch(true)
+    assert.strictEqual(playing.state.typed, "g")
+    assert.strictEqual(playing.index, 2)
   })
 })
