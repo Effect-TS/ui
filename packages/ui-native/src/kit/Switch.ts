@@ -103,9 +103,37 @@ export type SwitchElement<Msg, R = never> = Native.Element<
   "switch"
 >
 
-// Tracks the boolean native flipped to in `topChange`, so `value` knows when
-// the consumer rejected the toggle and must command native back.
-const nativeValue = /* @__PURE__ */ new WeakMap<NativeNode, boolean>()
+interface SwitchState {
+  native?: boolean | undefined
+  iosBg?: unknown
+  bg?: unknown
+  radius?: unknown
+  alignSelf?: unknown
+}
+
+// Per-node state for controlled toggle restores (`topChange`) and iOS fallback
+// styles (`iosBackgroundColor`, default `alignSelf: "flex-start"`) so partial
+// prop updates always agree with a fresh mount.
+const states = /* @__PURE__ */ new WeakMap<NativeNode, SwitchState>()
+
+const stateOf = (n: NativeNode): SwitchState => {
+  let state = states.get(n)
+  if (state === undefined) states.set(n, state = {})
+  return state
+}
+
+const applyIosBackground = (
+  n: NativeNode,
+  state: SwitchState,
+  host: Native.ViewHost
+) => {
+  host.set(n, "backgroundColor", state.bg ?? state.iosBg)
+  host.set(
+    n,
+    "borderRadius",
+    state.radius ?? (state.iosBg === undefined ? undefined : 16)
+  )
+}
 
 const switchBase = Native.defineView(
   () => new Native.Element<any, never, SwitchEvents, "switch">("switch"),
@@ -115,11 +143,15 @@ const switchBase = Native.defineView(
     props: {
       value(n, value, host) {
         const checked = value === true
-        const observed = nativeValue.get(n)
-        nativeValue.delete(n)
+        const state = states.get(n)
+        const observed = state?.native
+        if (state !== undefined) state.native = undefined
         // Always commit the prop on change so iOS updates `_props.value` and
         // Android's `ReactSwitch.setOn` unlocks `allowChange`.
         host.set(n, host.os === "ios" ? "value" : "on", checked)
+        if (host.os === "ios" && state?.alignSelf === undefined) {
+          host.set(n, "alignSelf", "flex-start")
+        }
         if (observed !== undefined && observed !== checked) {
           host.command(
             n,
@@ -157,14 +189,33 @@ const switchBase = Native.defineView(
       },
       iosBackgroundColor(n, value, host) {
         if (host.os !== "ios") return
-        host.set(n, "backgroundColor", value)
-        host.set(n, "borderRadius", value === undefined ? undefined : 16)
+        const state = stateOf(n)
+        state.iosBg = value
+        applyIosBackground(n, state, host)
+      },
+      backgroundColor(n, value, host) {
+        if (host.os !== "ios") return host.set(n, "backgroundColor", value)
+        const state = stateOf(n)
+        state.bg = value
+        applyIosBackground(n, state, host)
+      },
+      borderRadius(n, value, host) {
+        if (host.os !== "ios") return host.set(n, "borderRadius", value)
+        const state = stateOf(n)
+        state.radius = value
+        applyIosBackground(n, state, host)
+      },
+      alignSelf(n, value, host) {
+        if (host.os !== "ios") return host.set(n, "alignSelf", value)
+        const state = stateOf(n)
+        state.alignSelf = value
+        host.set(n, "alignSelf", value ?? "flex-start")
       }
     },
     events: {
       topChange(n, event, host) {
         const checked = Boolean(event?.value)
-        nativeValue.set(n, checked)
+        stateOf(n).native = checked
         host.fire(n, "change", { checked })
       }
     }

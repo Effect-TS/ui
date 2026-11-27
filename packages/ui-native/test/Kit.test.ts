@@ -14,7 +14,9 @@ const SwitchMessage = UiSchema.TaggedEnum({
   Rejected: {},
   Configured: {
     disabled: Schema.optional(Schema.Boolean),
-    styled: Schema.optional(Schema.Boolean)
+    styled: Schema.optional(Schema.Boolean),
+    borderRadius: Schema.optional(Schema.NullOr(Schema.Number)),
+    alignSelf: Schema.optional(Schema.NullOr(Schema.Literal("center")))
   }
 })
 
@@ -31,6 +33,8 @@ const SwitchHarness = Native.component({
     checked: Schema.Boolean,
     disabled: Schema.Boolean,
     styled: Schema.Boolean,
+    borderRadius: Schema.NullOr(Schema.Number),
+    alignSelf: Schema.NullOr(Schema.Literal("center")),
     rejections: Schema.Number
   }),
   message: SwitchMessage
@@ -39,15 +43,19 @@ const SwitchHarness = Native.component({
     checked: false,
     disabled: false,
     styled: true,
+    borderRadius: null,
+    alignSelf: null,
     rejections: 0
   }),
   update: {
     Toggled: ($, { checked }) => $.evolve({ checked }),
     Rejected: ($) => $.evolve({ rejections: (n) => n + 1 }),
-    Configured: ($, { disabled, styled }) =>
+    Configured: ($, { alignSelf, borderRadius, disabled, styled }) =>
       $.evolve({
         ...(disabled === undefined ? {} : { disabled }),
-        ...(styled === undefined ? {} : { styled })
+        ...(styled === undefined ? {} : { styled }),
+        ...(borderRadius === undefined ? {} : { borderRadius }),
+        ...(alignSelf === undefined ? {} : { alignSelf })
       })
   },
   view: (h, model) =>
@@ -74,7 +82,11 @@ const SwitchHarness = Native.component({
                 ? SwitchMessage.Rejected()
                 : SwitchMessage.Toggled({ checked })
           })
-      }).style({ marginLeft: 8 }),
+      }).style({
+        marginLeft: 8,
+        borderRadius: model.borderRadius ?? undefined,
+        alignSelf: model.alignSelf ?? undefined
+      }),
       h.text.children(`${model.checked}:${model.rejections}`)
     )
 })
@@ -150,6 +162,7 @@ describe("@effect/ui-native/kit", () => {
         assert.deepStrictEqual(node().props, {
           accessibilityRole: "switch",
           value: false,
+          alignSelf: "flex-start",
           disabled: false,
           thumbTintColor: "processed #fff",
           tintColor: "processed #767577",
@@ -179,6 +192,35 @@ describe("@effect/ui-native/kit", () => {
       assert.strictEqual(node().props[valueProp], true)
       assert.deepStrictEqual(fabric.commands, [])
 
+      // Explicit borderRadius and alignSelf survive removing and re-adding
+      // iosBackgroundColor, and fall back to iOS defaults when cleared.
+      if (os === "ios") {
+        root.send(
+          SwitchMessage.Configured({ borderRadius: 8, alignSelf: "center" })
+        )
+        await settle()
+        assert.strictEqual(node().props.borderRadius, 8)
+        assert.strictEqual(node().props.alignSelf, "center")
+
+        root.send(SwitchMessage.Configured({ styled: false }))
+        await settle()
+        assert.isUndefined(node().props.backgroundColor)
+        assert.strictEqual(node().props.borderRadius, 8)
+        assert.strictEqual(node().props.alignSelf, "center")
+
+        root.send(SwitchMessage.Configured({ styled: true }))
+        await settle()
+        assert.strictEqual(node().props.backgroundColor, "processed #3e3e3e")
+        assert.strictEqual(node().props.borderRadius, 8)
+
+        root.send(
+          SwitchMessage.Configured({ borderRadius: null, alignSelf: null })
+        )
+        await settle()
+        assert.strictEqual(node().props.borderRadius, 16)
+        assert.strictEqual(node().props.alignSelf, "flex-start")
+      }
+
       // Disabling removes the handler, updates native enabled/disabled, and clears styling.
       root.send(SwitchMessage.Configured({ disabled: true, styled: false }))
       await settle()
@@ -186,6 +228,7 @@ describe("@effect/ui-native/kit", () => {
       assert.isUndefined(node().props.thumbTintColor)
       if (os === "ios") {
         assert.strictEqual(node().props.disabled, true)
+        assert.strictEqual(node().props.alignSelf, "flex-start")
         assert.isUndefined(node().props.tintColor)
         assert.isUndefined(node().props.onTintColor)
         assert.isUndefined(node().props.backgroundColor)
