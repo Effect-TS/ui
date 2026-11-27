@@ -269,7 +269,9 @@ describe("Stream queries", () => {
       yield* flush
       const getExit = yield* Fiber.await(got)
       assert.isTrue(Exit.isFailure(getExit) && Cause.hasDies(getExit.cause))
-      const defect = Cause.squash(getExit.cause)
+      const defect = Exit.isFailure(getExit)
+        ? Cause.squash(getExit.cause)
+        : undefined
       assert.isTrue(
         defect instanceof Error &&
           defect.message.includes("ended before its first element")

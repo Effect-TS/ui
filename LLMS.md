@@ -24,7 +24,8 @@ and Subscriptions that the runtime runs for you, and data comes from queries,
 built with `Query`, also in `@effect/ui`. `@effect/ui/html` adds the HTML elements, the
 browser host and router, and server rendering.
 
-`Query.Service`, `Query.InfiniteService`, and `Command.Service` declare only
+`Query.Service`, `Query.InfiniteService`, `Query.StreamService`, and
+`Command.Service` declare only
 their Schemas and options. `args` defaults to none and `error` to
 `Schema.Never`. A `Command.Service` sets `success` to the Message Schema of
 the component that consumes it; without `success` it's silent and its body
@@ -536,6 +537,15 @@ results would mislead.
 
 The cache never retries a failed fetch: a fetcher that should retry does so
 itself.
+
+When the server pushes changes, as a sync engine's subscription does, define
+the query with `Query.StreamService` and return a Stream from `toLayer`.
+Every watcher of an entry shares one open stream, and each element replaces
+the entry's value, so a component reads the edits from `h.queries` instead
+of copying them into its Model. The stream closes when the entry is
+collected, `idleTimeToLive` after its last watcher leaves. A server render
+ships the first element, and the client opens the stream once hydration's
+fetch-free window closes.
 
 In tests, `Story` steps such as `loaded("note", note)` take the query's
 name and write its result. To start from fetched data without sending
