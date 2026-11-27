@@ -148,7 +148,8 @@ const Search = Html.component({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.form(h.input.attr("name", "q"))
+  view: (h) =>
+    h.form.attr("method", "dialog").children(h.input.attr("name", "q"))
 })
 
 const LateForm = Html.component({
@@ -158,7 +159,8 @@ const LateForm = Html.component({
 }).make({
   init: () => "late",
   update: ($) => $.model,
-  view: (h) => h.form(h.input.attr("name", "q"))
+  view: (h) =>
+    h.form.attr("method", "dialog").children(h.input.attr("name", "q"))
 })
 
 const LateFormHolder = Html.component({
@@ -180,7 +182,8 @@ const Gated = Component.provide(
   }).make({
     init: () => null,
     update: ($) => $.model,
-    view: (h) => h.form(h.input.attr("name", "q"))
+    view: (h) =>
+      h.form.attr("method", "dialog").children(h.input.attr("name", "q"))
   }),
   Layer.effectDiscard(Effect.suspend(() => layerGate))
 )

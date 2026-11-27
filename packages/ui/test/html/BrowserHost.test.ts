@@ -1652,12 +1652,15 @@ describe("BrowserHost", { concurrent: false }, () => {
       const [name, form] of [
         [
           "a form the patch inserts",
-          (h: any, after: boolean) => after ? h.el("form") : h.el("div")
+          (h: any, after: boolean) =>
+            after ? h.el("form").attr("method", "dialog") : h.el("div")
         ],
         [
           "a form whose submit handler the patch takes away",
           (h: any, after: boolean) =>
-            after ? h.el("form") : h.el("form").on("submit", "sent")
+            after
+              ? h.el("form").attr("method", "dialog")
+              : h.el("form").on("submit", "sent")
         ]
       ] as const
     ) {
@@ -2384,11 +2387,11 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(root.model()).toEqual(["submit Hello [a,b]"])
       }).pipe(Effect.scoped))
 
-    it.effect("an unhandled form is prevented only for same-window GET and dialog; handled forms always are; forms outside the app aren't", () =>
+    it.effect("an unhandled form is prevented only for dialog; handled forms always are; forms outside the app aren't", () =>
       Effect.gen(function*() {
         const app = yield* container
         const outside = yield* container
-        outside.innerHTML = "<form></form>"
+        outside.innerHTML = `<form method="dialog"></form>`
         // `Events` handles submit on its own form, so the document listener is already there.
         yield* BrowserHost.mountEffect(Events, {}, app)
         const Forms = Html.component({
@@ -2400,17 +2403,17 @@ describe("BrowserHost", { concurrent: false }, () => {
           update: ($) => $.model,
           view: (h) =>
             h.div(
-              h.form.attr("aria-label", "Bare").children(
-                h.input.attr("name", "q"),
-                h.button.attrs({ type: "submit", formmethod: "post" })
-                  .children("Post"),
-                h.button.attrs({ type: "submit", formtarget: "_blank" })
-                  .children("New tab")
+              h.form.attrs({
+                "aria-label": "Get",
+                method: "get",
+                action: "/settings"
+              }).children(
+                h.input.attrs({ type: "hidden", name: "tools", value: "1" }),
+                h.button.attrs({ type: "submit", formmethod: "dialog" })
+                  .children("Close")
               ),
-              h.form.attrs({ "aria-label": "Invalid", method: "put" }),
-              h.form.attrs({ "aria-label": "Dialog", method: "dialog" }),
-              h.form.attrs({ "aria-label": "Post", method: "post" }),
-              h.form.attrs({ "aria-label": "Blank", target: "_blank" }),
+              // An upper-case tag is still a form.
+              h.el("FORM").attrs({ "aria-label": "Dialog", method: "dialog" }),
               h.form.attrs({ "aria-label": "Handled post", method: "post" })
                 .on("submit", "Submitted")
             )
@@ -2431,40 +2434,17 @@ describe("BrowserHost", { concurrent: false }, () => {
         }
         const form = (name: string) =>
           HtmlLocator.getByRole(mounted, "form", { name }) as HTMLFormElement
-        const bare = form("Bare")
-        expect(submitted(bare)).toBe(true)
+        const get = form("Get")
+        expect(submitted(get)).toBe(false)
         expect(
           submitted(
-            bare,
-            HtmlLocator.getByRole(bare, "button", { name: "Post" })
+            get,
+            HtmlLocator.getByRole(get, "button", { name: "Close" })
           )
-        ).toBe(false)
-        expect(
-          submitted(
-            bare,
-            HtmlLocator.getByRole(bare, "button", { name: "New tab" })
-          )
-        ).toBe(false)
-        expect(submitted(form("Invalid"))).toBe(true)
+        ).toBe(true)
         expect(submitted(form("Dialog"))).toBe(true)
-        expect(submitted(form("Post"))).toBe(false)
-        expect(submitted(form("Blank"))).toBe(false)
         expect(submitted(form("Handled post"))).toBe(true)
         expect(submitted(outside.querySelector("form")!)).toBe(false)
-        // The tag as the author wrote it isn't what makes it a form.
-        const Upper = Html.component({
-          name: "Upper",
-          model: Schema.Null,
-          message: Schema.Never
-        })
-          .make({
-            init: () => null,
-            update: ($) => $.model,
-            view: (h) => h.el("FORM", h.input.attr("name", "q"))
-          })
-        const upper = yield* container
-        yield* BrowserHost.mountEffect(Upper, {}, upper)
-        expect(submitted(upper.querySelector("form")!)).toBe(true)
       }).pipe(Effect.scoped))
 
     it.effect("preventDefault cancels the default only when the handler sends, before the message is sent", () =>
@@ -4332,7 +4312,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           init: () => null,
           update: ($) => $.model,
           view: (h) =>
-            h.form(
+            h.form.attr("method", "dialog").children(
               h.el("div").attrs({ "Data-Kind": "box", "a b": "dropped" }),
               h.el("svg", h.el("rect").attr("viewBox", "0 0 1 1"))
             )
