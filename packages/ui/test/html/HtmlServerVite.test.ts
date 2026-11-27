@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from "@effect/vitest"
 import { Context, Logger } from "effect"
 import { once } from "node:events"
 import * as fs from "node:fs/promises"
+import { createServer as createHttpServer } from "node:http"
+import type { AddressInfo } from "node:net"
 import * as os from "node:os"
 import * as path from "node:path"
 import { pathToFileURL } from "node:url"
@@ -190,6 +192,42 @@ describe("HtmlServerVite.plugin", () => {
   )
 
   it(
+    "serves dev SSR under a non-root Vite base with single-prefixed links and assets",
+    async () => {
+      // In middleware mode, Vite passes requests outside the base on.
+      const server = await createServer(
+        config({ base: "/docs/", server: { middlewareMode: true, ws: false } })
+      )
+      const http = createHttpServer((request, response) =>
+        server.middlewares(request, response, () => {
+          response.statusCode = 418
+          response.end("fallback")
+        })
+      )
+      http.listen(0)
+      await once(http, "listening")
+      try {
+        const { port } = http.address() as AddressInfo
+        const get = (url: string) =>
+          fetch(new URL(url, `http://localhost:${port}`))
+
+        const person = await get("/docs/people/1")
+        expect(person.status).toBe(200)
+        const html = await person.text()
+        expect(html).toContain("href=\"/docs/people/1\"")
+        expect(html).toContain("/docs/src/entry.client.ts")
+        expect(html).not.toContain("/docs/docs/")
+
+        expect((await get("/docs-other/people/1")).status).toBe(418)
+      } finally {
+        http.close()
+        await server.close()
+      }
+    },
+    60_000
+  )
+
+  it(
     "rejects overlapping serverOutDir and client outDir before building either environment",
     async () => {
       const dir = await fs.mkdtemp(path.join(os.tmpdir(), "html-server-vite-"))
@@ -242,6 +280,54 @@ describe("HtmlServerVite.plugin", () => {
         await fs.rm(dir, { recursive: true, force: true })
       }
     }
+  )
+
+  it(
+    "prerenders app-relative routes into outDir and emits a handler for base URLs under a non-root Vite base",
+    async () => {
+      const dir = await fs.mkdtemp(path.join(fixtureRoot, ".out-"))
+      const outDir = path.join(dir, "client")
+      const serverOutDir = path.join(dir, "server")
+      try {
+        const builder = await createBuilder(
+          config({
+            base: "/docs",
+            build: { outDir, emptyOutDir: true },
+            plugins: [plugin({ entry: "/src/entry.server.ts", serverOutDir })]
+          })
+        )
+        await builder.buildApp()
+        const page = (file: string) =>
+          fs.readFile(path.join(outDir, file), "utf8")
+
+        const home = await page("index.html")
+        expect(home).toContain("href=\"/docs/people/1\"")
+        expect(home).toMatch(/src="\/docs\/assets\/[^"]+\.js"/)
+        expect(await page("people/1.html")).toContain("href=\"/docs\"")
+
+        // The emitted handler gets the browser URL, base included.
+        const server = (await import(
+          pathToFileURL(path.join(serverOutDir, "index.js")).href
+        )) as {
+          readonly handler: (request: Request) => Promise<Response>
+          readonly dispose: () => Promise<void>
+        }
+        try {
+          const live = await server.handler(
+            new Request("http://localhost/docs/people/1")
+          )
+          expect(live.status).toBe(200)
+          const html = await live.text()
+          expect(html).toContain("href=\"/docs/people/1\"")
+          expect(html).toMatch(/src="\/docs\/assets\/[^"]+\.js"/)
+        } finally {
+          await server.dispose()
+        }
+      } finally {
+        await fs.rm(dir, { recursive: true, force: true })
+      }
+    },
+    60_000
   )
 
   it("rejects watch builds before building either environment", async () => {

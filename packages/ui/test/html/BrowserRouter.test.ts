@@ -1096,23 +1096,24 @@ describe("BrowserRouter", { concurrent: false }, () => {
   it.effect("keeps the route in the fragment with layerHash", () =>
     Effect.gen(function*() {
       window.history.replaceState(null, "", "/")
-      const context = yield* Layer.build(
-        BrowserRouter.layerHash({ routes: AppRoute })
-      )
-      const router = Context.get(context, Router.Router)
-      expect(window.location.hash).toBe("#/")
-      expect(router.location().route._tag).toBe("Home")
-      expect(yield* router.push(AppRoute.Person({ params: { id: 3 } }))).toBe(
-        "navigated"
-      )
-      expect(window.location.pathname + window.location.hash).toBe(
-        "/#/people/3"
-      )
-      expect(Option.getOrThrow(AppRoute.parse("#/people/3"))._tag).toBe(
-        "Person"
-      )
-    }).pipe(
-      Effect.scoped,
-      Effect.ensuring(Effect.sync(() => AppRoute.setBase("")))
-    ))
+      yield* Effect.gen(function*() {
+        const context = yield* Layer.build(
+          BrowserRouter.layerHash({ routes: AppRoute })
+        )
+        const router = Context.get(context, Router.Router)
+        expect(window.location.hash).toBe("#/")
+        expect(router.location().route._tag).toBe("Home")
+        expect(yield* router.push(AppRoute.Person({ params: { id: 3 } }))).toBe(
+          "navigated"
+        )
+        expect(window.location.pathname + window.location.hash).toBe(
+          "/#/people/3"
+        )
+        expect(Option.getOrThrow(AppRoute.parse("#/people/3"))._tag).toBe(
+          "Person"
+        )
+      }).pipe(Effect.scoped)
+      // Closing the Scope restores the union's previous base.
+      expect(AppRoute.base()).toBe("")
+    }))
 })
