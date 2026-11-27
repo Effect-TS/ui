@@ -251,8 +251,7 @@ const normalizeSources = (
       : source
     if (one !== undefined) out.push(one)
   }
-  // Android's ReactImageView reads width and height with getDouble on every
-  // entry when given 2+ candidates, which throws on missing keys.
+  // Android's ReactImageView reads width and height with getDouble for 2+ sources.
   if (out.length > 1) {
     for (let i = 0; i < out.length; i++) {
       const entry = out[i]!
@@ -268,8 +267,7 @@ const normalizeSources = (
   return out
 }
 
-// An inline source object is new every render, and a changed source reloads
-// the image.
+// Avoid reloading when an inline source object is unchanged.
 const same = (a: unknown, b: unknown): boolean => {
   if (a === b) return true
   if (
@@ -330,8 +328,7 @@ const image = Native.defineView(
         if (same(n.props.source, sources)) return
         host.set(n, "source", sources)
         if (host.os === "android") {
-          // ReactImageManager.setHeaders ignores null, so clear previously set
-          // headers with an empty map rather than undefined.
+          // ReactImageManager.setHeaders ignores null, so clear with {}.
           const headers = sources?.[0]?.headers
           if (headers !== undefined) host.set(n, "headers", headers)
           else if (n.props.headers !== undefined) {
@@ -368,7 +365,6 @@ export const Image = <Msg>(
   options: ImageOptions
 ): ImageElement<Msg> => {
   const size = intrinsicSize(options.source)
-  // The options are named as the native props, which `style` sets.
   return (image as ImageElement<Msg>).style(
     { width: size?.width, height: size?.height, ...options } as ImageStyle
   )

@@ -1,11 +1,7 @@
 import * as Path from "node:path"
 import type { MetroConfig, ResolveRequest } from "../NativeMetro.ts"
 
-/**
- * A package asset import deferred from the pre-bundle to Metro's resolver so
- * Metro resolves it from the original importer's location (preserving nested
- * `node_modules`, package `exports`, and scale/platform variants).
- */
+// Bare or external asset import resolved by Metro from its original importer.
 export interface DeferredAsset {
   readonly moduleName: string
   readonly origin: string
@@ -72,14 +68,10 @@ const stripScaleSuffix = (filePath: string): string =>
   filePath.replace(/@[\d.]+x(?=\.[^./\\]+$)/, "")
 
 /**
- * Pre-bundles `entry` for `platform` under the project's
- * `node_modules/.cache`. Returns the file written, the file `entry` resolved
- * to, and any bare package asset imports deferred to Metro's resolver with
- * their original importer. Modules resolve as Metro resolves them: the app's
- * `resolveRequest` first, then, on Android, an import of `./title` picks
- * `title.android.ts` over `title.native.ts` over `title.ts`, trying the
- * config's `sourceExts` in order. Static imports matching `assetExts` are left
- * to Metro so Metro registers every scale variant and emits the files.
+ * Pre-bundles `entry` for `platform` under `node_modules/.cache` using Metro's
+ * `resolveRequest`, platform/native extensions, and `sourceExts`. Static
+ * imports matching `assetExts` are left to Metro, preserving original
+ * importers for deferred package assets.
  */
 export const prebundle = async (
   config: MetroConfig,
@@ -111,7 +103,6 @@ export const prebundle = async (
     )
   // Metro tells an asset by its extension alone, case and all.
   const isAsset = (id: string) => assetExts.has(Path.extname(id).slice(1))
-  // Without a resolver of the app's, every import is handed straight back.
   const resolveRequest: ResolveRequest = config.resolver?.resolveRequest ??
     ((context, moduleName, platform) =>
       context.resolveRequest(context, moduleName, platform))
@@ -148,8 +139,6 @@ export const prebundle = async (
             )
           }
         }
-        // Metro registers every scale of an asset left to it by absolute
-        // path, and emits the files.
         const leave = (id: string) => {
           rejectRequire()
           return { id, external: "absolute" as const }
@@ -192,8 +181,7 @@ export const prebundle = async (
         if (delegated.has(found as Delegated)) {
           const { moduleName, origin } = found as Delegated
           if (isAsset(moduleName)) {
-            // A relative path resolves by its name alone: an asset with only
-            // scaled (@2x) or platform (.android) files has no file of that name.
+            // Relative assets may exist only as @2x or platform-suffixed files.
             if (moduleName[0] === "." || Path.isAbsolute(moduleName)) {
               return leave(Path.resolve(Path.dirname(origin), moduleName))
             }

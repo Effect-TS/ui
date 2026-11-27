@@ -177,8 +177,7 @@ export const withEffectUi = async <Config extends MetroConfig>(
       ...resolved,
       resolver: {
         ...resolver,
-        // Match the resolved entry, including extensionless and platform entries,
-        // and restore original importers for deferred package asset imports.
+        // Swap the entry for its pre-bundle and restore importers for deferred assets.
         resolveRequest: (context, moduleName, platform) => {
           const bundle = platform === null ? undefined : bundles[platform]
           if (!context.dev && bundle !== undefined) {
