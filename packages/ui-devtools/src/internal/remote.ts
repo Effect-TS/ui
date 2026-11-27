@@ -77,6 +77,14 @@ interface Document {
   readonly definitions: Record<string, Json>
 }
 
+// Stands in for a redacting node the walk lost track of.
+const lost: Json = Object.freeze({})
+
+/** What `exampleOf` returns when a value may hold a secret it couldn't mark. */
+const unmasked: Json = Object.freeze({})
+
+const valueKeys = new Set(["const", "enum", "examples", "default"])
+
 /**
  * A value for a JSON Schema, or `undefined` when none is found: a constant,
  * an example, or the smallest value of its type, preferring the first union
@@ -86,6 +94,9 @@ interface Document {
  * `redacted` is the same node in the redacting codec's document. The walk
  * follows it alongside and puts `placeholder` where it has a
  * `Schema.Redacted`, so the value is the plain one with the placeholders in.
+ * When a value comes from a node whose redacting side holds a placeholder the
+ * walk can't reach, such as an `examples` annotation above a
+ * `Schema.Redacted`, it returns `unmasked`.
  */
 const exampleOf = (
   root: Json,
@@ -93,6 +104,22 @@ const exampleOf = (
   redacted?: Document
 ): Json | undefined => {
   const open = new Set<string>()
+  let missed = false
+  const masks = (node: Json | undefined, seen: Set<string>): boolean => {
+    if (node === lost) return true
+    if (redacted === undefined) return false
+    if (Array.isArray(node)) return node.some((item) => masks(item, seen))
+    if (!isObject(node)) return false
+    if (typeof node.$ref === "string") {
+      if (seen.has(node.$ref)) return false
+      seen.add(node.$ref)
+      return masks(resolve(node, redacted.definitions), seen)
+    }
+    return isPlaceholderSchema(node) ||
+      Object.keys(node).some((key) =>
+        !valueKeys.has(key) && masks(node[key], seen)
+      )
+  }
   const walk = (schema: Json, shadow: Json | undefined): Json | undefined => {
     if (redacted !== undefined) shadow = resolve(shadow, redacted.definitions)
     if (
@@ -101,7 +128,13 @@ const exampleOf = (
     ) {
       return walk(schema, undefined) === undefined ? undefined : placeholder
     }
-    if (schema === true) return null
+    const leaf = (value: Json | undefined) => {
+      if (value !== undefined && masks(shadow, new Set())) missed = true
+      return value
+    }
+    const sub = (node: Json | undefined) =>
+      node === undefined && masks(shadow, new Set()) ? lost : node
+    if (schema === true) return leaf(null)
     if (!isObject(schema)) return undefined
     if (typeof schema.$ref === "string") {
       const name = schema.$ref.slice(schema.$ref.lastIndexOf("/") + 1)
@@ -111,17 +144,17 @@ const exampleOf = (
       open.delete(name)
       return out
     }
-    if ("const" in schema) return schema.const
-    if (Array.isArray(schema.enum)) return schema.enum[0]
+    if ("const" in schema) return leaf(schema.const)
+    if (Array.isArray(schema.enum)) return leaf(schema.enum[0])
     if (Array.isArray(schema.examples) && schema.examples.length > 0) {
-      return schema.examples[0]
+      return leaf(schema.examples[0])
     }
-    if ("default" in schema) return schema.default
+    if ("default" in schema) return leaf(schema.default)
     const members = schema.anyOf ?? schema.oneOf
     if (Array.isArray(members)) {
       const shadows = at(shadow, "anyOf") ?? at(shadow, "oneOf")
       for (let i = 0; i < members.length; i++) {
-        const out = walk(members[i], nth(shadows, i))
+        const out = walk(members[i], sub(nth(shadows, i)))
         if (out !== undefined) return out
       }
       return undefined
@@ -132,7 +165,7 @@ const exampleOf = (
         const { allOf, ...rest } = node
         return Object.assign(rest, ...allOf)
       }
-      return walk(merge(schema)!, merge(shadow))
+      return walk(merge(schema)!, sub(merge(shadow)))
     }
     if (isObject(schema.not)) return undefined
     const number = (key: string) =>
@@ -140,7 +173,7 @@ const exampleOf = (
     const type = Array.isArray(schema.type) ? schema.type[0] : schema.type
     switch (type) {
       case "string":
-        return "a".repeat(Math.min(number("minLength") ?? 0, most))
+        return leaf("a".repeat(Math.min(number("minLength") ?? 0, most)))
       case "number":
       case "integer": {
         let out = Math.max(0, number("minimum") ?? -Infinity)
@@ -149,19 +182,19 @@ const exampleOf = (
         out = Math.min(out, number("maximum") ?? Infinity)
         const below = number("exclusiveMaximum")
         if (below !== undefined && out >= below) out = below - 1
-        return out
+        return leaf(out)
       }
       case "boolean":
-        return false
+        return leaf(false)
       case "null":
-        return null
+        return leaf(null)
       case "array": {
         const out: Array<Json> = []
         const prefix = Array.isArray(schema.prefixItems)
           ? schema.prefixItems
           : []
         for (let i = 0; i < prefix.length; i++) {
-          const value = walk(prefix[i], nth(at(shadow, "prefixItems"), i))
+          const value = walk(prefix[i], sub(nth(at(shadow, "prefixItems"), i)))
           if (value === undefined) return undefined
           out.push(value)
         }
@@ -174,7 +207,7 @@ const exampleOf = (
         )
         const item = schema.items === undefined ? true : schema.items
         while (out.length < length) {
-          const value = walk(item, at(shadow, "items"))
+          const value = walk(item, sub(at(shadow, "items")))
           if (value === undefined) {
             return out.length < minItems ? undefined : out
           }
@@ -187,7 +220,10 @@ const exampleOf = (
         const required = Array.isArray(schema.required) ? schema.required : []
         const properties = isObject(schema.properties) ? schema.properties : {}
         for (const key of Object.keys(properties)) {
-          const value = walk(properties[key], at(at(shadow, "properties"), key))
+          const value = walk(
+            properties[key],
+            sub(at(at(shadow, "properties"), key))
+          )
           if (value !== undefined) out[key] = value
           else if (required.includes(key)) return undefined
         }
@@ -197,17 +233,18 @@ const exampleOf = (
         ) {
           const value = walk(
             schema.additionalProperties,
-            at(shadow, "additionalProperties")
+            sub(at(shadow, "additionalProperties"))
           )
           if (value !== undefined) out.key = value
         }
         return out
       }
       default:
-        return null
+        return leaf(null)
     }
   }
-  return walk(root, redacted?.schema)
+  const out = walk(root, redacted?.schema)
+  return missed && out !== undefined ? unmasked : out
 }
 
 const documentOf = (schema: Schema.Top): Document =>
@@ -249,41 +286,51 @@ const messageSchema = (
       Schema.toCodecJson(redactedSchema as Schema.Codec<unknown>)
     )
     const example = (i: number): Effect.Effect<Json> => {
-      const message = exampleOf(members[i], document.definitions)
-      if (message === undefined) {
-        return Effect.succeed({
+      const none = (invalid: string) =>
+        Effect.succeed({
           ...(typeof tags[i] === "string" ? { tag: tags[i] } : {}),
-          invalid: "No value fits this schema."
+          invalid
         })
-      }
-      // An example that doesn't decode can only be redacted by its Schema:
-      // the walk follows the redacting document beside the plain one.
-      const walked = (): { message: Json; redacted?: true } => {
-        if (redacted === undefined) return { message }
+      const message = exampleOf(members[i], document.definitions)
+      if (message === undefined) return none("No value fits this schema.")
+      // Without a decoded value to encode, the walk follows the redacting
+      // document beside the plain one to place the placeholders.
+      const walked = (
+        status: { invalid?: string }
+      ): Effect.Effect<Json> => {
+        if (redacted === undefined) {
+          return Effect.succeed({ message, ...status })
+        }
         const shown = exampleOf(members[i], document.definitions, {
           schema: redactedMembers[i],
           definitions: redacted.definitions
         })!
-        return holdsPlaceholder(shown)
-          ? { message: shown, redacted: true }
-          : { message }
+        return shown === unmasked
+          ? none(
+            "No safe example: a Schema.Redacted's value here comes from an " +
+              "example, default or literal that can't be redacted."
+          )
+          : Effect.succeed({
+            message: shown,
+            ...(holdsPlaceholder(shown) ? { redacted: true } : {}),
+            ...status
+          })
       }
       return decode(message, { errors: "all" }).pipe(
         Effect.matchEffect({
-          onFailure: (error) =>
-            Effect.succeed({ ...walked(), invalid: error.message }),
-          // One that does is redacted by the log's codec, which marks the
-          // Schema.Redacted it decoded to whichever branch supplied it.
+          onFailure: (error) => walked({ invalid: error.message }),
+          // The log's codec marks each Schema.Redacted in the decoded value,
+          // whichever branch supplied it.
           onSuccess: (value) =>
             redacted === undefined
               ? Effect.succeed({ message })
               : Effect.all([encode(value), encodeRedacted(value)]).pipe(
-                Effect.map(([plain, shown]) =>
+                Effect.map(([plain, shown]): Json =>
                   JSON.stringify(plain) === JSON.stringify(shown)
                     ? { message }
                     : { message: shown as Json, redacted: true }
                 ),
-                Effect.orElseSucceed(walked)
+                Effect.catch(() => walked({}))
               )
         })
       )

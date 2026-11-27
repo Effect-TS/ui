@@ -250,7 +250,8 @@ const GetMessageSchema = read(Tool.make("get_message_schema", {
     "Returns the JSON Schema of the messages an instance accepts, as dispatch takes them, and examples: one " +
     "per _tag, or the given tag's. An example with only message decodes and can be sent as is. redacted: true " +
     "means it holds { \"~redacted\": true } where a real value is needed. invalid is the decode error, with the " +
-    "paths that need other values. An example with no message names a tag no value fits.",
+    "paths that need other values. An example with no message names a tag that no value fits, or whose " +
+    "redacted value can't be shown safely.",
   parameters: Schema.Struct({
     session: SessionParam,
     instance: Schema.Number,

@@ -11,7 +11,15 @@ import { DevToolsServer, DevToolsVite } from "@effect/ui-devtools/node"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Context, Effect, Layer, Schedule, Schema, Stream } from "effect"
+import {
+  Context,
+  Effect,
+  Layer,
+  Schedule,
+  Schema,
+  SchemaGetter,
+  Stream
+} from "effect"
 import { McpClient, McpProtocol } from "effect/ai"
 import { HttpRouter } from "effect/http"
 import { AsyncResult } from "effect/reactivity"
@@ -739,6 +747,11 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "returns validated, redacted, and invalid examples from get_message_schema",
     () =>
       Effect.gen(function*() {
+        // The JSON form: the JSON Schema drops a Redacted example.
+        const sampled = Schema.Struct({ token: Schema.Redacted(Schema.String) })
+          .pipe(
+            Schema.annotateEncoded({ examples: [{ token: "sample" }] as never })
+          )
         const SampleMessage = UiSchema.TaggedEnum({
           SelectedItem: {
             index: Schema.Number,
@@ -758,14 +771,18 @@ describe("DevToolsServer", { concurrent: false }, () => {
           Listed: {
             items: Schema.Array(Schema.String).check(Schema.isMinLength(65))
           },
-          Sampled: {
-            payload: Schema.Struct({ token: Schema.Redacted(Schema.String) })
-              .pipe(
-                // The JSON form: the JSON Schema drops a Redacted example.
-                Schema.annotateEncoded({
-                  examples: [{ token: "sample" }] as never
-                })
-              )
+          Sampled: { payload: sampled },
+          // Decodes, but can't be encoded to mark the token.
+          Unencodable: {
+            payload: sampled,
+            extra: Schema.String.pipe(Schema.decodeTo(Schema.String, {
+              decode: SchemaGetter.passthrough(),
+              encode: SchemaGetter.forbidden(() => "no")
+            }))
+          },
+          Undecodable: {
+            payload: sampled,
+            extra: Schema.String.check(Schema.isPattern(/x/))
           },
           Chosen: {
             mode: Schema.Union([
@@ -799,7 +816,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
         )
         const all = yield* agent.call("get_message_schema", { instance })
         assert.isArray(all.examples)
-        assert.strictEqual(all.examples.length, 9)
+        assert.strictEqual(all.examples.length, 11)
 
         const [
           selected,
@@ -809,7 +826,9 @@ describe("DevToolsServer", { concurrent: false }, () => {
           impossible,
           unset,
           listed,
-          sampled,
+          sampledEntry,
+          unencodable,
+          undecodable,
           chosen
         ] = all.examples
 
@@ -871,13 +890,24 @@ describe("DevToolsServer", { concurrent: false }, () => {
         assert.strictEqual(listed.message.items.length, 64)
         assert.include(listed.invalid, "items")
 
-        assert.deepStrictEqual(sampled, {
+        assert.deepStrictEqual(sampledEntry, {
           message: {
             _tag: "Sampled",
             payload: { token: { "~redacted": true } }
           },
           redacted: true
         })
+        for (
+          const [entry, tag] of [
+            [unencodable, "Unencodable"],
+            [undecodable, "Undecodable"]
+          ] as const
+        ) {
+          assert.strictEqual(entry.tag, tag)
+          assert.isUndefined(entry.message)
+          assert.isString(entry.invalid)
+          assert.notInclude(entry.invalid, "sample")
+        }
         assert.deepStrictEqual(chosen, {
           message: { _tag: "Chosen", mode: { "~redacted": true } },
           redacted: true
