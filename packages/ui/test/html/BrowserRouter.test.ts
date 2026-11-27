@@ -259,12 +259,6 @@ const intentsOf = (router: Router.Router) => {
   }
   return intents
 }
-/** Fires `beforeunload`, reporting whether something asked the browser to warn. */
-const beforeUnload = () => {
-  const event = new Event("beforeunload", { cancelable: true })
-  window.dispatchEvent(event)
-  return event.defaultPrevented
-}
 const region = () => document.querySelector("[aria-live=assertive]")
 const description = () =>
   document.head.querySelector("meta[name=description]")?.getAttribute("content")
@@ -882,6 +876,11 @@ describe("BrowserRouter", { concurrent: false }, () => {
       const { listening, window: recording } = recordingListeners(
         "beforeunload"
       )
+      const beforeUnload = () => {
+        const event = new Event("beforeunload", { cancelable: true })
+        window.dispatchEvent(event)
+        return event.defaultPrevented
+      }
 
       window.history.replaceState(null, "", "/")
       const outer = yield* Effect.scope
@@ -921,16 +920,18 @@ describe("BrowserRouter", { concurrent: false }, () => {
       yield* Scope.close(routerScope, Exit.void)
       expect(beforeUnload()).toBe(false)
       expect(listening.size).toBe(0)
-    }).pipe(Effect.scoped))
 
-  it.effect("doesn't warn before unloading with warnOnUnload: false", () =>
-    Effect.gen(function*() {
-      window.history.replaceState(null, "", "/")
-      const context = yield* Layer.build(
-        BrowserRouter.layer({ routes: AppRoute, warnOnUnload: false })
+      // warnOnUnload: false never registers a listener or prevents unload.
+      const optOut = yield* Layer.build(
+        BrowserRouter.layer({
+          routes: AppRoute,
+          warnOnUnload: false,
+          window: recording
+        })
       )
-      yield* Context.get(context, Router.Router).block("form")
+      yield* Context.get(optOut, Router.Router).block("form")
       expect(beforeUnload()).toBe(false)
+      expect(listening.size).toBe(0)
     }).pipe(Effect.scoped))
 
   it.effect("puts the shell's title back and removes the region when it closes", () =>
