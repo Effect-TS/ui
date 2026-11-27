@@ -133,7 +133,6 @@ const nameOf = (d: Native.Device) =>
 const entry = (d: Native.Device, setting: Setting) =>
   settings[setting][android(d) ? 0 : 1]
 
-// Asks native for the setting, answering `false` when it can't.
 const read = (
   d: Native.Device,
   setting: Setting,

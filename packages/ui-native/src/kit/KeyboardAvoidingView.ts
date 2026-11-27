@@ -217,15 +217,11 @@ export const KeyboardAvoidingView = Native.component({
       (percent === $.model.percent ? $ : $.set({ ...$.model, percent })).run(
         Measure.make()
       ),
-    // The frame includes the inset on screen, which the props and Model
-    // give: a render commits before the next message. The adjustment moves
-    // the view's bottom edge by a share of how much it changed, which the
-    // parent's layout sets: the padding grows the view and the height
-    // shrinks it, at its top, its bottom or both, and the position moves it.
-    // Movement up to that much is the adjustment's, and is left out of the
-    // edge the inset is computed from, so the inset doesn't move it again.
-    // The view is measured again once a changed inset is on screen, so the
-    // next layout's movement isn't taken for the adjustment's.
+    // The measured frame already includes the committed inset. Exclude
+    // movement caused by that inset so it does not feed back into the next
+    // calculation. Parent layout determines how much the bottom edge moves.
+    // Measure again after an inset change to distinguish that movement
+    // from later layout changes.
     Measured: ($, { height, y }) => {
       const { model, props } = $
       const inset = insetOf(props, model)
@@ -251,7 +247,6 @@ export const KeyboardAvoidingView = Native.component({
           : measured
       const seen = edge - (measured - bottom)
       const full = behavior === "height" ? height + inset : height
-      // A layout that moved nothing renders nothing.
       if (
         bottom === model.bottom && full === model.height &&
         seen === model.seen.bottom && inset === model.seen.inset
@@ -273,7 +268,6 @@ export const KeyboardAvoidingView = Native.component({
     )
   ],
   parts: (p, model) => {
-    // Follows the props at once, such as `enabled` turning off.
     const inset = insetOf(p.props, model)
     return {
       inset,

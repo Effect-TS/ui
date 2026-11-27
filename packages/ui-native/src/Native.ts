@@ -1146,7 +1146,7 @@ export const Device: Context.Reference<Device> = Context.Reference<Device>(
 )
 
 /**
- * A native module rejected a call, such as `Linking.open` for a URL no app
+ * A native module rejected a call, such as `Linking.openURL` for a URL no app
  * handles. `cause` is native's error.
  *
  * @stability experimental

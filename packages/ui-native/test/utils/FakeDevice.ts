@@ -75,7 +75,6 @@ export const module = (
   return { module: proxy as any, calls }
 }
 
-/** Runs `effect` on `device`. */
 export const run = <A, E>(
   device: Native.Device,
   effect: Effect.Effect<A, E>

@@ -2,4 +2,4 @@
 "@effect/ui": minor
 ---
 
-`Subscription.direct`'s `attach` can return `{ close, start }`. `start` runs once the Subscription has started, outside the render that started it, so a source can send its current value before any change.
+Allow `Subscription.direct`'s `attach` to return `{ close, start }`, with `start` running outside the render that started the Subscription. Use it to emit a source's current value before subsequent changes.

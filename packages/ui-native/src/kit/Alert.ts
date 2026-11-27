@@ -126,7 +126,6 @@ export type Pressed<O extends Options> =
 
 const ok: ReadonlyArray<Button> = [{ id: "ok", text: "OK" }]
 
-// No buttons, or an empty list, gives the one OK button.
 const buttonsOf = (
   buttons: ReadonlyArray<Button> | undefined
 ): ReadonlyArray<Button> => buttons?.length ? buttons : ok

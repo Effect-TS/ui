@@ -55,12 +55,12 @@ In development Metro serves the sources. Editing a module that exports only comp
 
 ## Device APIs
 
-The kit's device APIs call React Native's native modules and device events directly, without loading React Native's JavaScript wrappers. Each reads its device from `Native.Device`, which `NativeApp.register` provides, and each has a value that's safe off a device: a test without one gets a window of 0×0 at scale 1, the `"active"` app state, and a hidden keyboard.
+The kit's device APIs use native modules and device events directly rather than React Native's JavaScript wrappers. `NativeApp.register` provides their `Native.Device` service. Tests can provide a fake device; without one, defaults include a 0×0 window at scale 1, the `"active"` app state, and a hidden keyboard.
 
 They come in three forms:
 
-- Effects, such as `Linking.openURL(url)` and `Dimensions.get`. One that native can reject fails with `Native.DeviceError`.
-- Commands for `update`, such as `Keyboard.Dismiss` and `Alert.Alert`. A Command can't fail, so one whose Effect can is answered with a `Result`.
+- Effects, such as `Linking.openURL(url)` and `Dimensions.get`. Fallible calls report `Native.DeviceError`.
+- Commands for `update`, such as `Keyboard.Dismiss` and `Alert.Alert`. Commands for fallible calls return a `Result`.
 - Subscriptions and Streams of device events, such as `Dimensions.onChange` and `Keyboard.changes`.
 
 ```ts

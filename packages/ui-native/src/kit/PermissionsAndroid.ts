@@ -125,7 +125,6 @@ export interface Rationale {
 
 const name = "PermissionsAndroid"
 
-// Runs `f` on Android, and answers `otherwise` elsewhere.
 const onAndroid = <A>(
   method: string,
   otherwise: A,
