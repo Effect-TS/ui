@@ -24,20 +24,19 @@ const padding = (element: Element, side: "start" | "end") =>
 const rect = (top: number, height: number, width = 300) =>
   DOMRect.fromRect({ x: 0, y: top, width, height })
 
-// With a `pageTop`, the page scrolls the list, which starts that far down it.
-const layout = (pageTop?: number) =>
+// With `page`, the page scrolls the list; `listTop` places the list that far below its scroller's top.
+const layout = (page = false, listTop = 0) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       const original = Element.prototype.getBoundingClientRect
       const windowScrollTo = window.scrollTo
-      const origin = pageTop ?? 0
-      const height = pageTop === undefined ? 100 : window.innerHeight
+      const height = page ? window.innerHeight : 100
       let stored = 0
       const scroller = () =>
-        pageTop === undefined
-          ? document.querySelector<HTMLElement>(".viewport")!
-          : document.documentElement
-      const target = () => pageTop === undefined ? scroller() : window
+        page
+          ? document.documentElement
+          : document.querySelector<HTMLElement>(".viewport")!
+      const target = () => page ? window : scroller()
       const list = () => document.querySelector<HTMLElement>(".list")!
       const listHeight = () =>
         padding(list(), "start") +
@@ -45,16 +44,17 @@ const layout = (pageTop?: number) =>
         padding(list(), "end")
       const top = () => (stored = Math.max(
         0,
-        Math.min(stored, origin + listHeight() - height)
+        Math.min(stored, listTop + listHeight() - height)
       ))
       Element.prototype.getBoundingClientRect = function(this: Element) {
         if (this.classList.contains("viewport")) return rect(0, 100)
         if (this.classList.contains("list")) {
-          return rect(origin - top(), listHeight())
+          return rect(listTop - top(), listHeight())
         }
         if (this.classList.contains("item")) {
           return rect(
-            origin - top() + Number(this.getAttribute("data-index")) * itemSize,
+            listTop - top() +
+              Number(this.getAttribute("data-index")) * itemSize,
             itemSize
           )
         }
@@ -69,7 +69,7 @@ const layout = (pageTop?: number) =>
         })
         Object.defineProperty(element, "scrollHeight", {
           configurable: true,
-          get: () => origin + listHeight()
+          get: () => listTop + listHeight()
         })
         Object.defineProperty(element, "scrollTop", {
           configurable: true,
@@ -109,12 +109,13 @@ const layout = (pageTop?: number) =>
 
 const Steps = Effect.fnUntraced(function*(
   steps: ReadonlyArray<Partial<VirtualListProps>>,
-  { ownViewport = false, pageTop }: {
+  { listTop = 0, ownViewport = false, page = false }: {
+    readonly listTop?: number
     readonly ownViewport?: boolean
-    readonly pageTop?: number
+    readonly page?: boolean
   } = {}
 ) {
-  const geometry = yield* layout(pageTop)
+  const geometry = yield* layout(page, listTop)
   const events: Array<VirtualListEvents> = []
   const Message = UiSchema.TaggedEnum({ Advanced: {} })
   const Demo = Html.component({
@@ -134,7 +135,7 @@ const Steps = Effect.fnUntraced(function*(
             return undefined
           },
           view: (virtualList) =>
-            (ownViewport || pageTop !== undefined
+            (ownViewport || page
               ? h.div.class("viewport").attr("style", "overflow-y:visible")
               : virtualList.viewport(h.div.class("viewport"))).children(
                 virtualList.list(h.ul.class("list")).children(
@@ -393,44 +394,62 @@ describe("VirtualList in a document", { concurrent: false }, () => {
       const added = (
         count: number
       ) => [...Array.from({ length: count }, (_, i) => "n" + i), ...keys]
-      const { next, scrollTo, scrollTop } = yield* Steps([
-        { keys, scrollTo: toKey("k100") },
-        { count: 1010, keys: added(10), scrollTo: toKey("k100") },
-        { count: 1020, keys: added(20), scrollTo: toKey("k100") }
-      ])
-      assert.strictEqual(scrollTop(), 100 * itemSize)
-      yield* next
-      assert.strictEqual(scrollTop(), 110 * itemSize)
+      yield* Effect.scoped(
+        Effect.gen(function*() {
+          const { next, scrollTo, scrollTop } = yield* Steps([
+            { keys, scrollTo: toKey("k100") },
+            { count: 1010, keys: added(10), scrollTo: toKey("k100") },
+            { count: 1020, keys: added(20), scrollTo: toKey("k100") }
+          ])
+          assert.strictEqual(scrollTop(), 100 * itemSize)
+          yield* next
+          assert.strictEqual(scrollTop(), 110 * itemSize)
 
-      scrollTo(4000)
-      yield* tick
-      yield* next
-      assert.strictEqual(scrollTop(), 4200)
+          scrollTo(4000)
+          yield* tick
+          yield* next
+          assert.strictEqual(scrollTop(), 4200)
+        })
+      )
+
+      const withHeader = yield* Steps([
+        { count: 1000, keys },
+        { count: 1010, keys: added(10) }
+      ], { listTop: 40 })
+      yield* withHeader.next
+      assert.strictEqual(withHeader.scrollTop(), 10 * itemSize)
     }))
 
   it.effect("keeps a page above the list in place when keyed items reorder, and the item in view once in the list", () =>
     Effect.gen(function*() {
       const keys = Array.from({ length: 200 }, (_, i) => "k" + i)
       const reversed = [...keys].reverse()
+      const prepended = [
+        ...Array.from({ length: 50 }, (_, i) => "n" + i),
+        ...reversed
+      ]
       const { indices, next, scrollTo, scrollTop } = yield* Steps([
         { count: 200, keys },
         { count: 200, keys: reversed },
-        {
-          count: 210,
-          keys: [
-            ...Array.from({ length: 10 }, (_, i) => "n" + i),
-            ...reversed
-          ]
-        }
-      ], { pageTop: 400 })
+        { count: 250, keys: prepended },
+        { count: 250, keys: [...prepended].reverse() }
+      ], { page: true, listTop: 2 })
       yield* next
       assert.strictEqual(scrollTop(), 0)
       assert.strictEqual(indices()[0], 0)
 
-      scrollTo(400 + 100 * itemSize)
+      scrollTo(2)
       yield* tick
       yield* next
-      assert.strictEqual(scrollTop(), 400 + 110 * itemSize)
+      assert.strictEqual(scrollTop(), 2 + 50 * itemSize)
+
+      scrollTo(2)
+      yield* tick
+      scrollTo(0)
+      yield* tick
+      yield* next
+      assert.strictEqual(scrollTop(), 0)
+      assert.strictEqual(indices()[0], 0)
     }))
 
   it.effect("reports a list that grows without a scroll once with trackScroll, and not without it", () =>

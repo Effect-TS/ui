@@ -986,6 +986,7 @@ const TrackVirtualList = Mount.makeStream(
           readonly atStart: boolean
           readonly atEnd: boolean
           readonly overflowing: boolean
+          readonly above: boolean
         } | null = null
         let applied: VirtualListScrollTo | null = null
         let pinned: typeof ScrollRequest.Type | null = null
@@ -1079,8 +1080,8 @@ const TrackVirtualList = Mount.makeStream(
           const top = box().top
           const placed = placement(top)
           anchor = null
-          // Above the list, keep the scroll offset rather than follow a row.
-          if (placed > 0.5) return
+          // Above the list on the page, keep the scroll offset rather than follow a row.
+          if (viewport === null && placed > 0.5) return
           for (const item of itemsOf()) {
             const rect = placedAt(item)
             if (rect.bottom > top + 0.5) {
@@ -1101,10 +1102,6 @@ const TrackVirtualList = Mount.makeStream(
         }
 
         const anchorAt = (start: number): Position | null => {
-          // Above the list, hold its start rather than follow a row.
-          if (placement(box().top) > 0.5) {
-            return { index: 0, key: null, offset: start }
-          }
           const zero = origin()
           for (const item of itemsOf()) {
             const rect = placedAt(item)
@@ -1143,9 +1140,11 @@ const TrackVirtualList = Mount.makeStream(
           const overflowing = viewport !== null &&
             (viewport.scrollHeight > viewport.clientHeight ||
               viewport.scrollWidth > viewport.clientWidth)
+          const above = viewport === null && placement(box().top) > 0.5
           const unchanged = reported !== null &&
             same(height, reported.height) && atStart === reported.atStart &&
-            atEnd === reported.atEnd && overflowing === reported.overflowing
+            atEnd === reported.atEnd && overflowing === reported.overflowing &&
+            above === reported.above
           if (
             scrolled === null && unchanged &&
             (same(start, reported!.start) ||
@@ -1154,7 +1153,7 @@ const TrackVirtualList = Mount.makeStream(
             if (args.track && !sameTracked(next, tracked)) sendMetrics(next)
             return
           }
-          reported = { start, height, atStart, atEnd, overflowing }
+          reported = { start, height, atStart, atEnd, overflowing, above }
           tracked = next
           send(
             VirtualListMessage.MovedViewport({
@@ -1164,7 +1163,10 @@ const TrackVirtualList = Mount.makeStream(
               atEnd,
               overflowing,
               length,
-              anchor: anchorAt(start),
+              // Above the list on the page, hold its start rather than follow a row.
+              anchor: above
+                ? { index: 0, key: null, offset: start }
+                : anchorAt(start),
               scrolled
             })
           )
