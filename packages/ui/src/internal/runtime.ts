@@ -368,7 +368,6 @@ export type MakeDom = (
 
 interface HostInput {
   readonly elements: ReadonlyArray<string> | "any"
-  readonly hot?: boolean | undefined
   readonly make: (
     container: unknown,
     ownsHead: boolean,
@@ -383,7 +382,6 @@ const fromRenderer = (ctx: Context.Context<any>): HostInput => {
   const host = Context.get(ctx, services.Renderer).host
   return {
     elements: host.elements,
-    hot: host.hot,
     make: (container, ownsHead, step) => {
       const dom = domHost.doms.get(host)?.make(container, {
         head: ownsHead,
@@ -479,9 +477,19 @@ export const mount = (
   never,
   Scope.Scope | Renderer.Renderer
 > =>
-  withProps(
-    rootProps,
-    (props) => mountCore(component, props, container, fromRenderer, options)
+  Effect.contextWith((ctx: Context.Context<Renderer.Renderer>) =>
+    withProps(rootProps, (props) =>
+      mountCore(
+        component,
+        props,
+        container,
+        fromRenderer,
+        // A host such as a native one opts in to its own hot-reload runtime.
+        options?.hot === undefined &&
+          Context.get(ctx, services.Renderer).host.hot === true
+          ? { ...options, hot: hotSessions.openHost() }
+          : options
+      ))
   )
 
 /**
@@ -532,8 +540,7 @@ const start = (
     : messageLog.recorder(logService, clock, session, component.definition.name)
   let initCommands: ReadonlyArray<unknown> | undefined
   const hydrate = options?.hydrate
-  const hot = options?.hot ??
-    (hostInput.hot === true ? hotSessions.openHost() : undefined)
+  const hot = options?.hot
   const record: Kernel.Recorder = (inst, draft) => {
     if (initCommands !== undefined && draft._tag === "Mounted") {
       draft = { ...draft, commands: initCommands }
