@@ -575,7 +575,8 @@ const expandRoot = <Msg>(
       case "Text":
         return node
       case "Outlet": {
-        // The story's component placing a slot: it shows what the story passed.
+        // The story's component placing a slot: it shows what the story passed. Mounted under the slot,
+        // the content reads the owners above the story, not those around the outlet.
         const input = filled?.[node.name]
         if (input === undefined) return node
         return {
@@ -585,7 +586,7 @@ const expandRoot = <Msg>(
             "/" + name + "/" + slotSegment(node.name),
             1,
             false,
-            owners,
+            root,
             undefined
           )
         } as View.Node<
@@ -1961,7 +1962,7 @@ export const tryFireNode = <Props, Model, Msg, Events>(
         `${step}: only ${
           owners.join(" and ")
         } handles "${event}" at ${description}. ` +
-        "A scene doesn't run a child's update: use givenChild for its Model, or a Play.",
+        `A scene doesn't run a headless child's update, and givenChild only sets the Model it renders: test what ${story.component.definition.name} does with the child's events with childEmit, or the interaction itself in a Play.`,
       prevented: always
     }
   }
