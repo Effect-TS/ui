@@ -1664,21 +1664,36 @@ const build = (
     const publishQueue: Array<{
       readonly location: Location
       readonly targets: ReadonlyArray<(location: Location) => void>
+      readonly animated: boolean
     }> = []
     let publishing = false
-    const publish = (next: Location) => {
-      publishQueue.push({ location: next, targets: Array.from(listeners) })
+    const publish = (next: Location, animated: boolean = false) => {
+      publishQueue.push({
+        location: next,
+        targets: Array.from(listeners),
+        animated
+      })
       if (publishing) return
       publishing = true
       try {
         while (publishQueue.length > 0) {
-          const { location, targets } = publishQueue.shift()!
-          for (const listener of targets) {
-            if (listeners.has(listener)) listener(location)
+          const { animated, location, targets } = publishQueue.shift()!
+          const marked = animated ? Array.from(roots) : undefined
+          if (marked !== undefined) {
+            for (const root of marked) root.still(true)
           }
-          while (wakes.length > 0) {
-            const batch = wakes.splice(0)
-            for (const wake of batch) wake()
+          try {
+            for (const listener of targets) {
+              if (listeners.has(listener)) listener(location)
+            }
+            while (wakes.length > 0) {
+              const batch = wakes.splice(0)
+              for (const wake of batch) wake()
+            }
+          } finally {
+            if (marked !== undefined) {
+              for (const root of marked) root.still(false)
+            }
           }
         }
       } finally {
@@ -1753,6 +1768,7 @@ const build = (
       mode: {
         readonly quiet: boolean
         readonly scroll: boolean
+        readonly animated?: boolean | undefined
         readonly blocks?: ReadonlyArray<string> | undefined
       },
       saved?: Record<string, unknown> | undefined
@@ -1790,7 +1806,7 @@ const build = (
           blocks: blocked
         }
       }
-      publish(next)
+      publish(next, mode.animated === true)
     }
 
     /** Writes `url` as a new or the current entry, and moves to it. */
@@ -1964,10 +1980,6 @@ const build = (
       leave()
       index = target
       const saved = snapshots.get(target) ?? entry?.snapshot
-      // The host animated the traversal, so the flush that renders it starts no view transition.
-      if (animated) {
-        for (const root of roots) root.still()
-      }
       set({
         route: found.value.route,
         url: printed,
@@ -1976,7 +1988,8 @@ const build = (
         seq: current.seq + 1
       }, {
         quiet,
-        scroll: true
+        scroll: true,
+        animated: animated === true
       }, saved)
     }
     const unlisten = history.listen(popped)

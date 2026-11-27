@@ -7,7 +7,7 @@ class Running implements Kernel.Transitions {
   types: Set<string> | undefined = undefined
   holding = false
   starting = false
-  stilled = false
+  stilled = 0
   waiting: Array<() => void> = []
   constructor(
     tree: Kernel.Tree,
@@ -17,14 +17,18 @@ class Running implements Kernel.Transitions {
     this.start = start
   }
   request(types: ReadonlyArray<string>): void {
-    if (this.holding) return
+    if (this.holding || this.stilled > 0) return
     const set = this.types ??= new Set()
     for (const type of types) set.add(type)
   }
-  still(): void {
-    this.stilled = true
-    // A flush always follows, so the flag never outlives the navigation.
-    Kernel.wake(this.tree)
+  still(on: boolean): void {
+    if (on) {
+      this.stilled++
+      this.types = undefined
+      if (!this.holding) this.drain(true)
+    } else if (this.stilled > 0) {
+      this.stilled--
+    }
   }
   waits(inst: Kernel.Instance): boolean {
     if (!this.holding && this.types === undefined) return false
@@ -38,14 +42,10 @@ class Running implements Kernel.Transitions {
   }
   hold(): boolean {
     const types = this.types
-    const stilled = this.stilled
-    this.stilled = false
     if (types === undefined) return false
     this.types = undefined
     this.holding = this.starting = true
-    // Stilled, the flush goes on as when the host declines to animate.
-    if (stilled) this.resume()
-    else this.start(() => this.resume(), [...types])
+    this.start(() => this.resume(), [...types])
     this.starting = false
     return this.holding
   }
@@ -53,17 +53,34 @@ class Running implements Kernel.Transitions {
     this.types = undefined
     this.resume()
   }
-  resume(): void {
-    if (!this.holding) return
-    this.holding = false
+  drain(quiet: boolean): void {
     const tree = this.tree
     if (tree.closed) return
     const waiting = this.waiting
+    if (waiting.length === 0) return
     this.waiting = []
     for (let index = 0; index < waiting.length; index++) {
-      defer(tree, waiting[index]!)
+      const f = waiting[index]!
+      defer(
+        tree,
+        quiet
+          ? () => {
+            this.stilled++
+            try {
+              f()
+            } finally {
+              this.stilled--
+            }
+          }
+          : f
+      )
     }
-    if (!this.starting) Kernel.flush(tree)
+  }
+  resume(): void {
+    if (!this.holding) return
+    this.holding = false
+    this.drain(false)
+    if (!this.starting && !this.tree.closed) Kernel.flush(this.tree)
   }
 }
 

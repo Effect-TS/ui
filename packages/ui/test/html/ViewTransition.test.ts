@@ -206,6 +206,23 @@ const held = Effect.gen(function*() {
   return { ...app, tasks, runTasks }
 })
 
+const flaggedBack = Effect.acquireUseRelease(
+  Effect.sync(() => {
+    const Original = window.PopStateEvent
+    win.PopStateEvent = class extends Original {
+      constructor(type: string, init?: PopStateEventInit) {
+        super(type, { ...init, hasUAVisualTransition: true })
+      }
+    }
+    return Original
+  }),
+  () => Effect.sync(() => window.history.back()),
+  (Original) =>
+    Effect.sync(() => {
+      win.PopStateEvent = Original
+    })
+)
+
 describe("view transitions", { concurrent: false }, () => {
   it.effect("an update that asks for one commits in the browser's callback, with what arrives meanwhile", () =>
     Effect.gen(function*() {
@@ -320,7 +337,7 @@ describe("view transitions", { concurrent: false }, () => {
       expect(card()).toBe("Like 2")
     }).pipe(Effect.scoped))
 
-  it.effect("a pop the browser already animated renders without a transition, drains queued child messages, and leaves the next pop animated", () =>
+  it.effect("a pop the browser already animated renders without a transition, drains queued child messages, and leaves an ordinary pop animated", () =>
     Effect.gen(function*() {
       const transitions = yield* fakeTransitions()
       const { card, click, runTasks, shown, tasks } = yield* held
@@ -334,22 +351,7 @@ describe("view transitions", { concurrent: false }, () => {
       expect(shown()).toBe("Detail grid ")
       click("List")
       click(card())
-      yield* Effect.acquireUseRelease(
-        Effect.sync(() => {
-          const Original = window.PopStateEvent
-          win.PopStateEvent = class extends Original {
-            constructor(type: string, init?: PopStateEventInit) {
-              super(type, { ...init, hasUAVisualTransition: true })
-            }
-          }
-          return Original
-        }),
-        () => Effect.sync(() => window.history.back()),
-        (Original) =>
-          Effect.sync(() => {
-            win.PopStateEvent = Original
-          })
-      )
+      yield* flaggedBack
       runTasks()
       expect({
         shown: shown(),
@@ -366,6 +368,135 @@ describe("view transitions", { concurrent: false }, () => {
         ["to-detail"],
         ["to-detail"]
       ])
+      transitions.started[1]!.update()
+      runTasks()
+      // An ordinary Forward before the flush still animates after a flagged Back.
+      yield* flaggedBack
+      window.history.forward()
+      runTasks()
+      expect(transitions.started.map((started) => started.types)).toEqual([
+        ["to-detail"],
+        ["to-detail"],
+        ["to-detail"]
+      ])
+    }).pipe(Effect.scoped))
+
+  it.effect("a child requesting a transition while a parent transition is pending does not animate a flagged pop", () =>
+    Effect.gen(function*() {
+      const transitions = yield* fakeTransitions()
+      window.history.replaceState(null, "", "/")
+      const tasks: Array<() => void> = []
+      const runTasks = () => {
+        while (tasks.length > 0) tasks.shift()!()
+      }
+      const app = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          document.body.appendChild(document.createElement("div"))
+        ),
+        (element) => Effect.sync(() => element.remove())
+      )
+      const ChildMsg = UiSchema.TaggedEnum({
+        ClickedLike: {},
+        ChangedRoute: { route: GalleryRoute }
+      })
+      const AnimatedChild = Html.component({
+        name: "AnimatedChild",
+        props: Schema.Struct({ route: GalleryRoute }),
+        model: Schema.Struct({ route: GalleryRoute, likes: Schema.Number }),
+        message: ChildMsg
+      }).make({
+        init: ($) => ({ route: $.props.route, likes: 0 }),
+        update: {
+          ClickedLike: ($) =>
+            $.evolve({ likes: $.model.likes + 1 }).viewTransition([
+              "child-like"
+            ]),
+          ChangedRoute: ($, { route }) =>
+            $.evolve({ route }).viewTransition(["child-pop"])
+        },
+        subscriptions: ({ model }) => [
+          Router.subscription(
+            GalleryRoute,
+            model.route,
+            (route) => ChildMsg.ChangedRoute({ route })
+          )
+        ],
+        view: (h, model) =>
+          h.button.on("click", ChildMsg.ClickedLike()).children(
+            `${model.route._tag} ${model.likes}`
+          )
+      })
+      const Parent = Html.component({
+        name: "Parent",
+        props: Schema.Struct({ route: GalleryRoute }),
+        model: Schema.Struct({ route: GalleryRoute, layout: Layout }),
+        message: Message
+      }).make({
+        init: ($) => ({ route: $.props.route, layout: "grid" as const }),
+        update: {
+          ClickedLayout: ($, { layout }) =>
+            $.evolve({ layout }).viewTransition(["layout-change"]),
+          TypedFilter: ($) => $.model,
+          ClickedOpen: ($) =>
+            $.run(
+              Router.push(GalleryRoute, GalleryRoute.Detail()).pipe(
+                Command.asNoop
+              )
+            ),
+          ChangedRoute: ($, { route }) =>
+            $.evolve({ route }).viewTransition(["to-detail"])
+        },
+        subscriptions: ({ model }) => [
+          Router.subscription(
+            GalleryRoute,
+            model.route,
+            (route) => Message.ChangedRoute({ route })
+          )
+        ],
+        view: (h, model) =>
+          h.main(
+            h.p(`${model.route._tag} ${model.layout}`),
+            h.button.on("click", Message.ClickedOpen()).children("Open"),
+            h.button.on("click", Message.ClickedLayout({ layout: "list" }))
+              .children("List"),
+            AnimatedChild(h, { props: { route: model.route } })
+          )
+      })
+      const context = Context.merge(
+        yield* Layer.build(BrowserHost.layer()),
+        yield* Layer.build(BrowserRouter.layer({ routes: GalleryRoute }))
+      ).pipe(
+        Context.add(Executor.CurrentExecutor, {
+          scheduler: undefined,
+          schedule: (task) => tasks.push(task)
+        })
+      )
+      yield* Effect.flatMap(
+        Router.currentRoute(GalleryRoute),
+        (route) => Renderer.mount(Parent, { route }, app)
+      ).pipe(Effect.provideContext(context))
+      HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Open" }))
+      while (transitions.started.length === 0) {
+        if (tasks.length > 0) tasks.shift()!()
+        else yield* tick
+      }
+      transitions.started[0]!.update()
+      runTasks()
+      HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "List" }))
+      HtmlLocator.click(
+        HtmlLocator.getByRole(app, "button", { name: "Detail 0" })
+      )
+      yield* flaggedBack
+      runTasks()
+      expect({
+        parent: app.querySelector("p")!.textContent,
+        child: app.querySelector("main > button:last-child")!.textContent,
+        started: transitions.started.length
+      }).toEqual({
+        parent: "Grid list",
+        child: "Grid 1",
+        started: 1
+      })
     }).pipe(Effect.scoped))
 
   it.effect("freezing settles a requested transition's update at once, without starting one", () =>
