@@ -517,10 +517,7 @@ const computeName = <N>(index: Index<N>, entry: Entry<N>): string => {
   if (tag === "input" && type === "image") {
     return normalize(reader.attr(node, "alt") ?? "")
   }
-  if (
-    tag === "input" || tag === "select" || tag === "textarea" ||
-    tag === "meter" || tag === "progress"
-  ) {
+  if (labelable.has(tag)) {
     const id = reader.attr(node, "id")
     // A label can both name the control by `for` and wrap it: it counts once.
     const labels = [
