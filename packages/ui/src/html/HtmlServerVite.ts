@@ -20,9 +20,18 @@
  *
  * In a build, it builds the client, then the server entry, using the
  * client's `index.html` as the template. It requests each `prerender`
- * path at `origin` and writes a 200 to `<path>.html`, or `index.html`
- * for a path ending in `/`, and a 404 to `404.html`. Any other status
- * fails the build. The server build isn't kept.
+ * path at `origin` with `HtmlServer.Static` set to `true` and writes a
+ * 200 to `<path>.html`, or `index.html` for a path ending in `/`, and a
+ * 404 to `404.html`. Any other status fails the build. When
+ * `serverOutDir` is omitted, the server build isn't kept.
+ *
+ * When `serverOutDir` is set, the build emits the server entry to
+ * `<serverOutDir>/index.js` (or `index.mjs` when the app's package isn't
+ * `"type": "module"`) alongside its declaration file (`index.d.ts` /
+ * `index.d.mts`), exporting `handler` and `dispose` from
+ * `HttpRouter.toWebHandler`. A host serves files from the client `outDir`
+ * first and passes remaining requests to `handler`. `serverOutDir` must
+ * not overlap the client `outDir`.
  *
  * When another renderer builds the page shell, reduce `index.html` to its
  * asset tags and a `<!--app-html-->` marker directly in `<body>`, so the
@@ -52,7 +61,7 @@
  * // src/entry.server.ts:
  * //
  * // import { document } from "virtual:@effect/ui/document"
- * // export default layerHttp(App, { routes: AppRoute, document, static: import.meta.env.PROD })
+ * // export default layerHttp(App, { routes: AppRoute, document })
  * // export const prerender = [AppRoute.print(AppRoute.Home())]
  * ```
  *
@@ -96,6 +105,12 @@ export interface Options {
   readonly entry: string
   /** The origin prerendered pages are requested at. Defaults to `"http://localhost"`. */
   readonly origin?: string | undefined
+  /**
+   * Directory to write the production web handler (`index.js` / `index.mjs`
+   * and its declaration file) to. When omitted, the server build isn't kept.
+   * Must not overlap the client `outDir`.
+   */
+  readonly serverOutDir?: string | undefined
 }
 
 /**
@@ -117,11 +132,22 @@ export interface Plugin {
   load(this: LoadContext, id: string): Promise<string | undefined>
   configureServer(server: DevServer): () => void
   buildApp(builder: Builder): Promise<void>
-  buildEnd(this: { readonly environment: object }): Promise<void>
+  buildEnd(this: BuildEndContext): Promise<void>
 }
 
 interface LoadContext {
   addWatchFile(file: string): void
+  resolve?(
+    source: string,
+    importer?: string
+  ): Promise<{ readonly id: string } | null>
+}
+
+interface BuildEndContext {
+  readonly environment: object
+  getModuleInfo?(id: string): {
+    readonly exports?: ReadonlyArray<string> | null
+  } | null
 }
 
 interface OutputFile {
@@ -172,10 +198,24 @@ interface ServerModule {
   readonly handler: (request: Request) => Promise<Response>
   readonly dispose: () => Promise<void>
   readonly prerender: () => Promise<ReadonlyArray<string>>
+  readonly prerenderRequest: (request: Request) => Promise<Response>
 }
 
 const documentId = "virtual:@effect/ui/document"
 const serverId = "virtual:@effect/ui/server"
+
+const declarationSource = [
+  "import type { Context } from \"effect/Context\"",
+  "",
+  "export declare const handler: (",
+  "  request: Request,",
+  "  context?: Context<never> | undefined",
+  ") => Promise<Response>",
+  "export declare const dispose: () => Promise<void>",
+  ""
+].join("\n")
+
+let importSeq = 0
 
 /**
  * Creates the Vite plugin.
@@ -189,6 +229,8 @@ export const plugin = (options: Options): Plugin => {
   let devServer: DevServer | undefined
   // The app's `index.html` in dev, and the client build's in a build.
   let templateFile = ""
+  let resolvedEntry: string | undefined
+  let hasPrerender = true
   // Closes each dev server, by its client environment. A restart
   // configures the new server before it closes the old one.
   const closers = new WeakMap<object, () => Promise<void>>()
@@ -212,7 +254,12 @@ export const plugin = (options: Options): Plugin => {
       ssr: { noExternal: [/^@effect\/ui/] },
       environments: {
         ssr: {
-          build: { write: false, rolldownOptions: { input: serverId } }
+          build: options.serverOutDir !== undefined
+            ? {
+              outDir: options.serverOutDir,
+              rolldownOptions: { input: { index: serverId } }
+            }
+            : { write: false, rolldownOptions: { input: serverId } }
         }
       }
     }),
@@ -227,12 +274,22 @@ export const plugin = (options: Options): Plugin => {
         ].join("\n")
       }
       if (id === `\0${serverId}`) {
+        resolvedEntry = (await this.resolve?.(options.entry))?.id
+        const handlerOptions =
+          devServer !== undefined || options.serverOutDir === undefined
+            ? ", { disableLogger: true }"
+            : ""
         return [
           `import * as entry from ${JSON.stringify(options.entry)}`,
+          `import { Static } from "@effect/ui/html/HtmlServer"`,
+          `import * as Context from "effect/Context"`,
           `import { isEffect, runPromise } from "effect/Effect"`,
           `import { toWebHandler } from "effect/http/HttpRouter"`,
-          `export const { handler, dispose } = toWebHandler(entry.default, { disableLogger: true })`,
-          `export const prerender = async () => isEffect(entry.prerender) ? runPromise(entry.prerender) : entry.prerender ?? []`
+          `import { CurrentLoggers } from "effect/Logger"`,
+          `export const { handler, dispose } = toWebHandler(entry.default${handlerOptions})`,
+          `export const prerender = async () => isEffect(entry.prerender) ? runPromise(entry.prerender) : entry.prerender ?? []`,
+          `const prerenderContext = Context.add(Context.make(Static, true), CurrentLoggers, new Set())`,
+          `export const prerenderRequest = (request) => handler(request, prerenderContext)`
         ].join("\n")
       }
       return undefined
@@ -366,30 +423,34 @@ export const plugin = (options: Options): Plugin => {
       }
       const { cacheDir, root } = ssr.config
       const outDir = path.resolve(root, client.config.build.outDir)
+      const serverOutDir = options.serverOutDir !== undefined
+        ? path.resolve(root, ssr.config.build.outDir)
+        : undefined
+      if (serverOutDir !== undefined && overlaps(outDir, serverOutDir)) {
+        throw new Error(
+          `HtmlServerVite: \`serverOutDir\` (${ssr.config.build.outDir}) must not overlap the client \`outDir\` (${client.config.build.outDir}). Set \`build.outDir\` (for example \`"dist/client"\`) to a sibling directory.`
+        )
+      }
       await builder.build(client)
       templateFile = path.join(outDir, "index.html")
+      resolvedEntry = undefined
+      hasPrerender = true
       const output = (await builder.build(ssr)) as {
         readonly output: ReadonlyArray<OutputFile>
       }
-      await fs.mkdir(cacheDir, { recursive: true })
-      // Inside the project, so the bundle's external imports resolve.
-      const dir = await fs.mkdtemp(path.join(cacheDir, "effect-ui-server-"))
-      try {
-        await Promise.all(
-          output.output.map((file) =>
-            write(dir, file.fileName, file.code ?? file.source ?? "")
-          )
-        )
-        const entry = output.output.find((file) => file.isEntry)!
+      const entry = output.output.find((file) => file.isEntry)!
+      const prerenderFrom = async (entryFile: string) => {
         const module = (await import(
-          pathToFileURL(path.join(dir, entry.fileName)).href
+          `${pathToFileURL(entryFile).href}?t=${++importSeq}`
         )) as ServerModule
         try {
           // Settled, so no render outlives the handler when one fails.
           const results = await Promise.allSettled(
             (await module.prerender()).map(async (url) => {
               const target = new URL(url, origin)
-              const response = await module.handler(new Request(target))
+              const response = await module.prerenderRequest(
+                new Request(target)
+              )
               await write(
                 outDir,
                 fileName(target.pathname, response.status),
@@ -402,16 +463,59 @@ export const plugin = (options: Options): Plugin => {
         } finally {
           await module.dispose()
         }
+      }
+      if (serverOutDir !== undefined) {
+        await write(
+          serverOutDir,
+          declarationFileName(entry.fileName),
+          declarationSource
+        )
+        if (hasPrerender) {
+          await prerenderFrom(path.join(serverOutDir, entry.fileName))
+        }
+        return
+      }
+      if (!hasPrerender) return
+      await fs.mkdir(cacheDir, { recursive: true })
+      // Inside the project, so the bundle's external imports resolve.
+      const dir = await fs.mkdtemp(path.join(cacheDir, "effect-ui-server-"))
+      try {
+        await Promise.all(
+          output.output.map((file) =>
+            write(dir, file.fileName, file.code ?? file.source ?? "")
+          )
+        )
+        await prerenderFrom(path.join(dir, entry.fileName))
       } finally {
         await fs.rm(dir, { recursive: true, force: true })
       }
     },
     // Closes the dev server that owns this environment. Builds register none.
     async buildEnd() {
+      if (resolvedEntry !== undefined) {
+        const info = this.getModuleInfo?.(resolvedEntry)
+        if (info?.exports != null) {
+          hasPrerender = info.exports.includes("prerender")
+        }
+      }
       await closers.get(this.environment)?.()
     }
   }
 }
+
+const isInside = (parent: string, child: string): boolean => {
+  const relative = path.relative(parent, child)
+  return relative === "" ||
+    (relative !== ".." &&
+      !relative.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relative))
+}
+
+const overlaps = (a: string, b: string): boolean =>
+  isInside(a, b) || isInside(b, a)
+
+const declarationFileName = (file: string): string =>
+  file.replace(/\.([cm]?)js$/, ".d.$1ts")
 
 const fileName = (pathname: string, status: number): string => {
   if (status === 404) {
