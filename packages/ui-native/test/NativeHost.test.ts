@@ -382,16 +382,33 @@ describe("NativeHost", () => {
 
   it("handles defaultValue, clear, and setSelection", async () => {
     const Msg = UiSchema.TaggedEnum({
-      SetDefault: { value: Schema.UndefinedOr(Schema.String) }
+      SetDefault: { value: Schema.UndefinedOr(Schema.String) },
+      SetBoth: {
+        value: Schema.UndefinedOr(Schema.String),
+        seed: Schema.UndefinedOr(Schema.String)
+      },
+      Tick: {}
     })
     const Field = Native.component({
       name: "Field",
-      model: Schema.Struct({ initial: Schema.UndefinedOr(Schema.String) }),
+      model: Schema.Struct({
+        initial: Schema.UndefinedOr(Schema.String),
+        value: Schema.UndefinedOr(Schema.String),
+        seed: Schema.UndefinedOr(Schema.String),
+        ticks: Schema.Number
+      }),
       message: Msg
     }).make({
-      init: () => ({ initial: "hello" }),
+      init: () => ({
+        initial: "hello",
+        value: "live",
+        seed: "seed",
+        ticks: 0
+      }),
       update: {
-        SetDefault: ($, { value }) => $.evolve({ initial: value })
+        SetDefault: ($, { value }) => $.evolve({ initial: value }),
+        SetBoth: ($, { seed, value }) => $.evolve({ value, seed }),
+        Tick: ($) => $.evolve({ ticks: (n) => n + 1 })
       },
       view: (h, model) =>
         h.view.children(
@@ -404,8 +421,9 @@ describe("NativeHost", () => {
             .prop("placeholderTextColor", "#9ca3af")
             .prop("selectionColor", "#3b82f6")
             .prop("customNativeProp", 123),
-          h.input.value("live").prop("defaultValue", "seed"),
-          h.input.prop("defaultValue", "seed").value("live")
+          h.input.prop("value", model.value).prop("defaultValue", model.seed),
+          h.input.prop("defaultValue", model.seed).prop("value", model.value),
+          h.text.children(String(model.ticks))
         )
     })
     const { close, fabric, find, made, root, settle } = await FakeFabric.mount(
@@ -440,12 +458,28 @@ describe("NativeHost", () => {
     assert.strictEqual(node.props.text, "edited")
     assert.strictEqual(input().props.text, "next")
 
+    // Clearing `value` while changing `defaultValue` shows the new default in either order.
+    root.send(Msg.SetBoth({ value: undefined, seed: "next" }))
+    await settle()
+    assert.strictEqual(inputs()[1]!.props.text, "next")
+    assert.strictEqual(inputs()[2]!.props.text, "next")
+
+    // An unrelated render leaves uncontrolled edits alone.
+    const second = inputs()[2]!
+    const secondNode = second.handle as NativeHost.NativeNode
+    fabric.emit(second, "topChange", { text: "typed", eventCount: 1 })
+    root.send(Msg.Tick())
+    await settle()
+    assert.strictEqual(secondNode.props.text, "typed")
+
     const tag = input().tag
     assert.deepStrictEqual(fabric.commands, [
       [tag, "setTextAndSelection", [2, null, 3, 3]],
       [tag, "setTextAndSelection", [2, null, 1, 4]],
       [tag, "setTextAndSelection", [2, "", 0, 0]],
-      [tag, "setTextAndSelection", [2, "next", -1, -1]]
+      [tag, "setTextAndSelection", [2, "next", -1, -1]],
+      [inputs()[1]!.tag, "setTextAndSelection", [0, "next", -1, -1]],
+      [inputs()[2]!.tag, "setTextAndSelection", [0, "next", -1, -1]]
     ])
     await close()
   })

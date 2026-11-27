@@ -43,6 +43,9 @@ const text: ViewKind = {
   text: true
 }
 
+const defaultText = new WeakMap<NativeNode, unknown>()
+const pendingText = new Set<NativeNode>()
+
 const setText = (n: NativeNode, value: unknown, host: ViewHost) => {
   // Skip if removed or native already shows `value`; include `eventCount` so native accepts it.
   if (value === undefined || n.props.text === value) return
@@ -50,6 +53,24 @@ const setText = (n: NativeNode, value: unknown, host: ViewHost) => {
   host.set(n, "mostRecentEventCount", n.eventCount)
   // Fabric emits no diff when resetting to the last committed text, so send a command too.
   host.command(n, "setTextAndSelection", [n.eventCount, value, -1, -1])
+}
+
+/**
+ * Applies deferred `defaultValue` updates once all props for a render are set,
+ * so `value` and `defaultValue` produce the same text in either prop order.
+ *
+ * @internal
+ */
+export const flushInputs = (host: ViewHost) => {
+  if (pendingText.size === 0) return
+  for (const n of pendingText) {
+    if (n.host !== host) continue
+    pendingText.delete(n)
+    if (n.value === undefined) {
+      setText(n, defaultText.get(n), host)
+      defaultText.delete(n)
+    }
+  }
 }
 
 const textEvent =
@@ -63,9 +84,20 @@ const input: ViewKind = {
     host.os === "ios" ? "RCTSinglelineTextInputView" : "AndroidTextInput",
   defaults: { autoCapitalize: "sentences", underlineColorAndroid: 0 },
   props: {
-    value: setText,
-    defaultValue: (n, value, host) => {
-      if (n.value === undefined) setText(n, value, host)
+    value: (n, value, host) => {
+      if (value !== undefined) {
+        pendingText.delete(n)
+        setText(n, value, host)
+      } else if (defaultText.has(n)) {
+        pendingText.add(n)
+      }
+    },
+    defaultValue: (n, value) => {
+      if (value === undefined) defaultText.delete(n)
+      else {
+        defaultText.set(n, value)
+        pendingText.add(n)
+      }
     }
   },
   events: {

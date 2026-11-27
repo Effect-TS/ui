@@ -19,7 +19,7 @@
 import type * as Renderer from "@effect/ui/Renderer"
 import type * as View from "@effect/ui/View"
 import type * as Context from "effect/Context"
-import { kinds } from "./internal/kinds.ts"
+import { flushInputs, kinds } from "./internal/kinds.ts"
 import * as Native from "./Native.ts"
 
 /**
@@ -321,6 +321,7 @@ export const make = (options: Options): {
       }
     },
     commit() {
+      flushInputs(view)
       if (root.dirty) {
         root.dirty = false
         root.kidsChanged = false
