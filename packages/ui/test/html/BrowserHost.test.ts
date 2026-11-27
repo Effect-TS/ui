@@ -962,6 +962,34 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(document.activeElement).toBe(one)
       }).pipe(Effect.scoped))
 
+    it.effect("a keyed reorder uses moveBefore when the parent supports it", () =>
+      Effect.gen(function*() {
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Lists, {}, app)
+        const ul = app.querySelector("ul")!
+        const a = ul.firstElementChild!
+        const moved: Array<[globalThis.Node, globalThis.Node | null]> = []
+        Object.defineProperty(ul, "moveBefore", {
+          configurable: true,
+          value(
+            this: globalThis.Element,
+            node: globalThis.Node,
+            before: globalThis.Node | null
+          ) {
+            moved.push([node, before])
+            this.insertBefore(node, before)
+          }
+        })
+        root.send(ListMessage.Set({ rows: ["b", "c", "a"] }))
+        yield* tick
+        expect(moved).toEqual([[a, null]])
+        expect(ul.lastElementChild).toBe(a)
+        moved.length = 0
+        root.send(ListMessage.Set({ rows: ["b", "c", "a", "d"] }))
+        yield* tick
+        expect(moved).toEqual([])
+      }).pipe(Effect.scoped))
+
     it.effect("a custom element's class is set as an attribute, whatever its className does", () =>
       Effect.gen(function*() {
         const seen: Array<string | null> = []
