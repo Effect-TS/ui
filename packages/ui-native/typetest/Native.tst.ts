@@ -12,6 +12,12 @@ describe("Native.Element", () => {
     expect(h.text.prop).type.toBeCallableWith("numberOfLines", 2)
     expect(h.text.prop).type.not.toBeCallableWith("numberOfLines", "2")
     expect(h.input.prop).type.toBeCallableWith("placeholderTextColor", "#999")
+    expect(h.input.prop).type.toBeCallableWith("multiline", true)
+    expect(h.input.prop).type.toBeCallableWith(
+      "keyboardType",
+      "ascii-capable-number-pad"
+    )
+    expect(h.input.prop).type.not.toBeCallableWith("multiline", 123)
     expect(h.view.prop).type.toBeCallableWith(
       "keyboardShouldPersistTaps",
       "handled"

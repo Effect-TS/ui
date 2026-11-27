@@ -9,6 +9,7 @@ const Message = UiSchema.TaggedEnum({
   ClickedIncrement: {},
   ClickedReset: {},
   ChangedName: { value: Schema.String },
+  ChangedNotes: { value: Schema.String },
   ClickedAdd: {}
 })
 
@@ -20,6 +21,13 @@ const button = {
 } as const
 
 const label = { color: "white", fontSize: 18, textAlign: "center" } as const
+
+const field = {
+  borderWidth: 1,
+  borderColor: "#9ca3af",
+  borderRadius: 8,
+  padding: 8
+} as const
 
 const pressable = (
   h: Native.H<typeof Message.Type>,
@@ -35,16 +43,18 @@ export const App = Native.component({
   model: Schema.Struct({
     count: Schema.Number,
     name: Schema.String,
+    notes: Schema.String,
     items: Schema.Array(Schema.String)
   }),
   message: Message
 }).make({
-  init: () => ({ count: 0, name: "", items: [] }),
+  init: () => ({ count: 0, name: "", notes: "", items: [] }),
   update: {
     ClickedDecrement: ($) => $.evolve({ count: (count) => count - 1 }),
     ClickedIncrement: ($) => $.evolve({ count: (count) => count + 1 }),
-    ClickedReset: ($) => $.evolve({ count: 0, name: "" }),
+    ClickedReset: ($) => $.evolve({ count: 0, name: "", notes: "" }),
     ChangedName: ($, { value }) => $.evolve({ name: value }),
+    ChangedNotes: ($, { value }) => $.evolve({ notes: value }),
     ClickedAdd: ($) =>
       $.evolve({
         items: (
@@ -77,13 +87,12 @@ export const App = Native.component({
           pressable(h, Message.ClickedReset(), "Reset"),
           pressable(h, Message.ClickedIncrement(), "+")
         ),
-      h.input.value(model.name).placeholder("Your name").style({
-        borderWidth: 1,
-        borderColor: "#9ca3af",
-        borderRadius: 8,
-        padding: 8,
-        fontSize: 18
-      }).on("input", ({ value }) => Message.ChangedName({ value })),
+      h.input.value(model.name).placeholder("Your name")
+        .style({ ...field, fontSize: 18 })
+        .on("input", ({ value }) => Message.ChangedName({ value })),
+      h.input.value(model.notes).placeholder("Notes").prop("multiline", true)
+        .style({ ...field, minHeight: 72, fontSize: 16 })
+        .on("input", ({ value }) => Message.ChangedNotes({ value })),
       h.text.style({ fontSize: 18, color: "#374151" }).children(
         "Hello, ",
         h.text.style({ fontWeight: "bold" }).children(model.name || "stranger")

@@ -743,10 +743,67 @@ export interface TextProps extends ViewProps {
  * @since 0.1.0
  */
 export interface InputProps extends ViewProps {
+  readonly value?: string | undefined
+  /** Initial text for an uncontrolled input; changing it replaces the text. */
+  readonly defaultValue?: string | undefined
+  readonly placeholder?: string | undefined
   readonly placeholderTextColor?: Color | undefined
   readonly selectionColor?: Color | undefined
   readonly allowFontScaling?: boolean | undefined
   readonly maxFontSizeMultiplier?: number | undefined
+  /**
+   * Allows multiple lines of text. Unlike React Native's `TextInput`, no
+   * `paddingTop: 5` is added on iOS.
+   */
+  readonly multiline?: boolean | undefined
+  readonly secureTextEntry?: boolean | undefined
+  readonly keyboardType?:
+    | "default"
+    | "number-pad"
+    | "decimal-pad"
+    | "numeric"
+    | "email-address"
+    | "phone-pad"
+    | "url"
+    | "ascii-capable"
+    | "ascii-capable-number-pad"
+    | "numbers-and-punctuation"
+    | "name-phone-pad"
+    | "twitter"
+    | "web-search"
+    | "visible-password"
+    | undefined
+  readonly returnKeyType?:
+    | "done"
+    | "go"
+    | "next"
+    | "search"
+    | "send"
+    | "none"
+    | "previous"
+    | "default"
+    | "emergency-call"
+    | "google"
+    | "join"
+    | "route"
+    | "yahoo"
+    | "continue"
+    | undefined
+  /** `"sentences"` by default, matching React Native on both platforms. */
+  readonly autoCapitalize?:
+    | "none"
+    | "sentences"
+    | "words"
+    | "characters"
+    | undefined
+  readonly editable?: boolean | undefined
+  readonly maxLength?: number | undefined
+  readonly submitBehavior?: "submit" | "blurAndSubmit" | "newline" | undefined
+  readonly autoCorrect?: boolean | undefined
+  readonly autoFocus?: boolean | undefined
+  readonly selectTextOnFocus?: boolean | undefined
+  /** Android only. Transparent (`0`) by default, hiding the Material underline. */
+  readonly underlineColorAndroid?: Color | undefined
 }
 
 /**
@@ -823,9 +880,85 @@ export interface AccessibilityActionPayload {
 }
 
 /**
- * The events of a `view` and a `text`. A press ends on the element, or
- * at most 20 points outside it. `layout` fires when layout changes the
- * element's position or size.
+ * Metrics of one laid-out line of `text`, in points.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface TextLine {
+  readonly text: string
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+  readonly ascender: number
+  readonly descender: number
+  readonly capHeight: number
+  readonly xHeight: number
+}
+
+/**
+ * The laid-out lines of an outer `text` element.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface TextLayoutPayload {
+  readonly lines: ReadonlyArray<TextLine>
+}
+
+/**
+ * A text selection range in an `input`, as UTF-16 code unit offsets.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface Selection {
+  readonly start: number
+  readonly end: number
+}
+
+/**
+ * The selection reported by an `input`'s `selectionChange` event.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface SelectionChangePayload {
+  readonly selection: Selection
+}
+
+/**
+ * The key reported by an `input`'s `keyPress` event (`"Backspace"`,
+ * `"Enter"`, typed characters, and on iOS also `"Tab"` and `"Escape"`).
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface KeyPressPayload {
+  readonly key: string
+}
+
+/**
+ * The content size reported by an `input`'s `contentSizeChange` event, in points.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface ContentSizeChangePayload {
+  readonly contentSize: SizePayload
+}
+
+/**
+ * The events of a `view`. A press ends on the element, or at most 20 points
+ * outside it. `layout` fires when layout changes the element's position or
+ * size.
  *
  * `accessibilityTap` (iOS) fires when VoiceOver activates an `accessible`
  * element, and `accessibilityEscape` (iOS) on VoiceOver's escape gesture.
@@ -840,6 +973,18 @@ export interface ViewEvents {
   readonly accessibilityAction: AccessibilityActionPayload
   readonly accessibilityTap: {}
   readonly accessibilityEscape: {}
+}
+
+/**
+ * The events of a `text`. `textLayout` fires only on outer `text`; nested
+ * `text` is virtual and never lays out on its own.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface TextEvents extends ViewEvents {
+  readonly textLayout: TextLayoutPayload
 }
 
 /**
@@ -867,8 +1012,9 @@ export interface ScrollEvents extends ViewEvents {
 }
 
 /**
- * The events of an `input`. `input` fires on every edit and `submit` when
- * the keyboard's return key is pressed.
+ * The events of an `input`. `input` fires on every edit, `submit` when the
+ * return key is pressed, and `endEditing` when editing finishes (before
+ * `blur` on iOS, after `blur` on Android).
  *
  * @stability experimental
  * @category events
@@ -877,8 +1023,12 @@ export interface ScrollEvents extends ViewEvents {
 export interface InputEvents {
   readonly input: ValuePayload
   readonly submit: ValuePayload
+  readonly endEditing: ValuePayload
   readonly focus: {}
   readonly blur: {}
+  readonly selectionChange: SelectionChangePayload
+  readonly keyPress: KeyPressPayload
+  readonly contentSizeChange: ContentSizeChangePayload
   readonly layout: LayoutPayload
 }
 
@@ -933,6 +1083,45 @@ declare module "@effect/ui/Command" {
   interface FrameworkServices {
     readonly NativeHost: Host
   }
+}
+
+/**
+ * Clears an uncontrolled `input` using the host's latest event count and
+ * updates the host's mirrored text. For a controlled input, clear the
+ * `value` in your Model instead.
+ *
+ * @stability experimental
+ * @category commands
+ * @since 0.1.0
+ */
+export const clear = (
+  host: Context.Service.Shape<typeof Host>,
+  node: NativeNode
+): void => {
+  node.props.text = ""
+  host.command(node, "setTextAndSelection", [node.eventCount, "", 0, 0])
+}
+
+/**
+ * Moves the caret or selection of an `input` using the host's latest event
+ * count. Omitting `end` collapses the caret at `start`.
+ *
+ * @stability experimental
+ * @category commands
+ * @since 0.1.0
+ */
+export const setSelection = (
+  host: Context.Service.Shape<typeof Host>,
+  node: NativeNode,
+  start: number,
+  end = start
+): void => {
+  host.command(node, "setTextAndSelection", [
+    node.eventCount,
+    null,
+    start,
+    end
+  ])
 }
 
 /**
@@ -1281,7 +1470,7 @@ export class TextElement<
 }
 
 /**
- * The builder of `input`, a single-line text field.
+ * The builder of `input`, a single-line or multiline text field.
  *
  * @stability experimental
  * @category models
@@ -1331,7 +1520,7 @@ export interface Tags<Msg> {
   readonly scroll: View.Shorthand<
     ScrollElement<Msg, never, ScrollEvents, "scroll">
   >
-  readonly text: View.Shorthand<TextElement<Msg, never, ViewEvents, "text">>
+  readonly text: View.Shorthand<TextElement<Msg, never, TextEvents, "text">>
   readonly input: InputElement<Msg, never, InputEvents, "input">
 }
 

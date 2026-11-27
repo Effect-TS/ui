@@ -102,18 +102,71 @@ const text: ViewKind = {
   text: true
 }
 
+const defaultText = new WeakMap<NativeNode, unknown>()
+const pendingText = new WeakMap<ViewHost, Set<NativeNode>>()
+
+const queueText = (n: NativeNode) => {
+  let set = pendingText.get(n.host)
+  if (set === undefined) pendingText.set(n.host, set = new Set())
+  set.add(n)
+}
+
+const setText = (n: NativeNode, value: unknown, host: ViewHost) => {
+  if (value === undefined || n.props.text === value) return
+  host.set(n, "text", value)
+  // Native needs the latest event count to accept the update.
+  host.set(n, "mostRecentEventCount", n.eventCount)
+  // Fabric emits no diff when resetting to the last committed text, so send a command too.
+  host.command(n, "setTextAndSelection", [n.eventCount, value, -1, -1])
+}
+
+/**
+ * Applies deferred `defaultValue` updates once all props for a render are set,
+ * so `value` and `defaultValue` produce the same text in either prop order.
+ *
+ * @internal
+ */
+export const flushInputs = (host: ViewHost) => {
+  const set = pendingText.get(host)
+  if (set === undefined) return
+  pendingText.delete(host)
+  for (const n of set) {
+    if (n.value === undefined) {
+      setText(n, defaultText.get(n), host)
+      defaultText.delete(n)
+    }
+  }
+}
+
+const textEvent =
+  (name: string) => (n: NativeNode, event: any, host: ViewHost) =>
+    host.fire(n, name, { value: event?.text ?? "" })
+
 const input: ViewKind = {
+  // Fabric maps both iOS text input names to one `TextInput` component,
+  // which swaps `UITextField` for `UITextView` when `multiline` changes.
   viewName: (_, host) =>
     host.os === "ios" ? "RCTSinglelineTextInputView" : "AndroidTextInput",
-  defaults: { accessible: true },
+  defaults: {
+    accessible: true,
+    autoCapitalize: "sentences",
+    underlineColorAndroid: 0
+  },
   props: {
-    value(n, value, host) {
-      // Skip if native already shows `value`; include `eventCount` so native accepts it.
-      if (n.props.text === value) return
-      host.set(n, "mostRecentEventCount", n.eventCount)
-      host.set(n, "text", value)
-      // Fabric emits no diff when resetting to the last committed text, so send a command too.
-      host.command(n, "setTextAndSelection", [n.eventCount, value, -1, -1])
+    value: (n, value, host) => {
+      if (value !== undefined) {
+        pendingText.get(host)?.delete(n)
+        setText(n, value, host)
+      } else if (defaultText.has(n)) {
+        queueText(n)
+      }
+    },
+    defaultValue: (n, value) => {
+      if (value === undefined) defaultText.delete(n)
+      else {
+        defaultText.set(n, value)
+        queueText(n)
+      }
     }
   },
   events: {
@@ -126,8 +179,8 @@ const input: ViewKind = {
       n.props.text = value
       host.fire(n, "input", { value })
     },
-    topSubmitEditing: (n, event, host) =>
-      host.fire(n, "submit", { value: event?.text ?? "" })
+    topSubmitEditing: textEvent("submit"),
+    topEndEditing: textEvent("endEditing")
   }
 }
 

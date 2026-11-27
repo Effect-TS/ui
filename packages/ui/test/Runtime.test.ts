@@ -1305,6 +1305,73 @@ describe("Runtime", () => {
         assert.strictEqual(ran, 0)
         assert.deepStrictEqual(root.model(), [])
       })))
+
+    it.effect("records the issuing message on command spans without MessageLog", () =>
+      provideHost(Effect.gen(function*() {
+        const Message = UiSchema.TaggedEnum({
+          ClickedSave: { title: Schema.String },
+          Done: {}
+        })
+        const Load = Command.make(
+          "todos/Load",
+          { args: {} },
+          () => Effect.succeed(Message.Done())
+        )
+        const Save = Command.make(
+          "todos/Save",
+          { args: {} },
+          () => Effect.succeed(Message.Done())
+        )
+        const Editor = Component.define({
+          name: "Editor",
+          model: Schema.String,
+          message: Message
+        }).make({
+          init: ($) => $.set("").run(Load.make()),
+          update: ($, message) =>
+            Message.match(message, {
+              ClickedSave: () => $.run(Save.make()),
+              Done: () => $.model
+            }),
+          view: (h) => h.text("")
+        })
+        const spans: Array<Tracer.Span> = []
+        const tracer = yield* Effect.tracer
+        yield* Effect.gen(function*() {
+          const root = yield* TestHost.mount(Editor, {})
+          yield* TestHost.settle
+          root.send(Message.ClickedSave({ title: "secret" }))
+          yield* TestHost.settle
+          assert.deepStrictEqual(root.log(), [])
+        }).pipe(
+          Effect.provideService(MessageLog.MessageLog, MessageLog.noop),
+          Effect.provideService(
+            Tracer.Tracer,
+            Tracer.make({
+              span: (options) => {
+                const span = tracer.span(options)
+                spans.push(span)
+                return span
+              }
+            })
+          )
+        )
+        assert.deepStrictEqual(
+          spans.map((span) => [span.name, Object.fromEntries(span.attributes)]),
+          [
+            ["todos/Load", {
+              path: "/Editor",
+              mode: "concurrent",
+              message: "init"
+            }],
+            ["todos/Save", {
+              path: "/Editor",
+              mode: "concurrent",
+              message: "ClickedSave"
+            }]
+          ]
+        )
+      })))
   })
 
   describe("run owners", () => {
