@@ -693,7 +693,7 @@ export const hydrateEffect = <
   props: Props | Effect.Effect<Props, never, RP>,
   container: globalThis.Element,
   state: Renderer.State,
-  options?: BrowserHost.MountOptions<V, RF, Events>
+  options?: Omit<BrowserHost.MountOptions<V, RF, Events>, "key">
 ): Effect.Effect<
   Renderer.Root<Model, Msg>,
   never,
@@ -704,7 +704,7 @@ export const hydrateEffect = <
       component as unknown as Component.Any,
       props,
       container,
-      options,
+      { ...options, key: state["~key"] },
       hydrateRun.hydrating(state, adopt)
     )
   ) as any
@@ -726,8 +726,9 @@ export const hydrateEffect = <
  * Pass the `state` from `HtmlServer.renderToHtml`, with the server's HTML
  * already in `container` and the same props, to adopt the server's nodes
  * instead of building them. `Router.props` gives the same props on both
- * sides when both Routers are at the same URL. Everything else, the options
- * included, is as `BrowserHost.mount`.
+ * sides when both Routers are at the same URL. Options are as in
+ * `BrowserHost.mount`, except `key`: hydration reads the server's key from
+ * `state` automatically.
  *
  * Each instance adopts its server Model and replays `init` only to recover
  * its Commands, so the events `init` emits are dropped; server Commands the
@@ -799,7 +800,7 @@ export const hydrate = <
   props: Props | Effect.Effect<Props, never, RP>,
   container: globalThis.Element,
   state: Renderer.State,
-  options?: BrowserHost.MountOptions<V, RF, Events>
+  options?: Omit<BrowserHost.MountOptions<V, RF, Events>, "key">
 ): Layer.Layer<never, never, Exclude<R | RF | RP, Html.Host>> =>
   Layer.effectDiscard(
     hydrateEffect(component, props, container, state, options)
