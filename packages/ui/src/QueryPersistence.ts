@@ -9,19 +9,21 @@
  *
  * - The Layer reads every entry under its `prefix` while it builds, so a
  *   mount waits for the read and its first frame holds the saved values. It
- *   removes entries older than `maxAge`, saved under another `version`, or
- *   that don't parse.
+ *   removes entries whose data is older than `maxAge`, saved under another
+ *   `version`, or that don't parse. A value that no longer decodes is
+ *   removed when the cache first reads it.
  * - A saved value fills an entry when the cache creates it, as a stale
  *   Success with its saved timestamp. A watch or `get` refetches at once, and
  *   a failed refetch keeps it as the Failure's previous Success.
- * - Every stored Success is saved: fetches and a Command's `writes`, never
- *   an optimistic patch or a Failure. Writes go out at most once a second,
+ * - Every Success the cache holds is saved: fetches, a Command's `writes`,
+ *   and an infinite query's `loadMore` and `reset`. Never an optimistic
+ *   patch or a Failure. Writes go out at most once a second,
  *   and once more when the Layer's Scope closes.
  *
  * **Gotchas**
  *
  * - Server hydration wins: an entry the server shipped in `~query` ignores
- *   its saved value, and nothing is restored until the page is adopted.
+ *   its saved value. Other entries are restored once the page is adopted.
  * - A query whose args, success or error Schema holds a `Schema.Redacted`
  *   is never saved.
  * - Nothing clears a signed-out user's entries. Put the user id in `prefix`.
@@ -71,6 +73,7 @@ import * as Clock from "effect/Clock"
 import * as Data from "effect/Data"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
+import { constVoid } from "effect/Function"
 import * as Latch from "effect/Latch"
 import * as Layer from "effect/Layer"
 import * as KeyValueStore from "effect/persistence/KeyValueStore"
@@ -132,7 +135,9 @@ const failed = (query: string, part: "encode" | "write"): SaveFailed =>
  * **Details**
  *
  * - `prefix` namespaces the keys. Put a user id in it to keep users apart.
- * - `maxAge` is how long a saved entry is restored, from when it was saved.
+ * - `maxAge` is how old saved data may be when it is restored, counted from
+ *   the Success's timestamp: when its data was fetched, not when it was
+ *   saved. `loadMore` and `reset` keep a list's timestamp.
  * - `version` drops every entry saved under another one. Use a build id when
  *   a deploy changes a query's Schemas.
  *
@@ -153,8 +158,10 @@ export const layerKvs = (options: {
   readonly version?: string | undefined
 }): Layer.Layer<never, never, KeyValueStore.KeyValueStore> => {
   const maxAge = Duration.toMillis(options.maxAge)
-  const start = options.prefix + "/"
-  const keyOf = (def: Def, argsKey: string) => start + def.name + "/" + argsKey
+  // JSON keeps prefixes apart: `["app",` doesn't start `["app/u1",…`.
+  const start = JSON.stringify([options.prefix]).slice(0, -1) + ","
+  const keyOf = (def: Def, argsKey: string) =>
+    JSON.stringify([options.prefix, def.name, argsKey])
   return Layer.effect(
     queryCore.Persistence,
     Effect.gen(function*() {
@@ -164,21 +171,22 @@ export const layerKvs = (options: {
       const keys = yield* Effect.orElseSucceed(store.keys, () => [])
       yield* Effect.forEach(
         keys.filter((key) => key.startsWith(start)),
+        // A failed read skips the key: only a value read is pruned.
         (key) =>
-          Effect.flatMap(
-            Effect.orElseSucceed(store.get(key), () => undefined),
-            (text) => {
+          store.get(key).pipe(
+            Effect.flatMap((text) => {
               const entry = parse(text)
               if (
                 entry !== undefined && entry.version === options.version &&
-                // A result is saved as it is stored, so its timestamp is when it was saved.
+                // The data's age: a list's appended pages keep its timestamp.
                 now - entry.timestamp <= maxAge
               ) {
                 saved.set(key, entry)
                 return Effect.void
               }
-              return Effect.ignore(store.remove(key))
-            }
+              return store.remove(key)
+            }),
+            Effect.ignore
           ),
         { concurrency: "unbounded", discard: true }
       )
@@ -192,11 +200,15 @@ export const layerKvs = (options: {
         latch.closeUnsafe()
         return Effect.forEach(
           writes,
-          ([key, onFailure]) =>
-            Effect.try(() => JSON.stringify(saved.get(key))).pipe(
-              Effect.flatMap((text) => store.set(key, text)),
-              Effect.catch(() => Effect.sync(onFailure))
-            ),
+          ([key, onFailure]) => {
+            const entry = saved.get(key)
+            return entry === undefined
+              ? Effect.ignore(store.remove(key))
+              : Effect.try(() => JSON.stringify(entry)).pipe(
+                Effect.flatMap((text) => store.set(key, text)),
+                Effect.catch(() => Effect.sync(onFailure))
+              )
+          },
           { concurrency: "unbounded", discard: true }
         )
       })
@@ -211,16 +223,18 @@ export const layerKvs = (options: {
 
       const persistence: queryCore.Persistence = {
         get: (def, argsKey) => {
-          const entry = persisted(def)
-            ? saved.get(keyOf(def, argsKey))
-            : undefined
+          const key = keyOf(def, argsKey)
+          const entry = persisted(def) ? saved.get(key) : undefined
           if (entry === undefined) return undefined
           try {
             return AsyncResult.success(def.codec().decodeSuccess(entry.value), {
               timestamp: entry.timestamp
             })
           } catch {
-            // A value that no longer decodes leaves the entry cold.
+            // A value that no longer decodes is dropped, and the entry is cold.
+            saved.delete(key)
+            dirty.set(key, constVoid)
+            latch.openUnsafe()
             return undefined
           }
         },

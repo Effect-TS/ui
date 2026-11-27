@@ -4346,6 +4346,8 @@ interface CacheEnv {
   ) => void
   readonly ensureFetch: (entry: Entry, trigger: Trigger, build: Build) => void
   readonly store: (entry: Entry, result: Settled) => void
+  /** Saves a Success that isn't stored through `store`, keeping its timestamp. */
+  readonly save: (entry: Entry, result: Settled) => void
   readonly storeFailure: (entry: Entry, cause: Cause.Cause<any>) => boolean
   readonly markDefect: (
     entry: Entry,
@@ -4664,6 +4666,7 @@ const listOps: ListOps = {
           entry.result = AsyncResult.success(out.pages, {
             timestamp: previous.timestamp
           })
+          env.save(entry, entry.result)
           entry.hasMore = { result: entry.result, value: out.hasMore }
           entry.hydrated = false
         } else if (error !== undefined && Option.isSome(error)) {
@@ -4769,20 +4772,23 @@ const listOps: ListOps = {
     if (entry === undefined) return
     const result = entry.result
     if (result?._tag === "Success" && result.value.length > 1) {
-      entry.result = AsyncResult.success(result.value.slice(0, 1), {
-        timestamp: result.timestamp
-      })
+      env.save(
+        entry,
+        entry.result = AsyncResult.success(result.value.slice(0, 1), {
+          timestamp: result.timestamp
+        })
+      )
     } else if (
       result?._tag === "Failure" && Option.isSome(result.previousSuccess)
     ) {
       const previous = result.previousSuccess.value
       if (previous.value.length > 1) {
+        const first = AsyncResult.success(previous.value.slice(0, 1), {
+          timestamp: previous.timestamp
+        })
+        env.save(entry, first)
         entry.result = AsyncResult.failure(result.cause, {
-          previousSuccess: Option.some(
-            AsyncResult.success(previous.value.slice(0, 1), {
-              timestamp: previous.timestamp
-            })
-          )
+          previousSuccess: Option.some(first)
         })
       }
     }
@@ -5443,6 +5449,7 @@ const buildCache = (
       startFetch,
       ensureFetch,
       store,
+      save,
       storeFailure,
       markDefect,
       afterFetch,
@@ -5552,8 +5559,10 @@ const buildCache = (
     }
   }
   /** A settle or a stored write: patches held after success are confirmed and go. */
-  const store = (entry: Entry, result: Settled): void => {
+  const save = (entry: Entry, result: Settled): void =>
     persistence?.save(entry.def, entry.argsKey, result, report)
+  const store = (entry: Entry, result: Settled): void => {
+    save(entry, result)
     entry.result = result
     entry.settledAt = now()
     entry.invalidated = false
@@ -6601,7 +6610,20 @@ const buildCache = (
     }
   }
   const closeWindow = (): void => {
-    adopting = false
+    if (adopting) {
+      adopting = false
+      // An entry made while the page was adopted starts from its saved value now.
+      for (const entry of persistence === undefined ? [] : allEntries()) {
+        const saved = entry.result === undefined
+          ? savedOf(entry.def, entry.argsKey)
+          : undefined
+        if (saved === undefined) continue
+        entry.result = saved
+        entry.settledAt = now()
+        entry.invalidated = true
+        emit(entry)
+      }
+    }
     if (!windowOpen) return
     windowOpen = false
     for (const [name, byKey] of raw) {

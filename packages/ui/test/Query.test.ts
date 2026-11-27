@@ -1779,4 +1779,167 @@ describe("Query", () => {
       }).pipe(Effect.provide(session))
     }).pipe(Effect.provide(KeyValueStore.layerMemory))
   })
+  it.effect("an offline reload shows the pages loadMore appended and reset dropped", () => {
+    const Page = Schema.Struct({ n: Schema.Number })
+    let online = true
+    class ListNotes extends Query.InfiniteService<ListNotes>()("notes/List", {
+      page: Page,
+      items: (page) => [page],
+      key: (page) => String(page.n),
+      error: Schema.String,
+      cursor: Schema.Number,
+      next: (last) => last.n < 3 ? Option.some(last.n + 1) : Option.none(),
+      staleTime: "30 seconds",
+      persist: true
+    }) {
+      static readonly layer = this.toLayer((_, cursor) =>
+        online
+          ? Effect.succeed({ n: Option.getOrElse(cursor, () => 1) })
+          : Effect.fail("offline")
+      )
+    }
+    const pages = Effect.map(
+      ListNotes.peek({}),
+      (result) =>
+        AsyncResult.isSuccess(result) ? result.value.map((page) => page.n) : []
+    )
+    return Effect.gen(function*() {
+      const session = yield* persisted(ListNotes.layer)
+      yield* Effect.andThen(ListNotes.get({}), ListNotes.loadMore({})).pipe(
+        Effect.provide(session)
+      )
+      assert.deepStrictEqual(yield* Effect.provide(pages, session), [1, 2])
+
+      online = false
+      yield* Effect.gen(function*() {
+        assert.deepStrictEqual(yield* pages, [1, 2])
+        yield* ListNotes.reset({})
+      }).pipe(Effect.provide(session))
+      assert.deepStrictEqual(yield* Effect.provide(pages, session), [1])
+    }).pipe(Effect.provide(KeyValueStore.layerMemory))
+  })
+
+  it.effect("a watch started while a page is adopted gets the saved value once it is", () =>
+    Effect.forEach([false, true], (isStatic) => {
+      let online = true
+      class GetNotes extends Query.Service<GetNotes>()("notes/Watched", {
+        success: Schema.String,
+        error: Schema.String,
+        staleTime: "30 seconds",
+        persist: true
+      }) {
+        static readonly layer = this.toLayer(() =>
+          online
+            ? Effect.succeed("saved")
+            : Effect.fail("offline").pipe(Effect.delay("1 second"))
+        )
+      }
+      return Effect.gen(function*() {
+        const session = yield* persisted(GetNotes.layer)
+        yield* GetNotes.get({}).pipe(Effect.provide(session))
+        online = false
+        yield* Effect.gen(function*() {
+          const cache = Query.internals(yield* Query.Cache)
+          cache.hydrate({}, { static: isStatic })
+          const seen: Array<string> = []
+          yield* Effect.forkChild(
+            Stream.runForEach(
+              GetNotes.changes({}),
+              (result) =>
+                Effect.sync(() =>
+                  seen.push(
+                    result._tag +
+                      (AsyncResult.isSuccess(result)
+                        ? " " + result.value
+                        : "") +
+                      (AsyncResult.isFailure(result) &&
+                          Option.isSome(result.previousSuccess)
+                        ? " over " + result.previousSuccess.value.value
+                        : "")
+                  )
+                )
+            )
+          )
+          yield* flush
+          cache.closeWindow()
+          yield* advance("1 second")
+          assert.deepStrictEqual(seen, [
+            "Success saved",
+            "Failure over saved"
+          ])
+        }).pipe(Effect.provide(session))
+      }).pipe(Effect.provide(KeyValueStore.layerMemory))
+    }, { discard: true }))
+
+  it.effect("the startup read only prunes its own entries, and keeps one it can't read", () => {
+    class GetNotes extends Query.Service<GetNotes>()("notes/Store", {
+      success: Schema.String,
+      staleTime: "30 seconds",
+      persist: true
+    }) {
+      static readonly layer = this.toLayer(() => Effect.succeed("saved"))
+    }
+    return Effect.gen(function*() {
+      const memory = yield* KeyValueStore.KeyValueStore
+      let failGets = false
+      const store: KeyValueStore.KeyValueStore = {
+        ...memory,
+        get: (key) =>
+          failGets
+            ? Effect.fail(
+              new KeyValueStore.KeyValueStoreError({
+                method: "get",
+                key,
+                message: "busy"
+              })
+            )
+            : memory.get(key)
+      }
+      const session = (prefix: string, version?: string) =>
+        Layer.merge(GetNotes.layer, Query.layer()).pipe(
+          Layer.provide(
+            QueryPersistence.layerKvs({ prefix, maxAge: "7 days", version })
+          ),
+          Layer.provide(Layer.succeed(KeyValueStore.KeyValueStore, store))
+        )
+      const peeked = (prefix: string) =>
+        Effect.map(
+          GetNotes.peek({}).pipe(Effect.provide(session(prefix))),
+          (result) => result._tag
+        )
+      yield* GetNotes.get({}).pipe(Effect.provide(session("app/u1")))
+      // A parent prefix under another version leaves the nested one alone.
+      yield* Effect.provide(Effect.void, session("app", "2"))
+      failGets = true
+      yield* Effect.provide(Effect.void, session("app/u1"))
+      failGets = false
+      assert.strictEqual(yield* peeked("app/u1"), "Success")
+    }).pipe(Effect.provide(KeyValueStore.layerMemory))
+  })
+
+  it.effect("a saved value that no longer decodes is dropped", () => {
+    const define = <S extends Schema.Top & Query.Service.NoServices>(
+      success: S,
+      value: S["Type"]
+    ) => {
+      class GetNotes extends Query.Service<GetNotes>()("notes/Changed", {
+        success,
+        staleTime: "30 seconds",
+        persist: true
+      }) {
+        static readonly layer = this.toLayer(() => Effect.succeed(value))
+      }
+      return GetNotes
+    }
+    const Old = define(Schema.String, "old")
+    const New = define(Schema.Number, 1)
+    return Effect.gen(function*() {
+      const memory = yield* KeyValueStore.KeyValueStore
+      yield* Old.get({}).pipe(Effect.provide(yield* persisted(Old.layer)))
+      yield* Effect.gen(function*() {
+        assert.strictEqual((yield* New.peek({}))._tag, "Initial")
+      }).pipe(Effect.provide(yield* persisted(New.layer)))
+      assert.deepStrictEqual(yield* memory.keys, [])
+    }).pipe(Effect.provide(KeyValueStore.layerMemory))
+  })
 })
