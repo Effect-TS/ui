@@ -143,7 +143,7 @@ Here are all 51 modules. Hover or tap to animate.
 
 Effect UI renders through a host instead of tying Components to the browser DOM. The browser host renders DOM nodes, the server host writes HTML and the test host builds an in-memory tree, all from the same HTML Components.
 
-Other platforms bring their own elements and host, sharing the Component runtime without translating views across platforms: `@effect/ui-opentui` renders to the terminal, and `@effect/ui-native` renders React Native views directly through Fabric without React (with Vite tree-shaken release builds and Fast Refresh in dev). You pick the host when mounting the app, and the host interface is public if you want to write your own.
+Other platforms bring their own elements and host, sharing the Component runtime without translating views across platforms: `@effect/ui-opentui` renders to the terminal, and `@effect/ui-native` renders React Native views directly through Fabric without React. You pick the host when mounting the app, and the host interface is public if you want to write your own.
 
 ::Listing{code="mount"}
 
@@ -159,7 +159,7 @@ A test can also supply test values for everything around the Component: a query'
 
 You can also replay a recorded session with `Story.fromLog`. When logging is enabled, the runtime records every Message a Component receives, along with the props, query results and Provider values its update read. `Story.fromLog` re-runs those Messages against update without running Commands, and reports the first step where the Component produces a different Model, Command or event.
 
-Because a Component's Messages have Schemas and its `update` is pure, `Story.check` can test invariants against generated Message and Command sequences and shrink any failure to minimal Story steps with a replay token. For concurrency bugs, `Story.explore` exhaustively searches bounded Message and overlapping Command settlement orders and reports the shortest failing path. Both accept a `transition` rule to check every `update` step against a reference spec.
+Because Messages have Schemas and `update` is pure, `Story.check` runs property tests over generated Message and Command sequences and shrinks failures to minimal Story steps. For concurrency bugs, `Story.explore` exhaustively searches overlapping Message and Command settlement orders and reports the shortest failing path.
 
 ### Play tests
 
@@ -171,21 +171,19 @@ Play is a new kind of test in Effect UI. In Story and Scene tests, you resolve e
 
 ::PlayTest
 
-### Cases and the workbench
-
-`Case.make` defines named Component states as data — props, an optional starting Model, Messages to send and service Layers to provide. The same cases drive `Play.fromCase` and `HtmlPlay.fromCase` tests and mount in the browser through `BrowserCase.mount` or `DevToolsVite.plugin({ workbench })` at `/__workbench/<Component>/<key>`.
+Define reusable states once with `Case.make` to share them between `Play.fromCase` tests and a live browser workbench in `DevToolsVite.plugin`.
 
 ## DevTools
 
 :::LauncherPointer
-Effect UI has an inspector that you add with one Layer, `DevTools.layer`, or automatically in development with `DevToolsVite.plugin` (which also preserves compatible state across Vite hot reloads and serves the `Case` workbench). It's running on this page, behind the Effect UI button in the bottom-right corner.
+Effect UI has an inspector you can add with one Layer, `DevTools.layer`, or automatically in dev with `DevToolsVite.plugin`. It's running on this page, behind the Effect UI button in the bottom-right corner.
 
 - **Timeline:** One list holds every Message from every Component, the Model after it and what changed.
 - **Cause and effect:** For any entry, DevTools traces what sent the Message, the Commands it issued and how each one ended.
 - **Element picker:** Click **Pick** to select any element on the page and jump straight to the Component instance that rendered it — try it on this page.
 - **Noise control:** Stop or resume recording noisy Message tags at runtime without editing code, and surface or filter declared payload fields in the timeline.
 - **Time travel:** Pick an earlier entry to see the page at that point. The live app keeps running, and Resume returns to it.
-- **For agents:** An MCP server (and experimental in-page WebMCP) gives an agent the same view — reading the log, picking or finding instances, inspecting state and pausing on any entry. If you allow it, the agent can also send Messages.
+- **For agents:** An MCP server (and experimental WebMCP in the browser) gives an agent the same view — reading the log, finding instances, inspecting state and pausing on any entry. If you allow it, the agent can also send Messages.
 
 Terminal apps built with `@effect/ui-opentui` can stream their logs into the same browser inspector with `DevToolsHeadless.layer`.
 :::
@@ -203,9 +201,8 @@ In [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark),
 - **Services per Component:** `Component.provide` gives services to a Component and everything below it. Its Commands and Subscriptions use them, and TypeScript reports a missing service at compile time.
 - **Code splitting:** Load a Component from a chunk of its own with `Component.lazy`. The browser loads the chunk the first time the Component renders, so it stays out of the initial bundle.
 - **Control overlapping Commands:** When an update issues a Command that is still running, use `concurrent` to run both, `switch` to interrupt the earlier run or `queue` to wait for it.
-- **Full-stack SSR and prerendering:** `HtmlServerVite.plugin` renders pages on the server in `vite dev`, prerenders static routes in `vite build` and optionally emits a production web handler (`serverOutDir`). This page uses it.
-- **Web Components, both ways:** Consume third-party Web Components with `Html.customElement` (inferring prop and ref types from `HTMLElementTagNameMap`), or publish any Effect UI Component as a custom element with `BrowserHost.defineElement` to embed it in an existing app.
-- **Built-in tracing and phase budgets:** Command runs (tagged with the issuing Message) and query fetches automatically open Effect spans, and `Renderer.slowPhases` reports updates, views or flushes that exceed a budget.
+- **Full-stack SSR and prerendering:** `HtmlServerVite.plugin` renders pages on the server in `vite dev`, prerenders static routes in `vite build` and can emit a production web handler. This page uses it.
+- **Web Components, both ways:** Consume third-party Web Components with `Html.customElement`, or publish any Effect UI Component as a custom element with `BrowserHost.defineElement` to embed it in an existing app.
 
 ## What stays the same
 

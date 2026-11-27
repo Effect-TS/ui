@@ -31,7 +31,6 @@ const features: Readonly<
   "Control overlapping Commands": ["layers", "rows"],
   "Full-stack SSR and prerendering": ["server", "rows"],
   "Web Components, both ways": ["blocks", "rows"],
-  "Built-in tracing and phase budgets": ["activity", "rows"],
   "A constrained, agent-friendly architecture": ["kept", "checklist"],
   "Predictable state changes": ["kept", "checklist"],
   "Side effects as values that the runtime runs": [

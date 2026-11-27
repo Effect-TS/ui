@@ -1,6 +1,5 @@
 import type { Html } from "@effect/ui/html"
 import {
-  Activity,
   ArrowLeft,
   ArrowRight,
   ArrowUpRight,
@@ -34,7 +33,6 @@ import {
 
 // The Lucide icons the article draws, by the name it uses for each.
 const icons = {
-  activity: Activity,
   back: ArrowLeft,
   blocks: Blocks,
   bot: Bot,
