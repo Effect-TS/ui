@@ -8,6 +8,7 @@ import * as frames from "./frames.ts"
 import * as globalEvents from "./globalEvents.ts"
 import * as images from "./images.ts"
 import * as mediaQueries from "./mediaQueries.ts"
+import * as modals from "./modals.ts"
 import { payloadOf } from "./payload.ts"
 
 const signals = (document: Document) => {
@@ -58,7 +59,8 @@ const globalEventsOf = (
               undefined
             ) as object),
           defaultPrevented: event.defaultPrevented,
-          timeStamp: event.timeStamp
+          timeStamp: event.timeStamp,
+          modal: modals.open(document)
         },
         () => event.preventDefault()
       )

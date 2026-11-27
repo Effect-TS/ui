@@ -5,6 +5,7 @@ import type * as View from "../../View.ts"
 import type * as Html from "../Html.ts"
 import * as documentHead from "./documentHead.ts"
 import { attributeName, isCustomTag, svgTagSet } from "./elements.ts"
+import * as modalHolds from "./modals.ts"
 import { bubblingEvents, ownEvents } from "./ownEvents.ts"
 import {
   type FieldState,
@@ -212,7 +213,12 @@ export const makeHost = (
     }
   }
 
-  const modals = new WeakSet<globalThis.Node>()
+  // Each modal's release of its hold on the document's shortcuts.
+  const modals = new WeakMap<globalThis.Node, () => void>()
+  const unmodal = (dialog: globalThis.Node) => {
+    modals.get(dialog)?.()
+    modals.delete(dialog)
+  }
   const showings = new WeakMap<globalThis.Node, Array<Showing>>()
   const modalWanted = new Set<HTMLDialogElement>()
   const shown = new Set<HTMLDialogElement>()
@@ -232,7 +238,7 @@ export const makeHost = (
   }
   const closeDialog = (dialog: HTMLDialogElement, byHost: boolean) => {
     if (!dialog.open) return
-    modals.delete(dialog)
+    unmodal(dialog)
     adoptShowing(dialog)
     shown.delete(dialog)
     const current = showingsOf(dialog).at(-1)!
@@ -260,7 +266,7 @@ export const makeHost = (
     if (current !== false) closeDialog(dialog, true)
     if (want === "modal") {
       keepingScroll(() => dialog.showModal())
-      modals.add(dialog)
+      modals.set(dialog, modalHolds.hold(dialog))
       modalPseudo ??= matches(dialog, ":modal")
     } else dialog.show()
     showingsOf(dialog).push({ byHost: false, closed: false })
@@ -569,7 +575,7 @@ export const makeHost = (
         const list = showings.get(target)
         const ended = list?.shift()
         if (ended !== undefined && (ended.byHost || list!.length > 0)) return
-        if (!target.open) modals.delete(target)
+        if (!target.open) unmodal(target)
       }
     }
     if (name === "pointerdown") lastPointer = pointerTypeOf(event) || undefined

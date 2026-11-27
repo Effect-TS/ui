@@ -1,3 +1,4 @@
+import * as HtmlSubscription from "@effect/ui/html/HtmlSubscription"
 import { perDocument, saved } from "./dom.ts"
 
 // A dialog drawn in place, with `topLayer: false`, is never modal.
@@ -108,9 +109,12 @@ export const hideOthers = (
   const entry = { inside, also, order }
   stack.layers.push(entry)
   refresh(stack)
+  // The page's document shortcuts stop matching behind the layer too.
+  const unhold = HtmlSubscription.holdModal(inside)
   return () => {
     stack.layers.splice(stack.layers.indexOf(entry), 1)
     refresh(stack)
+    unhold()
   }
 }
 

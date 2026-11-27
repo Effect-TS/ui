@@ -21,8 +21,12 @@ import * as keys from "./internal/keys.ts"
  * both — and takes precedence over `ctrl` and `meta`. `shift` is ignored
  * unless set, so a character key such as `"?"` or `"G"` matches regardless of
  * whether the user's keyboard layout requires Shift to type it. `whileTyping`
- * defaults to `false` (ignored when `editable` is true), and `repeat` defaults
- * to `false` (ignored while the key auto-repeats).
+ * defaults to `false` (ignored when `editable` is true), `whileModal`
+ * defaults to `false` (ignored on a document listener while a modal is open),
+ * and `repeat` defaults to `false` (ignored while the key auto-repeats).
+ *
+ * A component drawn inside a modal whose document rows should keep working
+ * there, such as a dialog's own `mod+s`, sets `whileModal: true` on them.
  *
  * @stability experimental
  * @category events
@@ -37,6 +41,7 @@ export interface Shortcut<Msg> {
   readonly alt?: boolean | undefined
   readonly meta?: boolean | undefined
   readonly whileTyping?: boolean | undefined
+  readonly whileModal?: boolean | undefined
   readonly repeat?: boolean | undefined
 }
 
@@ -68,7 +73,8 @@ export interface Sequence<Msg> extends Omit<Shortcut<Msg>, "key"> {
  *
  * Events with `composing` are always ignored, and on document listeners
  * (`HtmlSubscription.onDocument`) events with `defaultPrevented` are ignored as
- * well (element payloads carry no `defaultPrevented`). Each row is checked in
+ * well, as are rows without `whileModal` while `modal` is true (element
+ * payloads carry neither). Each row is checked in
  * order and the first match returns its `message`. Unmatched events return
  * `undefined`, so `{ preventDefault: true }` cancels the browser's default
  * only for matched shortcuts. On element handlers, returning `undefined` does

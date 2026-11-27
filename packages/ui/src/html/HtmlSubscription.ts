@@ -37,6 +37,7 @@ import * as frames from "./internal/frames.ts"
 import * as globalEvents from "./internal/globalEvents.ts"
 import * as keys from "./internal/keys.ts"
 import * as mediaQueries from "./internal/mediaQueries.ts"
+import * as modals from "./internal/modals.ts"
 import * as signals from "./internal/signals.ts"
 
 /**
@@ -83,8 +84,8 @@ export interface WindowEvents {
 
 /**
  * The payload of a document or window listener: the event's payload,
- * whether something already cancelled the event's default, and the event's
- * `timeStamp` in ms.
+ * whether something already cancelled the event's default, the event's
+ * `timeStamp` in ms, and whether a modal is open in the document.
  *
  * **Details**
  *
@@ -96,6 +97,10 @@ export interface WindowEvents {
  * The test tools default `timeStamp` to `0`, so a test sets it to move
  * time between presses for {@link keySequences}.
  *
+ * `modal` is true while a dialog the host opened with `showModal()`, or an
+ * element given to {@link holdModal}, is in the document, wherever the event
+ * started. `HtmlKeyboard.shortcuts` skips rows without `whileModal` then.
+ *
  * @stability experimental
  * @category events
  * @since 0.1.0
@@ -103,6 +108,7 @@ export interface WindowEvents {
 export type GlobalPayload<P> = P & {
   readonly defaultPrevented: boolean
   readonly timeStamp: number
+  readonly modal: boolean
 }
 
 /**
@@ -423,6 +429,7 @@ export interface KeySequenceOptions extends GlobalEventOptions {
  * A press more than `timeout` (`1 second` by default) after the last matched
  * press starts over. Timing uses the events' `timeStamp`; no timer runs.
  * A press that does not continue a row is retried as a first press.
+ * While a modal is open, only rows with `whileModal` match, prefixes included.
  * Unmatched modifier-key presses and auto-repeats preserve an unexpired
  * prefix without extending its timeout. A `composing` or `defaultPrevented`
  * press clears the prefix, as does gating the subscription off.
@@ -523,6 +530,28 @@ export const keySequences = <
 }
 
 const modifiers = ["Shift", "Control", "Alt", "Meta", "AltGraph"]
+
+/**
+ * Marks `element` as a modal shown in its document, so document and window
+ * listeners there get `modal: true` until the returned function releases it.
+ *
+ * **When to use**
+ *
+ * Use when the host doesn't open a modal itself, as with a popover drawn as a
+ * modal layer, so the page's `shortcuts` stop matching behind it. A dialog
+ * written with `h.dialog.modal(true)` is held already.
+ *
+ * **Details**
+ *
+ * The hold counts only while `element` is in a document, so one left behind
+ * by a removed element doesn't keep the page's shortcuts off. Release it as
+ * the modal starts closing.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export const holdModal: (element: Element) => () => void = modals.hold
 
 /**
  * A Subscription that listens for an event on the host's window.

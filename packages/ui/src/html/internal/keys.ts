@@ -9,10 +9,13 @@ import type * as HtmlKeyboard from "../HtmlKeyboard.ts"
 
 type Row = HtmlKeyboard.Shortcut<unknown> | HtmlKeyboard.Sequence<unknown>
 
-type Press = Pick<
-  Html.KeyPayload,
-  "key" | "shift" | "ctrl" | "alt" | "meta" | "repeat" | "editable"
->
+// `modal` is a document listener's: element payloads carry none.
+type Press =
+  & Pick<
+    Html.KeyPayload,
+    "key" | "shift" | "ctrl" | "alt" | "meta" | "repeat" | "editable"
+  >
+  & { readonly modal?: boolean | undefined }
 
 /**
  * Whether `payload` presses `key` with `row`'s modifiers and guards.
@@ -32,6 +35,7 @@ export const matches = (
   payload.alt === (row.alt ?? false) &&
   (row.shift === undefined || payload.shift === row.shift) &&
   (!payload.editable || row.whileTyping === true) &&
+  (!payload.modal || row.whileModal === true) &&
   (!payload.repeat || row.repeat === true)
 
 /** @internal */
@@ -76,7 +80,7 @@ export const checkSequences = (table: ReadonlyArray<Row>): void =>
     const seen = new Set<string>()
     // Try every modifier and guard combination: overlap alone does not make a row unreachable.
     const fires = (run: ReadonlyArray<Press>): boolean => {
-      for (let i = 0; i < 64; i++) {
+      for (let i = 0; i < 128; i++) {
         const presses = [...run, {
           key: keys[run.length]!,
           ctrl: (i & 1) > 0,
@@ -84,7 +88,8 @@ export const checkSequences = (table: ReadonlyArray<Row>): void =>
           alt: (i & 4) > 0,
           shift: (i & 8) > 0,
           editable: (i & 16) > 0,
-          repeat: (i & 32) > 0
+          repeat: (i & 32) > 0,
+          modal: (i & 64) > 0
         }]
         if (first([row], presses) === undefined) continue
         const id = presses.length +
