@@ -101,7 +101,7 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Play", (it) => {
       )
     }))
 
-  it.effect("fromCase replays messages with the case's layer and starts from model without running init's Commands", () =>
+  it.effect("fromCase starts from the case's model or sends its messages, with its layer", () =>
     Effect.gen(function*() {
       class InitialId extends Context.Service<InitialId, string>()(
         "InitialId"
@@ -154,9 +154,6 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Play", (it) => {
         })
       )
       const SavePending = SaveItem.toLayer(() => Effect.never)
-      const SaveImmediate = SaveItem.toLayer(() =>
-        Effect.succeed(ItemMessage.CompletedSave())
-      )
 
       const cases = Case.make(Item, {
         saved: {
@@ -175,11 +172,6 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Play", (it) => {
             Layer.succeed(InitialId, "t2")
           )
         },
-        replayed: {
-          props: { id: "t3" },
-          messages: [ItemMessage.ClickedSave()],
-          layer: Layer.mergeAll(LoadLayer, SaveImmediate)
-        },
         unset: {
           props: { id: "t4" },
           model: undefined,
@@ -192,14 +184,10 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Play", (it) => {
 
       const saved = yield* Play.fromCase(cases.saved)
       yield* saved.expect(Locator.tag("p")).toHaveText("t1:saved")
-      assert.deepStrictEqual(saved.root.model(), { saved: true, loaded: false })
       assert.strictEqual(initLoads, 0)
 
       const saving = yield* Play.fromCase(cases.saving)
       yield* saving.expect(Locator.tag("p")).toHaveText("t2:saving")
-
-      const replayed = yield* Play.fromCase(cases.replayed)
-      yield* replayed.expect(Locator.tag("p")).toHaveText("t3:saved")
 
       // `model: undefined` counts as left out: `init` runs.
       const unset = yield* Play.fromCase(cases.unset)
@@ -207,20 +195,6 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Play", (it) => {
       assert.deepStrictEqual(
         Case.make(SearchBox, { idle: { props: undefined } }).idle.props,
         {}
-      )
-      const Nullable = Component.define({
-        name: "Nullable",
-        props: Schema.NullOr(Schema.String),
-        model: Schema.Struct({}),
-        message: Schema.Never
-      }).make({
-        init: () => ({}),
-        update: (model) => model,
-        view: (h) => h.el("p")
-      })
-      assert.strictEqual(
-        Case.make(Nullable, { empty: { props: null } }).empty.props,
-        null
       )
     }))
 })

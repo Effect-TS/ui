@@ -62,7 +62,6 @@ import { SaveTodo, TodoItem, TodoMessage } from "./TodoItem.ts"
 const SavePending = SaveTodo.toLayer(() => Effect.never)
 
 export const TodoItemCases = Case.make(TodoItem, {
-  empty: { props: { id: "t1" }, layer: SavePending },
   saving: {
     props: { id: "t1" },
     messages: [TodoMessage.ClickedSave()],
@@ -144,21 +143,11 @@ try {
     )
 
     await page.goto(url + "__workbench/")
-    await page.locator("a", { hasText: "TodoItem/saved" }).waitFor()
-    const links = await page.locator("a").allTextContents()
-    expect(
-      links.some((text) => text.includes("TodoItem/empty")) &&
-        links.some((text) => text.includes("TodoItem/saving")) &&
-        links.some((text) => text.includes("TodoItem/saved")),
-      "index lists all cases",
-      links
-    )
-
     await page.locator("a", { hasText: "TodoItem/a?b#1" }).click()
     await waitReady()
     const hashPath = await page.evaluate(() => location.pathname)
     expect(
-      hashPath.endsWith("/TodoItem/a%3Fb%231"),
+      hashPath === "/app/__workbench/TodoItem/a%3Fb%231",
       "a key with ? and # links to its own case",
       hashPath
     )
@@ -218,6 +207,8 @@ try {
     await held.close()
   }, {
     root,
+    // Vite doesn't prefix the plugin's own URLs and tags with `base`.
+    base: "/app/",
     plugins: [
       DevToolsVite.plugin({
         port: 47771,

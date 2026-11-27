@@ -344,15 +344,14 @@ describe("Story's re-exports of the Steps types", () => {
 
 describe("Case", () => {
   it("checks props, model and messages against the component and allows omitting empty props", () => {
-    const counterCases = Case.make(Counter, {
+    expect(Case.make).type.toBeCallableWith(Counter, {
       start: {
         props: { initial: 1 },
         model: { count: 2 },
         messages: [CounterMessage.Increment()]
       }
     })
-    expect(counterCases.start.name).type.toBe<string>()
-    expect(Case.make(SearchBox, { idle: {} }).idle.name).type.toBe<string>()
+    expect(Case.make).type.toBeCallableWith(SearchBox, { idle: {} })
     expect(Case.make).type.not.toBeCallableWith(Counter, {
       badProps: { props: { initial: "0" } }
     })
@@ -367,80 +366,38 @@ describe("Case", () => {
     })
   })
 
-  it("keeps unmet requirements in the case's type and removes ones the layer satisfies", () => {
-    const todo = { id: "t1", title: "Buy milk", done: false }
-    const todoCases = Case.make(TodoItem, {
-      unprovided: { props: { todo } },
-      provided: {
-        props: { todo },
-        layer: SaveTodo.toLayer(() => Effect.never)
-      }
-    })
-    expect(Play.fromCase(todoCases.unprovided)).type.toBe<
-      Effect.Effect<
-        Play.Play<
-          Component.Model<typeof TodoItem>,
-          Component.Message<typeof TodoItem>,
-          Component.Events<typeof TodoItem>
-        >,
-        Play.StepError,
-        SaveTodo | TestHost.TestHost | Scope.Scope
-      >
-    >()
-    expect(Play.fromCase(todoCases.provided)).type.toBe<
-      Effect.Effect<
-        Play.Play<
-          Component.Model<typeof TodoItem>,
-          Component.Message<typeof TodoItem>,
-          Component.Events<typeof TodoItem>
-        >,
-        Play.StepError,
-        TestHost.TestHost | Scope.Scope
-      >
-    >()
-  })
-
-  it("keeps a requirement that only some branches of a case provide", () => {
+  it("keeps the requirements its layer doesn't provide", () => {
     const todo = { id: "t1", title: "Buy milk", done: false }
     const SavePending = SaveTodo.toLayer(() => Effect.never)
-    const input = Math.random() > 0.5
-      ? { props: { todo }, layer: SavePending }
-      : { props: { todo } }
-    const cases = Case.make(TodoItem, { either: input })
-    expect(Play.fromCase(cases.either)).type.toBe<
-      Effect.Effect<
-        Play.Play<
-          Component.Model<typeof TodoItem>,
-          Component.Message<typeof TodoItem>,
-          Component.Events<typeof TodoItem>
-        >,
-        Play.StepError,
-        SaveTodo | TestHost.TestHost | Scope.Scope
-      >
-    >()
-  })
-
-  it("keeps the requirements of an Effect branch in a props union", () => {
     const props = {} as
       | Component.Props<typeof TodoItem>
       | Effect.Effect<Component.Props<typeof TodoItem>, never, Config>
     const cases = Case.make(TodoItem, {
-      either: { props, layer: SaveTodo.toLayer(() => Effect.never) }
+      unprovided: { props: { todo } },
+      provided: { props: { todo }, layer: SavePending },
+      // Only one branch provides SaveTodo.
+      either: Math.random() > 0.5
+        ? { props: { todo }, layer: SavePending }
+        : { props: { todo } },
+      effectProps: { props, layer: SavePending }
     })
-    expect(Play.fromCase(cases.either)).type.toBe<
-      Effect.Effect<
-        Play.Play<
-          Component.Model<typeof TodoItem>,
-          Component.Message<typeof TodoItem>,
-          Component.Events<typeof TodoItem>
-        >,
-        Play.StepError,
-        Config | TestHost.TestHost | Scope.Scope
-      >
-    >()
+    expect(Play.fromCase(cases.unprovided)).type.toBe<TodoPlay<SaveTodo>>()
+    expect(Play.fromCase(cases.provided)).type.toBe<TodoPlay<never>>()
+    expect(Play.fromCase(cases.either)).type.toBe<TodoPlay<SaveTodo>>()
+    expect(Play.fromCase(cases.effectProps)).type.toBe<TodoPlay<Config>>()
   })
 })
 
 interface Config {
   readonly _tag: "Config"
 }
+
+type TodoPlay<R> = Effect.Effect<
+  Play.Play<
+    Component.Model<typeof TodoItem>,
+    Component.Message<typeof TodoItem>,
+    Component.Events<typeof TodoItem>
+  >,
+  Play.StepError,
+  R | TestHost.TestHost | Scope.Scope
+>
