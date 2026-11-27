@@ -447,3 +447,41 @@ type TodoPlay<R> = Effect.Effect<
   Play.StepError,
   R | TestHost.TestHost | Scope.Scope
 >
+
+describe("Story.explore", () => {
+  it("takes results for Effect Commands only, inferred from each definition", () => {
+    const messages = [SearchMessage.Start()]
+    expect(Story.explore(SearchBox, {}, {
+      messages,
+      commands: [[Search, {
+        success: ({ text }) => [SearchMessage.Results({ items: [text] })]
+      }]],
+      depth: 2
+    })).type.toBe<Story.Explored>()
+    expect(Story.explore).type.not.toBeCallableWith(SearchBox, {}, {
+      messages,
+      commands: [[Search, { success: [1] }]],
+      depth: 2
+    })
+    expect(Story.explore).type.not.toBeCallableWith(SearchBox, {}, {
+      messages,
+      commands: [[Upload, {}]],
+      depth: 2
+    })
+  })
+
+  it("gives the invariant no history and no Command work", () => {
+    Story.explore(SearchBox, {}, {
+      messages: [SearchMessage.Start()],
+      depth: 1,
+      invariant: (story) => {
+        type Issued = (typeof story.pending)[number]["command"]
+        expect(story).type.not.toHaveProperty("interrupted")
+        expect<Issued>().type.toHaveProperty("name")
+        expect<Issued>().type.toHaveProperty("args")
+        expect<Issued>().type.not.toHaveProperty("effect")
+        expect(story.model.text).type.toBe<string>()
+      }
+    })
+  })
+})
