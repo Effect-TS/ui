@@ -52,6 +52,7 @@ export const fire = (
   for (const capture of [true, false]) {
     for (const listener of listening(capture)) {
       listener({
+        modal: false,
         ...defaults,
         timeStamp: 0,
         ...given,

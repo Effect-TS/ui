@@ -18,6 +18,7 @@ import {
   Html,
   HtmlCommand,
   HtmlHydrate,
+  HtmlKeyboard,
   HtmlScheduler,
   HtmlServer,
   HtmlSubscription
@@ -3284,6 +3285,74 @@ describe("BrowserHost", { concurrent: false }, () => {
           .toEqual([false, 0, true, ""])
       }).pipe(Effect.scoped))
 
+    it.effect("closing a mounted root closes its modal dialog", () =>
+      Effect.gen(function*() {
+        const Modal = Html.component({
+          name: "Modal",
+          model: Schema.Struct({}),
+          message: Schema.Never
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) => h.dialog.modal(true).children("Hi")
+        })
+        const app = yield* container
+        const dialog = yield* Effect.gen(function*() {
+          yield* BrowserHost.mountEffect(Modal, {}, app)
+          yield* tick
+          return app.querySelector("dialog")!
+        }).pipe(Effect.scoped)
+        expect(dialog.open).toBe(false)
+      }))
+
+    it.effect("document shortcuts don't fire while a modal dialog is open", () =>
+      Effect.gen(function*() {
+        const Message = UiSchema.TaggedEnum({ Help: {}, Closed: {} })
+        const Shell = Html.component({
+          name: "Shell",
+          model: Schema.Struct({
+            open: Schema.Boolean,
+            log: Schema.Array(Schema.String)
+          }),
+          message: Message
+        }).make({
+          init: () => ({ open: true, log: [] }),
+          update: {
+            Help: ($) => ({ ...$.model, log: [...$.model.log, "help"] }),
+            Closed: ($) => ({ ...$.model, open: false })
+          },
+          view: (h, model) =>
+            h.dialog.attr("aria-label", "Confirm").modal(model.open).children(
+              h.button.children("Inside")
+            ),
+          subscriptions: () => [
+            HtmlSubscription.onDocument(
+              "keydown",
+              HtmlKeyboard.shortcuts([{ key: "?", message: Message.Help() }])
+            )
+          ]
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Shell, {}, app)
+        yield* tick
+        const help = (target: EventTarget) =>
+          target.dispatchEvent(
+            new KeyboardEvent("keydown", {
+              key: "?",
+              bubbles: true,
+              cancelable: true
+            })
+          )
+        help(app.querySelector("button")!)
+        yield* tick
+        expect(root.model()!.log).toEqual([])
+        root.send(Message.Closed())
+        yield* tick
+        help(document.body)
+        yield* tick
+        expect(root.model()!.log).toEqual(["help"])
+      }).pipe(Effect.scoped))
+
     it.effect("a modal removed while open is forgotten, and switching mode closes without telling the app", () =>
       Effect.gen(function*() {
         const { calls } = yield* dialogCalls
@@ -3368,35 +3437,68 @@ describe("BrowserHost", { concurrent: false }, () => {
       }
     )
 
-    it("a close the browser makes is the app's, unless the host has shown the dialog again first", () => {
-      const host = BrowserHost.makeHost(document)
-      const dialog = document.body.appendChild(document.createElement("dialog"))
-      const seen: Array<unknown> = []
-      try {
-        host.setEvents(
-          dialog,
-          { close: "closed" },
-          (_, handler) => seen.push(handler) > 0,
-          {}
+    it.effect("a close the browser makes is the app's, unless the host has shown the dialog again first", () =>
+      Effect.gen(function*() {
+        const events = Context.get(
+          yield* Layer.build(BrowserHost.layer()),
+          HtmlSubscription.GlobalEvents
         )
-        host.setProp(dialog, "open", "modal")
-        host.commit?.()
-        // A forced close reported before the reconciliation shows it again.
-        dialog.open = false
-        dialog.dispatchEvent(new Event("close"))
-        expect(seen).toEqual(["closed"])
-        host.commit?.()
-        expect(dialog.open).toBe(true)
-        // A forced close the reconciliation got to first: its report is stale.
-        dialog.open = false
-        host.commit?.()
-        dialog.dispatchEvent(new Event("close"))
-        expect(seen).toEqual(["closed"])
-      } finally {
-        host.dispose()
-        dialog.remove()
-      }
-    })
+        const help = HtmlKeyboard.shortcuts([{ key: "?", message: "help" }])
+        const heard: Array<unknown> = []
+        yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            events.listen(
+              "document",
+              "keydown",
+              { capture: false },
+              (payload) => heard.push(help(payload as never))
+            )
+          ),
+          (off) => Effect.sync(off)
+        )
+        const host = BrowserHost.makeHost(document)
+        const dialog = document.body.appendChild(
+          document.createElement("dialog")
+        )
+        const seen: Array<unknown> = []
+        try {
+          host.setEvents(
+            dialog,
+            { close: "closed" },
+            (_, handler) => seen.push(handler) > 0,
+            {}
+          )
+          host.setProp(dialog, "open", "modal")
+          host.commit?.()
+          // A forced close reported before the reconciliation shows it again.
+          dialog.open = false
+          dialog.dispatchEvent(new Event("close"))
+          expect(seen).toEqual(["closed"])
+          host.commit?.()
+          expect(dialog.open).toBe(true)
+          // A forced close the reconciliation got to first: its report is stale.
+          dialog.open = false
+          host.commit?.()
+          dialog.dispatchEvent(new Event("close"))
+          expect(seen).toEqual(["closed"])
+          // Disposed with it reopened, the host holds the page's shortcuts
+          // past the stale `close`, until the dialog really closes.
+          dialog.open = false
+          host.commit?.()
+          host.dispose()
+          dialog.dispatchEvent(new Event("close"))
+          const press = () =>
+            document.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))
+          press()
+          dialog.close()
+          yield* tick
+          press()
+          expect(heard).toEqual([undefined, "help"])
+        } finally {
+          host.dispose()
+          dialog.remove()
+        }
+      }).pipe(Effect.scoped))
 
     it("reconciling a dialog that's already open records its showing once", () => {
       const host = BrowserHost.makeHost(document)

@@ -25,6 +25,7 @@ export const onEscape = <M>(message: M): Subscription.Subscription<M> =>
     key: "Escape",
     message,
     whileTyping: true,
+    whileModal: true,
     repeat: true
   }])
 

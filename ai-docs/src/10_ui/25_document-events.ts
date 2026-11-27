@@ -38,9 +38,11 @@ const SnakeMessage = UiSchema.TaggedEnum({
 // so the page doesn't scroll for a matched key and keeps every other key.
 // By default it skips `defaultPrevented` (a key an element's handler already
 // took), `composing`, `repeat` (a held key's auto-repeats), `ctrl`/`alt`/`meta`
-// combos, and `editable` (keys typed into a field); `whileTyping: true` lets
-// `Escape` through. The listener runs the declaration from the latest
-// `subscriptions`, so omitting the opposite direction updates with `model.heading`.
+// combos, `editable` (keys typed into a field) and `modal` (keys pressed while
+// a modal dialog is open); `whileTyping: true` lets `Escape` through, and
+// `whileModal: true` does the same behind a modal. The listener runs the
+// declaration from the latest `subscriptions`, so omitting the opposite
+// direction updates with `model.heading`.
 export const Snake = Html.component({
   name: "Snake",
   model: Schema.Struct({ running: Schema.Boolean, heading: Direction }),
