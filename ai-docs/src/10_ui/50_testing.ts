@@ -122,6 +122,46 @@ describe("NoteEditor", () => {
     assert.isFalse(closed)
   })
 
+  it("story: follows a smaller spec", () => {
+    // The spec says what each message does to the part of the Model it
+    // models, as a plain function. Another component works as one too:
+    // `Story.start(Simple, {}).given(state).send(message).model`.
+    type Text = { readonly draft: string; readonly saved: string }
+    const text = ({ draft, saved }: Text): Text => ({ draft, saved })
+    const spec = (
+      before: Text,
+      message: typeof NoteEditorMessage.Type
+    ): Text => {
+      switch (message._tag) {
+        case "UpdatedBody":
+          return { ...before, draft: message.body }
+        case "SucceededSaveNote":
+          return { ...before, saved: message.note.body }
+        default:
+          return before
+      }
+    }
+    // A wrong `init` passes every transition, so check it once.
+    assert.deepStrictEqual(text(Story.start(NoteEditor, { note }).model), {
+      draft: note.body,
+      saved: note.body
+    })
+    Story.explore(NoteEditor, { note }, {
+      messages: [
+        NoteEditorMessage.UpdatedBody({ body: edited.body }),
+        NoteEditorMessage.RequestedSave()
+      ],
+      commands: [[SaveNote, {
+        success: ({ note }) => [NoteEditorMessage.SucceededSaveNote({ note })]
+      }]],
+      // Checked on every `update` call, Command results included. The first
+      // failure reports the call, and the shortest path to it.
+      transition: ({ after, before, message }) =>
+        assert.deepStrictEqual(text(after), spec(text(before), message)),
+      depth: 4
+    })
+  })
+
   it.effect("scene: saves the draft and tells its parent", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(NoteEditor, { note })

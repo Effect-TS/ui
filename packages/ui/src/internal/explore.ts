@@ -11,7 +11,7 @@
 import * as Equal from "effect/Equal"
 import * as Hash from "effect/Hash"
 import * as MutableHashSet from "effect/MutableHashSet"
-import * as Schema from "effect/Schema"
+import type * as Schema from "effect/Schema"
 import * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
 import type { Pending } from "../testing/Steps.ts"
@@ -23,6 +23,7 @@ import type {
 import { isNoop, isNoopSchema, noop } from "./noop.ts"
 import { atSite, callSite, type Cursor, initial, stateOf } from "./steps.ts"
 import * as engine from "./story.ts"
+import * as rules from "./storyRules.ts"
 
 type Story = Cursor & { send(message: unknown): unknown }
 type State = engine.State<any, any, any, any>
@@ -59,9 +60,6 @@ const values = (
 
 const show = (schema: Schema.Top | undefined, value: unknown): string =>
   isNoop(value) ? "Component.noop" : engine.show(schema, value)
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
 
 const isPlain = (value: object): boolean => {
   const proto = Object.getPrototypeOf(value)
@@ -186,7 +184,6 @@ export const explore = (
   options: ExploreOptions<any, ReadonlyArray<ExploredCommand>>
 ): Explored =>
   atSite(callSite(site), () => {
-    const { invariant } = options
     const depth = count("depth", options.depth, 0)
     const budget = count("states", options.states ?? 10_000, 1)
     const lists = new Map(
@@ -194,9 +191,7 @@ export const explore = (
         [definition, results]
       ) => [Command.nameOf(definition), results])
     )
-    const isModel = Schema.is(component.model as Schema.Codec<unknown, unknown>)
-    const events = component.events as Schema.Codec<unknown, unknown>
-    const isEvent = Schema.is(events)
+    const checks = rules.make(component, options)
     const settled = new WeakMap<Issued, Settles | string>()
     let runs = 0
 
@@ -293,67 +288,23 @@ export const explore = (
       return record
     }
 
-    const fail = (reason: string, node: Node, state: State): never => {
+    const fail = (problem: rules.Problem, node: Node, state: State): never => {
       const path: Array<ReadonlyArray<string>> = []
       for (let at: Node | undefined = node; at !== undefined; at = at.parent) {
         path.push(at.lines())
       }
       const [first, ...steps] = path.reverse().flat()
       throw new Error(
-        `Story.explore: ${reason}:\n\n${first}\n  ${
+        `Story.explore: ${problem.reason}:\n\n${first}\n  ${
           steps.join("\n  ")
-        }\n\n  model: ${show(component.model, state.model)}\n  pending: ${
-          engine.describePending(state.pending)
+        }\n\n  ${
+          [
+            ...(problem.detail ?? []),
+            `model: ${show(component.model, state.model)}`,
+            `pending: ${engine.describePending(state.pending)}`
+          ].join("\n  ")
         }`
       )
-    }
-
-    // Check the invariant before acknowledging outputs so it can inspect events and sends.
-    const check = (story: Story, lines: Array<string>): string | undefined => {
-      if (!isModel(story.state.model)) {
-        return "the Model doesn't satisfy its Schema"
-      }
-      if (invariant !== undefined) {
-        try {
-          if (invariant(recordOf(story) as any) === false) {
-            return "the invariant returned false"
-          }
-        } catch (error) {
-          return `the invariant threw: ${messageOf(error)}`
-        }
-      }
-      const state = story.state
-      const event = state.emitted.find((event) => !isEvent(event))
-      if (event !== undefined) {
-        return `the event ${
-          show(events, event)
-        } doesn't satisfy the events Schema`
-      }
-      if (state.emitted.length > 0) {
-        lines.push(
-          `.emitted(${
-            state.emitted.map((event) => show(events, event)).join(", ")
-          })`
-        )
-        story.emitted(...state.emitted)
-      }
-      for (const send of state.sent) {
-        const receives = send.owner.receives as Schema.Codec<unknown, unknown>
-        if (!Schema.is(receives)(send.message)) {
-          return `the send ${
-            show(receives, send.message)
-          } doesn't satisfy the receives Schema of ${send.owner.definition.name}`
-        }
-        lines.push(
-          `.sent(${send.owner.definition.name}, ${
-            show(receives, send.message)
-          })`
-        )
-        story.sent(send.owner, send.message)
-      }
-      return state.pending.map((entry) => settlesOf(entry.command)).find((
-        settles
-      ) => typeof settles === "string")
     }
 
     const visit = (
@@ -362,18 +313,30 @@ export const explore = (
       move: Move
     ): Node => {
       const acknowledged: Array<string> = []
-      let reason: string | undefined
+      let problem: rules.Problem | undefined
       try {
-        move.run(story)
-        reason = check(story, acknowledged)
+        const updates = engine.recordUpdates(() => move.run(story))
+        problem = rules.check(
+          checks,
+          story,
+          updates,
+          () => recordOf(story),
+          acknowledged
+        )
+        if (problem === undefined) {
+          const reason = story.state.pending.map((entry) =>
+            settlesOf(entry.command)
+          ).find((settles) => typeof settles === "string")
+          if (reason !== undefined) problem = { reason }
+        }
       } catch (error) {
-        reason = `the step threw: ${messageOf(error)}`
+        problem = { reason: `the step threw: ${rules.messageOf(error)}` }
       }
       const node: Node = {
         parent,
         lines: () => [...move.lines(), ...acknowledged]
       }
-      return reason === undefined ? node : fail(reason, node, story.state)
+      return problem === undefined ? node : fail(problem, node, story.state)
     }
 
     /** Every move from a record, in a fixed order: the messages as listed, then pending work, oldest first. */

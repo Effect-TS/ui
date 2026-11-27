@@ -1806,24 +1806,54 @@ export const findRunning = (
   return entry
 }
 
+/**
+ * One `update` call: the Model it received, the message and the Model it returned.
+ *
+ * @internal
+ */
+export interface Update {
+  readonly before: unknown
+  readonly message: unknown
+  readonly after: unknown
+}
+
+let updates: Array<Update> | undefined
+
+/**
+ * Runs `f` and returns the `update` calls it made, in the order they ran.
+ *
+ * @internal
+ */
+export const recordUpdates = (f: () => void): ReadonlyArray<Update> => {
+  const previous = updates
+  const out: Array<Update> = []
+  updates = out
+  try {
+    f()
+  } finally {
+    updates = previous
+  }
+  return out
+}
+
 /** @internal */
 export const dispatch = <Props, Model, Msg, Events>(
   story: State<Props, Model, Msg, Events>,
   message: Msg | Component.Noop | undefined
-): State<Props, Model, Msg, Events> =>
+): State<Props, Model, Msg, Events> => {
   // `undefined` is a handler's "no message", and `Component.noop` a Command's or a mount's.
-  message === undefined || isNoop(message)
-    ? story
-    : apply(
-      story,
-      story.component.update(
-        story.model,
-        message,
-        story.props,
-        story.results,
-        sharedReads.record(story.component, rootShared(sharedGiven.get(story)))
-      )
-    )
+  if (message === undefined || isNoop(message)) return story
+  const next = story.component.update(
+    story.model,
+    message,
+    story.props,
+    story.results,
+    sharedReads.record(story.component, rootShared(sharedGiven.get(story)))
+  )
+  // Before `apply`, which can dispatch a cut run's message: calls stay in the order they ran.
+  updates?.push({ before: story.model, message, after: next.model })
+  return apply(story, next)
+}
 
 /** `node` and its ancestors in `root`, innermost first, or `undefined` when `node` isn't in `root`. */
 const pathTo = (

@@ -368,6 +368,20 @@ export interface CheckResults<D> {
 }
 
 /**
+ * One `update` call, as `check` and `explore`'s `transition` rule sees it:
+ * the Model it received, the message, and the Model it returned.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Transition<Model, Msg> {
+  readonly before: Model
+  readonly message: Msg
+  readonly after: Model
+}
+
+/**
  * Generators and an invariant for `check`, plus the run, shrink and replay
  * options accepted by `Arbitrary.checkEffect`.
  *
@@ -394,6 +408,15 @@ export interface CheckOptions<
         results: CheckResults<O[K]>
       ]
     }
+    | undefined
+  /**
+   * Runs on each `update` call a step makes, Command results included.
+   * Return `false` or throw to fail the run.
+   */
+  readonly transition?:
+    | ((
+      transition: Transition<Component.Model<C>, Component.Message<C>>
+    ) => boolean | void)
     | undefined
   /**
    * Runs after `init` and each applied step, with the same record as
@@ -429,8 +452,10 @@ export interface CheckOptions<
  * **Checks and failures**
  *
  * After `init` and each applied step, the runner checks the Model's Schema,
- * runs `invariant`, then validates and acknowledges events and sends using
- * the `events` and `receives` Schemas. A step that throws also fails the run.
+ * runs `transition` on each `update` call the step made, in order, runs
+ * `invariant`, then validates and acknowledges events and sends using the
+ * `events` and `receives` Schemas. A step that throws also fails the run.
+ * A `transition` failure also reports the call's message and Models.
  *
  * The failure report includes Story steps, the Model, pending Commands and a
  * `replay` token. Shrinking removes steps and shrinks messages generated from
@@ -586,6 +611,15 @@ export interface ExploreOptions<
     }
     | undefined
   /**
+   * Checked on each `update` call a move makes, Command results included.
+   * Fails by returning `false` or throwing.
+   */
+  readonly transition?:
+    | ((
+      transition: Transition<Component.Model<C>, Component.Message<C>>
+    ) => boolean | void)
+    | undefined
+  /**
    * Checked after `init` and every move, before events and sends are
    * acknowledged. Receives an `ExploredRecord` and fails by returning
    * `false` or throwing.
@@ -628,8 +662,11 @@ export interface Explored {
  * a written Story, only the oldest run with the same name and args settles.
  *
  * After `init` and every move, the Model is checked against its Schema,
+ * then `transition` runs on each `update` call the move made, in order,
  * then `invariant` runs, then events and sends are checked against their
- * Schemas and acknowledged. A move that throws fails too.
+ * Schemas and acknowledged. A move that throws fails too. A `transition`
+ * failure also reports the call's message and Models. Rules should read only
+ * what they are given: outside state defeats the merging below.
  *
  * Moves run breadth first, messages as listed, then pending Commands oldest
  * first. With deterministic inputs and component logic, the first failure
