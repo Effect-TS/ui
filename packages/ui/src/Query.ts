@@ -595,7 +595,9 @@ const queryClass = (def: QueryDef) => {
                 }
                 const offer = (result: Item): void => {
                   if (failed !== undefined) return
-                  if (last !== undefined && Equal.equals(result, last)) return
+                  if (
+                    last !== undefined && queryCore.sameResult(result, last)
+                  ) return
                   last = result
                   pending.push(result)
                   wake()
@@ -3169,7 +3171,7 @@ class SnapshotImpl implements Equal.Equal {
     const b = that[SnapshotTypeId]
     return a.def.name === b.def.name && a.label === b.label &&
       a.argsKey === b.argsKey && a.patched === b.patched &&
-      sameMore(a.more, b.more) && Equal.equals(a.result, b.result)
+      sameMore(a.more, b.more) && queryCore.sameResult(a.result, b.result)
   }
   [Hash.symbol](): number {
     const data = this[SnapshotTypeId]
@@ -4924,6 +4926,8 @@ const buildCache = (
   let windowOpen = false
   // From a hydration until adoption: saved values would change the adopted frame.
   let adopting = false
+  // Entries made while adopting and not shipped: they look up their saved value at adoption.
+  const unrestored = new Set<Entry>()
   // Writes and invalidations, entry creation and run starts share one sequence.
   let seq = 0
   let issued = 0
@@ -5075,6 +5079,7 @@ const buildCache = (
     let byKey = index.get(def.name)
     if (byKey === undefined) index.set(def.name, byKey = new Map())
     byKey.set(argsKey, entry)
+    if (adopting && def.persist) unrestored.add(entry)
     return entry
   }
   const removeEntry = (entry: Entry): void => {
@@ -5221,7 +5226,7 @@ const buildCache = (
       }
       if (
         patched === watcher.lastPatched && sameMore(more, watcher.lastMore) &&
-        Equal.equals(result, watcher.last)
+        queryCore.sameResult(result, watcher.last)
       ) {
         continue
       }
@@ -6578,6 +6583,7 @@ const buildCache = (
       }
       const entry = existing ?? ensureEntry(def, args, argsKey)
       entry.result = result
+      unrestored.delete(entry)
       // It ages from the client's mount. Under `static` its age is unknown: stale unless never stale by age.
       entry.settledAt = hydratedAt
       entry.invalidated = hydratedStatic && def.staleMs !== Infinity
@@ -6610,20 +6616,29 @@ const buildCache = (
     }
   }
   const closeWindow = (): void => {
-    if (adopting) {
-      adopting = false
-      // An entry made while the page was adopted starts from its saved value now.
-      for (const entry of persistence === undefined ? [] : allEntries()) {
-        const saved = entry.result === undefined
-          ? savedOf(entry.def, entry.argsKey)
-          : undefined
-        if (saved === undefined) continue
+    adopting = false
+    // An entry made while the page was adopted gets its saved value now: as its
+    // result, or under a Failure that has no previous Success.
+    for (const entry of unrestored) {
+      const result = entry.result
+      if (
+        entry.removed || result?._tag === "Success" ||
+        (result !== undefined && Option.isSome(result.previousSuccess))
+      ) continue
+      const saved = savedOf(entry.def, entry.argsKey)
+      if (saved === undefined) continue
+      if (result === undefined) {
         entry.result = saved
         entry.settledAt = now()
         entry.invalidated = true
-        emit(entry)
+      } else {
+        entry.result = AsyncResult.failure(result.cause, {
+          previousSuccess: Option.some(saved)
+        })
       }
+      emit(entry)
     }
+    unrestored.clear()
     if (!windowOpen) return
     windowOpen = false
     for (const [name, byKey] of raw) {

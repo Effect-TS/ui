@@ -1779,7 +1779,7 @@ describe("Query", () => {
       }).pipe(Effect.provide(session))
     }).pipe(Effect.provide(KeyValueStore.layerMemory))
   })
-  it.effect("an offline reload shows the pages loadMore appended and reset dropped", () => {
+  it.effect("an offline reload shows the pages loadMore appended and reset dropped, aged from the last save", () => {
     const Page = Schema.Struct({ n: Schema.Number })
     let online = true
     class ListNotes extends Query.InfiniteService<ListNotes>()("notes/List", {
@@ -1805,9 +1805,16 @@ describe("Query", () => {
     )
     return Effect.gen(function*() {
       const session = yield* persisted(ListNotes.layer)
-      yield* Effect.andThen(ListNotes.get({}), ListNotes.loadMore({})).pipe(
-        Effect.provide(session)
-      )
+      yield* Effect.gen(function*() {
+        const fiber = yield* Effect.forkChild(
+          Stream.runDrain(ListNotes.changes({}))
+        )
+        yield* advance("6 days")
+        yield* ListNotes.loadMore({})
+        yield* Fiber.interrupt(fiber)
+      }).pipe(Effect.provide(session))
+      // Page 1 is 8 days old, but the list was saved 2 days ago.
+      yield* advance("2 days")
       assert.deepStrictEqual(yield* Effect.provide(pages, session), [1, 2])
 
       online = false
@@ -1820,56 +1827,66 @@ describe("Query", () => {
   })
 
   it.effect("a watch started while a page is adopted gets the saved value once it is", () =>
-    Effect.forEach([false, true], (isStatic) => {
-      let online = true
-      class GetNotes extends Query.Service<GetNotes>()("notes/Watched", {
-        success: Schema.String,
-        error: Schema.String,
-        staleTime: "30 seconds",
-        persist: true
-      }) {
-        static readonly layer = this.toLayer(() =>
-          online
-            ? Effect.succeed("saved")
-            : Effect.fail("offline").pipe(Effect.delay("1 second"))
-        )
-      }
-      return Effect.gen(function*() {
-        const session = yield* persisted(GetNotes.layer)
-        yield* GetNotes.get({}).pipe(Effect.provide(session))
-        online = false
-        yield* Effect.gen(function*() {
-          const cache = Query.internals(yield* Query.Cache)
-          cache.hydrate({}, { static: isStatic })
-          const seen: Array<string> = []
-          yield* Effect.forkChild(
-            Stream.runForEach(
-              GetNotes.changes({}),
-              (result) =>
-                Effect.sync(() =>
-                  seen.push(
-                    result._tag +
-                      (AsyncResult.isSuccess(result)
-                        ? " " + result.value
-                        : "") +
-                      (AsyncResult.isFailure(result) &&
-                          Option.isSome(result.previousSuccess)
-                        ? " over " + result.previousSuccess.value.value
-                        : "")
-                  )
-                )
-            )
+    Effect.forEach(
+      [
+        [false, "1 second"],
+        [true, "1 second"],
+        [false, 0],
+        [true, 0]
+      ] as const,
+      ([isStatic, delay]) => {
+        let online = true
+        class GetNotes extends Query.Service<GetNotes>()("notes/Watched", {
+          success: Schema.String,
+          error: Schema.String,
+          staleTime: "30 seconds",
+          persist: true
+        }) {
+          static readonly layer = this.toLayer(() =>
+            online
+              ? Effect.succeed("saved")
+              : Effect.fail("offline").pipe(Effect.delay(delay))
           )
-          yield* flush
-          cache.closeWindow()
-          yield* advance("1 second")
-          assert.deepStrictEqual(seen, [
-            "Success saved",
-            "Failure over saved"
-          ])
-        }).pipe(Effect.provide(session))
-      }).pipe(Effect.provide(KeyValueStore.layerMemory))
-    }, { discard: true }))
+        }
+        return Effect.gen(function*() {
+          const session = yield* persisted(GetNotes.layer)
+          yield* GetNotes.get({}).pipe(Effect.provide(session))
+          online = false
+          yield* Effect.gen(function*() {
+            const cache = Query.internals(yield* Query.Cache)
+            cache.hydrate({}, { static: isStatic })
+            const seen: Array<string> = []
+            yield* Effect.forkChild(
+              Stream.runForEach(
+                GetNotes.changes({}),
+                (result) =>
+                  Effect.sync(() =>
+                    seen.push(
+                      result._tag +
+                        (AsyncResult.isSuccess(result)
+                          ? " " + result.value
+                          : "") +
+                        (AsyncResult.isFailure(result) &&
+                            Option.isSome(result.previousSuccess)
+                          ? " over " + result.previousSuccess.value.value
+                          : "")
+                    )
+                  )
+              )
+            )
+            yield* flush
+            cache.closeWindow()
+            yield* advance("1 second")
+            // A fetch that failed before adoption gets the saved value under it.
+            assert.deepStrictEqual(seen, [
+              delay === 0 ? "Failure" : "Success saved",
+              "Failure over saved"
+            ])
+          }).pipe(Effect.provide(session))
+        }).pipe(Effect.provide(KeyValueStore.layerMemory))
+      },
+      { discard: true }
+    ))
 
   it.effect("the startup read only prunes its own entries, and keeps one it can't read", () => {
     class GetNotes extends Query.Service<GetNotes>()("notes/Store", {

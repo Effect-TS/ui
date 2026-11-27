@@ -9,12 +9,13 @@
  *
  * - The Layer reads every entry under its `prefix` while it builds, so a
  *   mount waits for the read and its first frame holds the saved values. It
- *   removes entries whose data is older than `maxAge`, saved under another
+ *   removes entries last saved more than `maxAge` ago, saved under another
  *   `version`, or that don't parse. A value that no longer decodes is
  *   removed when the cache first reads it.
  * - A saved value fills an entry when the cache creates it, as a stale
  *   Success with its saved timestamp. A watch or `get` refetches at once, and
- *   a failed refetch keeps it as the Failure's previous Success.
+ *   a failed refetch keeps it as the Failure's previous Success. That holds
+ *   for a fetch that failed before a hydrated page was adopted, too.
  * - Every Success the cache holds is saved: fetches, a Command's `writes`,
  *   and an infinite query's `loadMore` and `reset`. Never an optimistic
  *   patch or a Failure. Writes go out at most once a second,
@@ -101,13 +102,17 @@ type Def = ReturnType<typeof Query.defOf>
 interface Saved {
   readonly version: string | undefined
   readonly value: unknown
+  /** The Success's timestamp, for display. */
   readonly timestamp: number
+  /** When the Layer saved it, for `maxAge`. */
+  readonly savedAt: number
 }
 
 const parse = (text: string | undefined): Saved | undefined => {
   try {
     const saved = JSON.parse(text!)
-    return typeof saved.timestamp === "number" && "value" in saved
+    return typeof saved.timestamp === "number" &&
+        typeof saved.savedAt === "number" && "value" in saved
       ? saved
       : undefined
   } catch {
@@ -135,9 +140,8 @@ const failed = (query: string, part: "encode" | "write"): SaveFailed =>
  * **Details**
  *
  * - `prefix` namespaces the keys. Put a user id in it to keep users apart.
- * - `maxAge` is how old saved data may be when it is restored, counted from
- *   the Success's timestamp: when its data was fetched, not when it was
- *   saved. `loadMore` and `reset` keep a list's timestamp.
+ * - `maxAge` is how long a saved entry is kept, from its last save. A
+ *   restored Success keeps its own timestamp.
  * - `version` drops every entry saved under another one. Use a build id when
  *   a deploy changes a query's Schemas.
  *
@@ -166,7 +170,8 @@ export const layerKvs = (options: {
     queryCore.Persistence,
     Effect.gen(function*() {
       const store = yield* KeyValueStore.KeyValueStore
-      const now = yield* Clock.currentTimeMillis
+      const clock = yield* Clock.Clock
+      const now = clock.currentTimeMillisUnsafe()
       const saved = new Map<string, Saved>()
       const keys = yield* Effect.orElseSucceed(store.keys, () => [])
       yield* Effect.forEach(
@@ -178,8 +183,7 @@ export const layerKvs = (options: {
               const entry = parse(text)
               if (
                 entry !== undefined && entry.version === options.version &&
-                // The data's age: a list's appended pages keep its timestamp.
-                now - entry.timestamp <= maxAge
+                now - entry.savedAt <= maxAge
               ) {
                 saved.set(key, entry)
                 return Effect.void
@@ -250,7 +254,8 @@ export const layerKvs = (options: {
           saved.set(key, {
             version: options.version,
             value,
-            timestamp: result.timestamp
+            timestamp: result.timestamp,
+            savedAt: clock.currentTimeMillisUnsafe()
           })
           dirty.set(key, () => report(failed(def.name, "write")))
           latch.openUnsafe()

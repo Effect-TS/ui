@@ -9,7 +9,8 @@
 import * as Context from "effect/Context"
 import type * as Duration from "effect/Duration"
 import type * as Effect from "effect/Effect"
-import type * as AsyncResult from "effect/reactivity/AsyncResult"
+import * as Equal from "effect/Equal"
+import * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Query from "../Query.ts"
 import type * as componentQueries from "./queries.ts"
 import type * as queryRun from "./queryRun.ts"
@@ -296,6 +297,20 @@ export const Persistence: Context.Reference<Persistence | undefined> = Context
   .Reference<Persistence | undefined>("@effect/ui/Query/Persistence", {
     defaultValue: () => undefined
   })
+
+/**
+ * `Equal.equals`, except that two Failures also compare their previous
+ * Success, which AsyncResult's own equality ignores.
+ *
+ * @internal
+ */
+export const sameResult = (a: unknown, b: unknown): boolean =>
+  Equal.equals(a, b) &&
+  !(AsyncResult.isAsyncResult(a) && a._tag === "Failure" &&
+    !Equal.equals(
+      a.previousSuccess,
+      (b as AsyncResult.Failure<unknown, unknown>).previousSuccess
+    ))
 
 /** @internal */
 export const report = (

@@ -2,7 +2,6 @@ import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
-import * as Equal from "effect/Equal"
 import type * as Fiber from "effect/Fiber"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Component from "../Component.ts"
@@ -329,7 +328,7 @@ const watch = (
       if (
         last !== undefined && last.patched === patched &&
         loaded().sameMore(last.more as never, more) &&
-        Equal.equals(last.result, result)
+        queryCore.sameResult(last.result, result)
       ) return
       last = { result, patched, more }
       if (running.marker.keyed) {
@@ -511,7 +510,7 @@ const writeResult = (
   if (inst.closed) return
   const bound = boundOf(inst)
   const results = (inst.results ?? bound.empty) as componentQueries.Results
-  if (Equal.equals(results[entry.name], result)) return
+  if (queryCore.sameResult(results[entry.name], result)) return
   inst.results = { ...results, [entry.name]: result }
   const seq = inst.tree.log?.(inst, {
     _tag: "QueryChanged",
