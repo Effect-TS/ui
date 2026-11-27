@@ -15,6 +15,7 @@ import { Cause, Effect, Layer, Option, Redacted, Schema, Stream } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import {
   Counter,
+  CounterMessage,
   SaveTodo,
   Search,
   SearchBox,
@@ -1427,6 +1428,24 @@ describe("Story", () => {
 
     it.effect("runs settle-only stories when messages is Schema.Never", () =>
       Story.check(Editor, {}, { seed: 1, messages: Schema.Never }))
+
+    it.effect("checks the transition rule on each update, Command results included", () =>
+      Effect.gen(function*() {
+        const message = yield* defect(
+          Story.check(Editor, {}, {
+            seed: 1,
+            messages: EditorMessage.cases.ClickedSave,
+            commands: [[SaveEditor, {
+              success: EditorMessage.cases.CompletedSave
+            }]],
+            transition: ({ message }) => message._tag !== "CompletedSave"
+          })
+        )
+        assert.match(
+          message,
+          /^Story\.check: the transition rule returned false[\s\S]*\.resolve\(todos\/Save,\s*\{"_tag":"CompletedSave"\}\)\s*update: \{"_tag":"CompletedSave"\}\s*before: \{"text":"","saving":true\}\s*after: \{"text":"","saving":false\}/
+        )
+      }))
   })
 
   describe("explore", () => {
@@ -1707,6 +1726,74 @@ Story.start(ExploreSearch, {})
         commands: [[SaveNoteCommand, { success: [NoteMessage.Saved()] }]],
         invariant: () => true,
         depth: 2
+      })
+    })
+
+    it("checks every update against a smaller spec, and reports the first shortest divergence", () => {
+      const Toggled = UiSchema.TaggedEnum({ Toggled: { id: Schema.String } })
+      // A toggle that only adds: toggling a selected id leaves it selected.
+      const FilterList = Component.define({
+        name: "FilterList",
+        model: Schema.Struct({ selected: Schema.Array(Schema.String) }),
+        message: Toggled
+      }).make({
+        init: () => ({ selected: [] }),
+        update: ($, { id }) =>
+          $.model.selected.includes(id)
+            ? $.model
+            : { selected: [...$.model.selected, id] },
+        view: (h, model) => h.el("div", model.selected.join(","))
+      })
+      const message = exploreFailure(() =>
+        Story.explore(FilterList, {}, {
+          messages: [Toggled.Toggled({ id: "a" })],
+          depth: 2,
+          transition: ({ after, before, message }) =>
+            assert.deepStrictEqual(
+              after.selected,
+              before.selected.includes(message.id)
+                ? before.selected.filter((id) => id !== message.id)
+                : [...before.selected, message.id]
+            )
+        })
+      )
+      assert.strictEqual(
+        message,
+        `Story.explore: the transition rule threw: expected [ 'a' ] to deeply equal []:
+
+Story.start(FilterList, {})
+  .send({"_tag":"Toggled","id":"a"})
+  .send({"_tag":"Toggled","id":"a"})
+
+  update: {"_tag":"Toggled","id":"a"}
+    before: {"selected":["a"]}
+    after: {"selected":["a"]}
+  model: {"selected":["a"]}
+  pending: nothing`
+      )
+    })
+
+    it("gives the transition rule only the explored story's updates, not a story its update runs", () => {
+      const Tick = UiSchema.TaggedEnum({ Tick: {} })
+      // Frozen, as a component may be: the rule's recording can't assign to it.
+      const Outer = Object.freeze(
+        Component.define({
+          name: "Outer",
+          model: Schema.Number,
+          message: Tick
+        }).make({
+          init: () => 0,
+          update: ($) =>
+            Story.start(Counter, { initial: $.model }).send(
+              CounterMessage.Increment()
+            ).model.count,
+          view: (h, model) => h.el("div", String(model))
+        })
+      )
+      Story.explore(Outer, {}, {
+        messages: [Tick.Tick()],
+        depth: 1,
+        transition: ({ after, before }) => after === before + 1
       })
     })
   })

@@ -17,6 +17,7 @@ import type { Pending } from "../testing/Steps.ts"
 import { isNoop, isNoopSchema, noop } from "./noop.ts"
 import { atSite, callSite, type Cursor } from "./steps.ts"
 import * as engine from "./story.ts"
+import * as rules from "./storyRules.ts"
 
 /** @internal */
 export type Source =
@@ -35,6 +36,7 @@ export interface Options extends Arbitrary.CheckOptions {
   readonly commands?:
     | ReadonlyArray<readonly [Command.Definition.Any, Results]>
     | undefined
+  readonly transition?: ((update: any) => boolean | void) | undefined
   readonly invariant?: ((story: any) => boolean | void) | undefined
 }
 
@@ -64,20 +66,17 @@ interface Action {
   readonly schema?: Schema.Top | undefined
 }
 
-interface Failure {
-  readonly reason: string
+interface Failure extends rules.Problem {
   readonly lines: ReadonlyArray<string>
   readonly state: engine.State<any, any, any, any>
 }
 
 interface Context {
-  readonly start: () => Story
+  readonly start: (component: Component.Any) => Story
   /** None for `Schema.Never`, which makes settle-only scripts. */
   readonly messages: Source | undefined
   readonly commands: ReadonlyMap<string, Results>
-  readonly invariant: ((story: any) => boolean | void) | undefined
-  readonly isModel: (u: unknown) => boolean
-  readonly isEvent: (u: unknown) => boolean
+  readonly rules: rules.Rules
 }
 
 const derived = new WeakMap<Schema.Top, Arbitrary.Arbitrary<unknown>>()
@@ -253,56 +252,6 @@ const settleable = (
     ...queryActions(state)
   ].filter((actions) => actions.length > 0)
 
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
-
-const checkStep = (
-  ctx: Context,
-  story: Story,
-  lines: Array<string>
-): string | undefined => {
-  if (!ctx.isModel(story.model)) return "the Model doesn't satisfy its Schema"
-  if (ctx.invariant !== undefined) {
-    try {
-      if (ctx.invariant(story.current) === false) {
-        return "the invariant returned false"
-      }
-    } catch (error) {
-      return `the invariant threw: ${messageOf(error)}`
-    }
-  }
-  const state = story.state
-  const events: Schema.Top = state.component.events
-  for (const event of state.emitted) {
-    if (!ctx.isEvent(event)) {
-      return `the event ${
-        show(events, event)
-      } doesn't satisfy the events Schema`
-    }
-  }
-  if (state.emitted.length > 0) {
-    lines.push(
-      `.emitted(${
-        state.emitted.map((event) => show(events, event)).join(", ")
-      })`
-    )
-    story.emitted(...state.emitted)
-  }
-  for (const send of state.sent) {
-    const receives = send.owner.receives as Schema.Codec<unknown, unknown>
-    if (!Schema.is(receives)(send.message)) {
-      return `the send ${
-        show(receives, send.message)
-      } doesn't satisfy the receives Schema of ${send.owner.definition.name}`
-    }
-    lines.push(
-      `.sent(${send.owner.definition.name}, ${show(receives, send.message)})`
-    )
-    story.sent(send.owner, send.message)
-  }
-  return undefined
-}
-
 const keepAll = (story: Story, lines: Array<string>): void => {
   const { commands, more, queries } = engine.blocking(story.state)
   for (const name of new Set(commands.map((entry) => entry.command.name))) {
@@ -326,27 +275,21 @@ const runScript = (
 ): Effect.Effect<boolean, Failure> =>
   Effect.gen(function*() {
     // A defect in `init` fails every run alike: there is nothing to shrink.
-    const story = ctx.start()
+    const story = ctx.start(ctx.rules.component)
     const component = story.state.component
     const lines = [
       `Story.start(${component.definition.name}, ${
         show(component.props, story.state.props)
       })`
     ]
-    const failed = (reason: string): Effect.Effect<never, Failure> =>
-      Effect.fail({ reason, lines, state: story.state })
-    const attempt = (f: () => void): string | undefined => {
-      try {
-        f()
-        return checkStep(ctx, story, lines)
-      } catch (error) {
-        return `the step threw: ${messageOf(error)}`
-      }
-    }
+    const failed = (problem: rules.Problem): Effect.Effect<never, Failure> =>
+      Effect.fail({ ...problem, lines, state: story.state })
+    const attempt = (f: () => void): rules.Problem | undefined =>
+      rules.step(ctx.rules, story, f, () => story.current, lines)
     const first = attempt(() => {})
     if (first !== undefined) return yield* failed(first)
     for (const step of script) {
-      let problem: string | undefined
+      let problem: rules.Problem | undefined
       if (step._tag === "Settle") {
         const candidates = settleable(ctx, story.state)
         if (candidates.length === 0) continue
@@ -422,10 +365,8 @@ const report = (
 ): string =>
   `Story.check: ${failure.reason}, after ${result.runs} run(s) and ${result.shrinks} shrink(s):\n\n${
     failure.lines.join("\n  ")
-  }\n\n  model: ${
-    show(failure.state.component.model, failure.state.model)
-  }\n  pending: ${
-    engine.describePending(failure.state.pending)
+  }\n\n  ${
+    rules.describe(failure, failure.state)
   }\n\nReplay it with { replay: ${JSON.stringify(result.replay)} }`
 
 /**
@@ -436,7 +377,7 @@ const report = (
 export const check = (
   site: Function,
   component: Component.Any,
-  start: () => Story,
+  start: (component: Component.Any) => Story,
   options: Options = {}
 ): Effect.Effect<void> => {
   const where = callSite(site)
@@ -449,9 +390,7 @@ export const check = (
         [definition, results]
       ) => [Command.nameOf(definition), results])
     ),
-    invariant: options.invariant,
-    isModel: Schema.is(component.model as Schema.Codec<unknown, unknown>),
-    isEvent: Schema.is(component.events as Schema.Codec<unknown, unknown>)
+    rules: rules.make(component, options)
   }
   return Effect.flatMap(
     Arbitrary.checkEffect(
