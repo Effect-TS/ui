@@ -145,6 +145,7 @@
  */
 import * as Context from "effect/Context"
 import * as Schema from "effect/Schema"
+import type * as Types from "effect/Types"
 import * as Component from "../Component.ts"
 import { handle } from "../internal/handler.ts"
 import * as Renderer from "../Renderer.ts"
@@ -1891,26 +1892,21 @@ type ElementOf<Tag extends string> = Tag extends keyof HTMLElementTagNameMap
   ? HTMLElementTagNameMap[Tag]
   : HTMLElement
 
-type IsReadonly<T, K extends keyof T> =
-  (<V>() => V extends Pick<T, K> ? 1 : 2) extends
-    (<V>() => V extends { -readonly [Q in K]: T[Q] } ? 1 : 2) ? false : true
-
-type IsCallback<V> = [V] extends [Function | null | undefined]
-  ? [V] extends [null | undefined] ? false : true
+type IsCallback<V> = [V] extends [null | undefined] ? false
+  : [V] extends [Function | null | undefined] ? true
   : false
 
-type ElementProperties<T> = {
-  readonly [
-    K in keyof T as K extends keyof HTMLElement | symbol ? never
-      : IsCallback<T[K]> extends true ? never
-      : IsReadonly<T, K> extends true ? never
-      : K
-  ]: T[K]
-}
-
-type Properties<P, Tag extends string> =
+type Properties<P, T> =
   & P
-  & Omit<ElementProperties<ElementOf<Tag>>, keyof P>
+  & {
+    readonly [
+      K in Exclude<
+        keyof T,
+        keyof HTMLElement | keyof P
+      > as IsCallback<T[K]> extends true ? never
+        : Types.EqualsWith<Pick<T, K>, Types.Mutable<Pick<T, K>>, K, never>
+    ]: T[K]
+  }
 
 /**
  * The builder under a custom element's property methods: an `Element` whose
@@ -1925,7 +1921,8 @@ type Properties<P, Tag extends string> =
  * name. When `Tag` is in `HTMLElementTagNameMap`, its element class types
  * `ref` and `onMount`, and `prop` also takes its writable fields that
  * `HTMLElement` lacks, minus methods and callbacks, each typed as it
- * reads. A declared property wins over a field of the same name. `CustomElement` adds a method per declared property.
+ * reads. A declared property wins over a field of the same name.
+ * `CustomElement` adds a method per declared property.
  *
  * @stability experimental
  * @category custom elements
@@ -1940,19 +1937,6 @@ export class CustomElementBuilder<
   in out Tag extends string = string
 > extends Element<Msg, R, Omit<Events, keyof E> & E, ElementOf<Tag>, Tag> {
   /**
-   * Writes the property `name` on the element as a JavaScript property,
-   * typed by its Schema or by the element's class. The browser host writes
-   * it when its value changes, and resets it when a render leaves it out.
-   *
-   * @since 0.1.0
-   */
-  override prop<K extends keyof Properties<P, Tag> & string>(
-    name: K,
-    value: Properties<P, Tag>[K]
-  ): this {
-    return super.prop(name, value)
-  }
-  /**
    * Phantom: keeps the property methods through `View.WithRequirements`.
    *
    * @since 0.1.0
@@ -1963,9 +1947,9 @@ export class CustomElementBuilder<
 type Undeclared<P, K extends string> = K extends keyof P ? never : unknown
 
 /**
- * The HTML methods a declared property can share a name with. Once a
- * declaration takes the name, the HTML method can't be called, so the
- * generated method is the only signature left.
+ * The typed `prop`, and the HTML methods a declared property can share a
+ * name with. Once a declaration takes the name, the HTML method can't be
+ * called, so the generated method is the only signature left.
  *
  * @stability experimental
  * @category custom elements
@@ -1978,6 +1962,17 @@ export interface CustomElementBuilder<
   in out E = {},
   in out Tag extends string = string
 > {
+  /**
+   * Writes the property `name` on the element as a JavaScript property,
+   * typed by its Schema or by the element's class. The browser host writes
+   * it when its value changes, and resets it when a render leaves it out.
+   *
+   * @since 0.1.0
+   */
+  prop<K extends keyof Properties<P, ElementOf<Tag>> & string>(
+    name: K,
+    value: Properties<P, ElementOf<Tag>>[K]
+  ): this
   disabled(
     this: Undeclared<P, "disabled">,
     disabled: boolean
@@ -2103,10 +2098,10 @@ export interface CustomElementBinding<Tag extends string, P, E> {
  * Declare a property in `properties` for a method, for an element with no
  * types, for a callback, which isn't inferred, or for an accessor whose
  * setter takes another type than its getter returns, such as `currentTime`
- * on Shoelace's `sl-animation`. The
- * HTML methods, such as `class`, `style` and `on("click", ...)`, work as
- * on any element. Registering the element with `customElements.define`, often by
- * importing its package, is still the app's job.
+ * on Shoelace's `sl-animation`. The HTML methods, such as `class`, `style`
+ * and `on("click", ...)`, work as on any element. Registering the element
+ * with `customElements.define`, often by importing its package, is still
+ * the app's job.
  *
  * Throws when `tag` isn't a custom element name, lowercase with a hyphen.
  *

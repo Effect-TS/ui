@@ -166,10 +166,12 @@ describe("Html.customElement", () => {
 
     const CustomQrCode = Html.customElement({
       tag: "test-qr-code",
-      properties: { size: Schema.Number, custom: Schema.Boolean }
+      properties: { size: Schema.String, custom: Schema.Boolean }
     })
     const customQr = CustomQrCode(h)
-    expect(customQr.size).type.toBeCallableWith(256)
+    expect(customQr.size).type.toBeCallableWith("256")
+    expect(customQr.prop).type.toBeCallableWith("size", "256")
+    expect(customQr.prop).type.not.toBeCallableWith("size", 256)
     expect(customQr.custom).type.toBeCallableWith(true)
     expect(customQr.custom).type.not.toBeCallableWith("yes")
     expect(customQr.prop).type.toBeCallableWith("custom", true)
