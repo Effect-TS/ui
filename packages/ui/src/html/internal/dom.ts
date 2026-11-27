@@ -829,12 +829,19 @@ export const makeHost = (
     },
     insert(parent: Node, node, before) {
       if (node.parentNode !== parent) parent.insertBefore(node, before)
-      else if (parent.moveBefore !== undefined) parent.moveBefore(node, before)
-      else {
+      // A form control named `moveBefore` shadows the method.
+      else if (typeof parent.moveBefore === "function") {
+        parent.moveBefore(node, before)
+      } else {
         const focused = (node.getRootNode() as Document | ShadowRoot)
           .activeElement as HTMLElement | null
         parent.insertBefore(node, before)
-        if (node.contains(focused)) focused!.focus({ preventScroll: true })
+        // Focus is given back only if it was dropped, not if a blur handler moved it.
+        if (
+          document.activeElement === document.body && node.contains(focused)
+        ) {
+          focused!.focus({ preventScroll: true })
+        }
       }
     },
     remove(parent, node) {

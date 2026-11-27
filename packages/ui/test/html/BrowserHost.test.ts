@@ -948,6 +948,22 @@ describe("BrowserHost", { concurrent: false }, () => {
           .toEqual(["b", "c", "a"])
         expect(ul.lastElementChild).toBe(a)
         expect(document.activeElement).toBe(a)
+        // Code that runs during the move, like a blur handler, keeps the focus it gives.
+        const other = yield* container
+        other.tabIndex = 0
+        customElements.define(
+          "focus-other",
+          class extends HTMLElement {
+            disconnectedCallback() {
+              other.focus()
+            }
+          }
+        )
+        a.append(document.createElement("focus-other"))
+        root.send(ListMessage.Set({ rows: ["a", "b", "c"] }))
+        yield* tick
+        expect(ul.firstElementChild).toBe(a)
+        expect(document.activeElement).toBe(other)
       }).pipe(Effect.scoped))
 
     it.effect("a keyed reorder uses moveBefore when the parent supports it", () =>
@@ -969,6 +985,11 @@ describe("BrowserHost", { concurrent: false }, () => {
         root.send(ListMessage.Set({ rows: ["b", "c", "a", "d"] }))
         yield* tick
         expect(moved).toEqual([])
+        // A form control named `moveBefore` shadows the method.
+        Object.assign(ul, { moveBefore: document.createElement("input") })
+        root.send(ListMessage.Set({ rows: ["a", "b", "c", "d"] }))
+        yield* tick
+        expect(ul.firstElementChild).toBe(a)
       }).pipe(Effect.scoped))
 
     it.effect("a custom element's class is set as an attribute, whatever its className does", () =>
