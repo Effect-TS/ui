@@ -54,10 +54,7 @@ const ScrollFar = Command.make(
     )
 )
 
-const virtualRows = Array.from({ length: 300 }, (_, i) => ({
-  id: `row-${i}`,
-  index: i + 1
-}))
+const virtualRows = Array.from({ length: 300 }, (_, i) => String(i + 1))
 
 const button = {
   backgroundColor: "#111827",
@@ -100,10 +97,7 @@ export const App = Native.component({
     dragged: Schema.Number,
     dropped: Schema.Number,
     showVirtual: Schema.Boolean,
-    hidden: Schema.Record(Schema.String, Rect),
-    visibleEvents: Schema.Number,
-    prerenderEvents: Schema.Number,
-    hiddenEvents: Schema.Number
+    hidden: Schema.Record(Schema.String, Rect)
   }),
   message: Message
 }).make({
@@ -116,10 +110,7 @@ export const App = Native.component({
     dragged: 0,
     dropped: 0,
     showVirtual: false,
-    hidden: {},
-    visibleEvents: 0,
-    prerenderEvents: 0,
-    hiddenEvents: 0
+    hidden: {}
   }),
   update: {
     ClickedDecrement: ($) => $.evolve({ count: (count) => count - 1 }),
@@ -129,7 +120,9 @@ export const App = Native.component({
     ChangedNotes: ($, { value }) => $.evolve({ notes: value }),
     ClickedAdd: ($) =>
       $.evolve({
-        items: (items) => [
+        items: (
+          items
+        ) => [
           ...items,
           `Item ${items.length + 1}: ${$.model.name || "stranger"}`
         ]
@@ -139,13 +132,7 @@ export const App = Native.component({
     Dropped: ($) => $.evolve({ dropped: $.model.dragged }),
     CancelledDrag: ($) => $.evolve({ dragged: $.model.dropped }),
     ToggledVirtual: ($) =>
-      $.evolve({
-        showVirtual: (show) => !show,
-        hidden: () => ({}),
-        visibleEvents: () => 0,
-        prerenderEvents: () => 0,
-        hiddenEvents: () => 0
-      }),
+      $.evolve({ showVirtual: (show) => !show, hidden: () => ({}) }),
     JumpedFar: ($) => $.run(ScrollFar.make()),
     ModeChanged: ($, { id, mode, rect }) =>
       $.evolve({
@@ -155,10 +142,7 @@ export const App = Native.component({
           const next = { ...hidden }
           delete next[id]
           return next
-        },
-        visibleEvents: (n) => (mode === "visible" ? n + 1 : n),
-        prerenderEvents: (n) => (mode === "prerender" ? n + 1 : n),
-        hiddenEvents: (n) => (mode === "hidden" ? n + 1 : n)
+        }
       })
   },
   view: (h, model) => {
@@ -180,15 +164,13 @@ export const App = Native.component({
           pressable(h, Message.ToggledVirtual(), "Back"),
           pressable(h, Message.JumpedFar(), "Jump"),
           h.text.style({ fontSize: 13, color: "#374151", flex: 1 }).children(
-            `${rendered}/${virtualRows.length} V:${model.visibleEvents} P:${model.prerenderEvents} H:${model.hiddenEvents}`
+            `${rendered}/${virtualRows.length} rendered`
           )
         ),
         h.scroll.ref(virtualScroll).style({ flex: 1 }).children(
           ...virtualRows.map((row) =>
             VirtualView(h, {
-              hidden: model.hidden[row.id],
-              onModeChange: ({ mode, targetRect }) =>
-                Message.ModeChanged({ id: row.id, mode, rect: targetRect }),
+              hidden: model.hidden[row],
               children: () =>
                 h.view.style({
                   height: 92,
@@ -196,19 +178,20 @@ export const App = Native.component({
                   marginVertical: 4,
                   padding: 16,
                   borderRadius: 10,
-                  backgroundColor: row.index % 2 === 0 ? "#eff6ff" : "#f3f4f6",
+                  backgroundColor: "#f3f4f6",
                   justifyContent: "center"
                 }).children(
                   h.text.style({
                     fontSize: 18,
                     fontWeight: "bold",
                     color: "#111827"
-                  }).children(`Row ${row.index}`),
-                  h.text.style({ fontSize: 14, color: "#4b5563" }).children(
-                    `VirtualView item #${row.index}`
-                  )
+                  }).children(`Row ${row}`)
                 )
-            }).key(row.id)
+            }).key(row).on(
+              "modeChange",
+              ({ mode, targetRect }) =>
+                Message.ModeChanged({ id: row, mode, rect: targetRect })
+            )
           )
         )
       )
@@ -225,7 +208,9 @@ export const App = Native.component({
         fontWeight: "bold",
         color: "#1f2937",
         textAlign: "center"
-      }).children(String(model.count)),
+      }).children(
+        String(model.count)
+      ),
       h.view.style({ flexDirection: "row", justifyContent: "center", gap: 16 })
         .children(
           pressable(h, Message.ClickedDecrement(), "-"),

@@ -17,16 +17,13 @@ const Rect = Schema.Struct({
 const Message = UiSchema.TaggedEnum({
   ModeChanged: {
     mode: Schema.Literals(["visible", "prerender", "hidden"]),
-    targetRect: Rect,
-    thresholdRect: Rect
+    targetRect: Rect
   },
   Pressed: {}
 })
 
 const makeList = (options: {
-  readonly initialHidden?: boolean
   readonly startHidden?: boolean
-  readonly removeClippedSubviews?: boolean
   readonly onRenderChild: () => void
 }) =>
   Native.component({
@@ -44,8 +41,8 @@ const makeList = (options: {
     message: Message
   }).make({
     init: () => ({
-      hidden: options.initialHidden || options.startHidden
-        ? { width: undefined, height: 64 }
+      hidden: options.startHidden
+        ? { width: 320, height: undefined }
         : undefined,
       lastMode: "none",
       presses: 0
@@ -62,10 +59,6 @@ const makeList = (options: {
       h.scroll.style({ flex: 1 }).children(
         VirtualView(h, {
           hidden: model.hidden,
-          initialHidden: options.initialHidden,
-          removeClippedSubviews: options.removeClippedSubviews,
-          onModeChange: ({ mode, targetRect, thresholdRect }) =>
-            Message.ModeChanged({ mode, targetRect, thresholdRect }),
           children: () => {
             options.onRenderChild()
             return h.text.children(`Mode: ${model.lastMode} (${model.presses})`)
@@ -73,6 +66,10 @@ const makeList = (options: {
         })
           .key("item-1")
           .style({ minHeight: 20, padding: 8 })
+          .on(
+            "modeChange",
+            ({ mode, targetRect }) => Message.ModeChanged({ mode, targetRect })
+          )
           .on("press", Message.Pressed())
       )
   })
@@ -133,11 +130,10 @@ describe("VirtualView", () => {
     await close()
   })
 
-  it("defaults initialHidden from hidden, forwards removeClippedSubviews, and rejects raw text", async () => {
+  it("starts hidden when mounted with hidden, and rejects raw text", async () => {
     let childRenders = 0
     const List = makeList({
       startHidden: true,
-      removeClippedSubviews: true,
       onRenderChild: () => childRenders++
     })
     const { close, fabric, find, printed, settle } = await FakeFabric.mount(
@@ -147,14 +143,14 @@ describe("VirtualView", () => {
     assert.strictEqual(childRenders, 0)
     assert.strictEqual(vv().props.initialHidden, true)
     assert.strictEqual(vv().props.renderState, 2)
-    assert.strictEqual(vv().props.removeClippedSubviews, true)
-    assert.isUndefined(vv().props.minWidth)
-    assert.strictEqual(vv().props.minHeight, 64)
+    // An omitted dimension keeps the caller's own minimum.
+    assert.strictEqual(vv().props.minWidth, 320)
+    assert.strictEqual(vv().props.minHeight, 20)
     assert.include(printed(), "<VirtualView></>")
 
     fabric.emit(vv(), "topModeChange", {
       mode: 0,
-      targetRect: { x: 0, y: 0, width: 320, height: 64 },
+      targetRect: { x: 0, y: 0, width: 320, height: 20 },
       thresholdRect: { x: 0, y: 0, width: 320, height: 800 }
     })
     await settle()
