@@ -101,4 +101,24 @@ describe("Fast Refresh", () => {
     assert.strictEqual(reloads.length, 1)
     await close()
   })
+
+  // Alone: every runtime sees a view defined again.
+  it(
+    "reloads when a native view is defined again",
+    { concurrent: false },
+    async () => {
+      const { refreshed, reloads, runtime, close } = await setup()
+      const define = (viewName: string) =>
+        Native.defineView(() => new Native.Element("refreshed"), { viewName })
+      define("Before")
+      runtime.performReactRefresh()
+      assert.deepStrictEqual(reloads, [])
+      // Nodes keep the definition they were made with.
+      define("After")
+      runtime.performReactRefresh()
+      assert.strictEqual(refreshed(), 0)
+      assert.strictEqual(reloads.length, 1)
+      await close()
+    }
+  )
 })

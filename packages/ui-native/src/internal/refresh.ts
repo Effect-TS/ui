@@ -1,4 +1,5 @@
 import * as Component from "@effect/ui/Component"
+import { kinds } from "./kinds.ts"
 
 interface Family {
   readonly first: Component.Any
@@ -24,6 +25,15 @@ export const make = (options: {
   const families = new Map<string, Family>()
   const familyOf = new WeakMap<object, Family>()
   const changed = new Map<string, Family>()
+  // A mounted node keeps the view definition it was made with, so a view
+  // defined again needs a reload. Watched here to keep production lookups out
+  // of the host.
+  let redefined = false
+  const define = kinds.set
+  kinds.set = (tag, kind) => {
+    redefined ||= kinds.has(tag)
+    return define.call(kinds, tag, kind)
+  }
   return {
     isLikelyComponentType: Component.isComponent,
     register(type: unknown, id: string) {
@@ -45,6 +55,11 @@ export const make = (options: {
       typeof type === "function" ? familyOf.get(type) : undefined,
     createSignatureFunctionForTransform: () => (type: unknown) => type,
     performReactRefresh() {
+      if (redefined) {
+        redefined = false
+        changed.clear()
+        return options.reload("Fast Refresh: a native view was defined again")
+      }
       if (changed.size === 0) return
       const first: Record<string, unknown> = {}
       const next: Record<string, unknown> = {}

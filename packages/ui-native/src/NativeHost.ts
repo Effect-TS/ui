@@ -118,24 +118,29 @@ export class NativeNode {
   // surfaces' own tags.
   tag = lastTag += 2
   readonly kind: Native.ViewKind
+  /** The surface's host, which the kind's functions get. */
+  readonly host: Native.ViewHost
   /** Props of the shadow node, in Fabric's flat form. */
   readonly props: Record<string, unknown>
   constructor(
     kind: Native.ViewKind,
+    host: Native.ViewHost,
     props: Record<string, unknown> = { ...kind.defaults }
   ) {
     this.kind = kind
+    this.host = host
     this.props = props
   }
 }
 
 const rawText: Native.ViewKind = { viewName: "RCTRawText" }
+// A surface's root, and a container holding nodes off screen.
+const surface: Native.ViewKind = { viewName: "" }
 const container: Native.ViewKind = { viewName: "" }
 
 let lastTag = 0
 
 const isColor = /(^c|C)olor$/
-const colors = new Map<string, unknown>()
 const none = {}
 
 /**
@@ -157,10 +162,37 @@ export const make = (options: Options): {
   const cloneChildren = ui.cloneNodeWithNewChildren
   const cloneBoth = ui.cloneNodeWithNewChildrenAndProps
   const appendChild = ui.appendChild
-  const root = new NativeNode(container)
-  const view = listen(ui, os, processColor)
-  const setNative = view.set
-  const command = view.command
+  listen(ui)
+  const colors = new Map<string, unknown>()
+  const color = (value: unknown) => {
+    if (typeof value !== "string") return processColor(value)
+    let out = colors.get(value)
+    if (out === undefined) {
+      if (colors.size > 255) colors.clear()
+      colors.set(value, out = processColor(value))
+    }
+    return out
+  }
+  const setNative = (n: NativeNode, name: string, value: unknown) => {
+    if (value !== undefined && isColor.test(name)) value = color(value)
+    if (n.props[name] === value) return
+    if (value === undefined) delete n.props[name]
+    else n.props[name] = value
+    // A node not created yet takes all its props at createNode.
+    if (n.shadow !== undefined) {
+      ;(n.pending ??= {})[name] = value === undefined ? null : value
+    }
+    markDirty(n)
+  }
+  const command = (
+    n: NativeNode,
+    name: string,
+    args: ReadonlyArray<unknown> = []
+  ) => {
+    if (n.shadow !== undefined) ui.dispatchCommand(n.shadow, name, args)
+  }
+  const view: Native.ViewHost = { os, set: setNative, color, command, fire }
+  const root = new NativeNode(surface, view)
 
   const viewNameOf = (n: NativeNode): string => {
     const name = n.kind.viewName
@@ -217,19 +249,19 @@ export const make = (options: Options): {
     createElement(type) {
       const kind = kinds.get(type)
       if (kind === undefined) throw new Error(`<${type}> has no native view`)
-      const n = new NativeNode(kind)
+      const n = new NativeNode(kind, view)
       if (kind.content !== undefined) {
-        const inner = new NativeNode(kind.content)
+        const inner = new NativeNode(kind.content, view)
         inner.parent = n
         n.first = n.last = n.inner = inner
       }
       return n
     },
     createText(text) {
-      return new NativeNode(rawText, { text })
+      return new NativeNode(rawText, view, { text })
     },
     createContainer() {
-      return new NativeNode(container)
+      return new NativeNode(container, view)
     },
     setText(n, text) {
       setNative(n, "text", text)
@@ -239,7 +271,7 @@ export const make = (options: Options): {
     },
     setProp(n, name, value) {
       if (name === "value") n.value = value
-      setProp(n, name, value, view)
+      setProp(n, name, value)
     },
     insertBefore(parent, n, ref) {
       if (n.parent !== undefined) host.remove(n)
@@ -326,15 +358,10 @@ const markDirty = (n: NativeNode | undefined) => {
   }
 }
 
-const setProp = (
-  n: NativeNode,
-  name: string,
-  value: unknown,
-  view: Native.ViewHost
-) => {
+const setProp = (n: NativeNode, name: string, value: unknown) => {
   const set = n.kind.props?.[name]
-  if (set === undefined) view.set(n, name, value)
-  else set(n, value, view)
+  if (set === undefined) n.host.set(n, name, value)
+  else set(n, value, n.host)
 }
 
 const fire = (n: NativeNode, name: string, payload: unknown) => {
@@ -347,50 +374,16 @@ const propOf = (name: string): string =>
   "on" + name[0]!.toUpperCase() + name.slice(1)
 
 // Native reports every surface's events through one handler, with the
-// instance handle the host gave `createNode`, so the surfaces of a
-// UIManager share it and the `ViewHost` its hooks get.
-const views = new WeakMap<UIManager, Native.ViewHost>()
+// instance handle the host gave `createNode`.
+const listening = new WeakSet<UIManager>()
 
 // How far, in points, a touch may end outside the pressed view and still
 // press it, as React Native's `Pressable` allows by default.
 const slop = 20
 
-const listen = (
-  ui: UIManager,
-  os: string,
-  processColor: (color: unknown) => unknown
-): Native.ViewHost => {
-  const known = views.get(ui)
-  if (known !== undefined) return known
-  const color = (value: unknown) => {
-    if (typeof value !== "string") return processColor(value)
-    let out = colors.get(value)
-    if (out === undefined) {
-      if (colors.size > 255) colors.clear()
-      colors.set(value, out = processColor(value))
-    }
-    return out
-  }
-  const view: Native.ViewHost = {
-    os,
-    color,
-    fire,
-    set(n, name, value) {
-      if (value !== undefined && isColor.test(name)) value = color(value)
-      if (n.props[name] === value) return
-      if (value === undefined) delete n.props[name]
-      else n.props[name] = value
-      // A node not created yet takes all its props at createNode.
-      if (n.shadow !== undefined) {
-        ;(n.pending ??= {})[name] = value === undefined ? null : value
-      }
-      markDirty(n)
-    },
-    command(n, name, args = []) {
-      if (n.shadow !== undefined) ui.dispatchCommand(n.shadow, name, args)
-    }
-  }
-  views.set(ui, view)
+const listen = (ui: UIManager) => {
+  if (listening.has(ui)) return
+  listening.add(ui)
   let pressed: NativeNode | undefined
   const within = (n: NativeNode, x: number, y: number) => {
     const rect = n.shadow === undefined
@@ -436,12 +429,15 @@ const listen = (
     if (hook === undefined) {
       return fire(handle, type[3]!.toLowerCase() + type.slice(4), payload)
     }
-    hook(handle, payload, view)
+    hook(handle, payload, handle.host)
     // Once the event's update has rendered, a value native edited that the
-    // Model didn't take is put back.
+    // Model didn't take is put back, if the field is still shown.
     if (handle.value !== undefined) {
-      setTimeout(() => setProp(handle, "value", handle.value, view), 0)
+      setTimeout(() => {
+        let n = handle
+        while (n.parent !== undefined) n = n.parent
+        if (n.kind === surface) setProp(handle, "value", handle.value)
+      }, 0)
     }
   })
-  return view
 }

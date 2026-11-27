@@ -295,7 +295,37 @@ describe("NativeHost", () => {
     assert.deepStrictEqual(shadow().props, { enabled: true, value: true })
   })
 
-  it("names the views for iOS", () => {
+  it("renders each surface of a UIManager with its own options", () => {
+    const fabric = FakeFabric.make()
+    const surface = (rootTag: number, os: string, color: number) => {
+      const { host, root } = NativeHost.make({
+        ui: fabric.ui,
+        rootTag,
+        os,
+        processColor: () => color
+      })
+      const scroll = host.createElement("scroll")
+      host.setProp(scroll, "horizontal", true)
+      host.setAttr(scroll, "backgroundColor", "red")
+      host.insertBefore(root, scroll, undefined)
+      host.insertBefore(root, host.createElement("input"), undefined)
+      host.commit!()
+      return [
+        FakeFabric.print(fabric.committed()),
+        fabric.committed()[0]!.props.backgroundColor
+      ]
+    }
+    assert.deepStrictEqual(surface(1, "android", 111), [
+      "<AndroidHorizontalScrollView><AndroidHorizontalScrollContentView></></><AndroidTextInput></>",
+      111
+    ])
+    assert.deepStrictEqual(surface(11, "ios", 222), [
+      "<RCTScrollView><RCTScrollContentView></></><RCTSinglelineTextInputView></>",
+      222
+    ])
+  })
+
+  it("doesn't put a rejected edit back into a field that is no longer shown", async () => {
     const fabric = FakeFabric.make()
     const { host, root } = NativeHost.make({
       ui: fabric.ui,
@@ -303,14 +333,21 @@ describe("NativeHost", () => {
       os: "ios",
       processColor: (c) => c
     })
-    const scroll = host.createElement("scroll")
-    host.setProp(scroll, "horizontal", true)
-    host.insertBefore(root, scroll, undefined)
-    host.insertBefore(root, host.createElement("input"), undefined)
+    const box = host.createElement("view")
+    const input = host.createElement("input")
+    host.setProp(input, "value", "old")
+    host.insertBefore(root, box, undefined)
+    host.insertBefore(box, input, undefined)
     host.commit!()
-    assert.strictEqual(
-      FakeFabric.print(fabric.committed()),
-      "<RCTScrollView><RCTScrollContentView></></><RCTSinglelineTextInputView></>"
-    )
+    const field = FakeFabric.find(
+      fabric.committed(),
+      FakeFabric.byName("RCTSinglelineTextInputView")
+    )!
+    fabric.emit(field, "topChange", { text: "new", eventCount: 1 })
+    // The edit's update removes the field's parent.
+    host.remove(box)
+    host.commit!()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    assert.deepStrictEqual(fabric.commands, [])
   })
 })
