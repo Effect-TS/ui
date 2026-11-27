@@ -24,8 +24,6 @@ Not reading all that? Copy a prompt to explore Effect UI with an AI agent.
 
 Frontend apps get hard for the same reasons everywhere: tangled state, race conditions in async work and side effects scattered across callbacks. Effect UI puts every state transition in one pure function and handles async work, cancellation and errors with Effect. If you also use Effect on the server, the same programming model carries across the whole stack.
 
-Implicit render cycles and hidden side effects make agent-driven frontend development slower, more error-prone and harder to debug. Pure updates, Schema-typed inputs, an inspectable Message log and tests that run against in-memory services give both humans and agents concrete structure to aid review and verification.
-
 Like Effect itself, Effect UI and Effect UI Kit have zero third-party runtime dependencies. Typed routing, a query cache, shared state, server rendering, DevTools, testing harnesses and 51 headless UI modules all come built in, so you don't have to assemble a frontend stack out of half a dozen packages.
 
 ## Components
@@ -60,7 +58,7 @@ Effect UI has an inspector you can add with one Layer, `DevTools.layer`, or auto
 - **Element picker:** Click **Pick** to select any element on the page and jump to the Component instance that rendered it. Try it on this page.
 - **Noise control:** Stop or resume recording noisy Message tags at runtime without editing code, and surface or filter declared payload fields in the timeline.
 - **Time travel:** Pick an earlier entry to see the page at that point. The live app keeps running, and Resume returns to it.
-- **For agents:** An MCP server, or the experimental WebMCP in the browser, gives an agent the same view. It can read the log, find Component instances, inspect their state and pause on any entry. If you allow it, the agent can also send Messages.
+- **For agents:** An MCP server (or WebMCP in the browser) lets agents read the log, inspect Component state and, if allowed, send Messages.
 
 Terminal apps built with `@effect/ui-opentui` can stream their logs into the same browser inspector with `DevToolsHeadless.layer`.
 :::
