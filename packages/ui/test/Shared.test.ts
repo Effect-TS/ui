@@ -328,6 +328,68 @@ describe("shared state in a Scene", () => {
       assert.strictEqual(Locator.textOf(scene.root), "placed")
     }))
 
+  it.effect("delivers an expanded reader's send to the nearest owner the scene expanded or is, and drops one to an owner above it", () =>
+    Effect.gen(function*() {
+      const Opener = Component.define({
+        name: "Opener",
+        model: Schema.Null,
+        message: TipMessage,
+        reads: { provider: TipsProvider }
+      }).make({
+        init: () => null,
+        update: ($, message) => $.send(TipsProvider, message),
+        parts: (p) => ({
+          open: p.reads.provider.open ?? "none",
+          button: p.part((b) => b.on("click", TipMessage.Enter({ id: "x" })))
+        })
+      })
+      const Inside = Component.define({
+        name: "Inside",
+        model: Schema.Null,
+        message: TipMessage
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          TipsProvider(h, {
+            key: "tips",
+            view: () =>
+              Opener(h, {
+                view: (opener) =>
+                  opener.button(h.el("button")).children(opener.open)
+              })
+          })
+      })
+      const inside = yield* Scene.make(Inside, {})
+      assert.strictEqual(Locator.textOf(inside.click("none").root), "x")
+
+      const owner = yield* Scene.make(TipsProvider, {}, {
+        view: (_, h) =>
+          Opener(h, {
+            view: (opener) =>
+              opener.button(h.el("button")).children(opener.open)
+          })
+      })
+      assert.strictEqual(Locator.textOf(owner.click("none").root), "x")
+
+      const Above = Component.define({
+        name: "Above",
+        model: Schema.Null,
+        message: TipMessage
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          Opener(h, {
+            view: (opener) =>
+              opener.button(h.el("button")).children(opener.open)
+          })
+      })
+      const above = yield* Scene.make(Above, {})
+      assert.strictEqual(Locator.textOf(above.click("none").root), "none")
+      assert.deepStrictEqual(above.current.sent, [])
+    }))
+
   it("gives the parts of a headless reader the shared value, from an owner declared with p.child too", () => {
     assert.deepStrictEqual(Story.parts(Trigger, { model: null, props: {} }), {
       open: null,

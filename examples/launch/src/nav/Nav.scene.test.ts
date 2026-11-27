@@ -1,17 +1,11 @@
 // @vitest-environment happy-dom
 import { Subscription } from "@effect/ui"
-import { Collapsible, CollapsibleEvents } from "@effect/ui-kit"
 import { HtmlCommand } from "@effect/ui/html"
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { describe, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { Nav, NavMessage } from "./Nav.ts"
-
-// A scene doesn't run a child, so the Collapsible's event stands in
-// for a press on the bar.
-const press = (open: boolean) =>
-  CollapsibleEvents.Toggled({ open, reason: "trigger-press" })
 
 const sections = [
   { id: "terms", label: "Terms", isNested: false },
@@ -52,16 +46,16 @@ describe("Nav", () => {
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(Nav, { sections })
       scene.expect(closed).toHaveText("On this page")
-        .childEmit(Collapsible, "sections", press(true))
+        .click(closed)
         .expect(opened).toExist()
-        .childEmit(Collapsible, "sections", press(false))
+        .click(opened)
         .expect(closed).toExist()
     }))
 
   it.effect("closes when a section is chosen", () =>
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(Nav, { sections })
-      scene.childEmit(Collapsible, "sections", press(true))
+      scene.click(closed)
         .expect(opened).toExist()
         .click(queries)
         .expect(closed).toExist()
@@ -70,7 +64,7 @@ describe("Nav", () => {
   it.effect("closes on Escape and returns focus to the bar", () =>
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(Nav, { sections })
-      scene.childEmit(Collapsible, "sections", press(true))
+      scene.click(closed)
         .fireDocument("keydown", { key: "Enter" }).expectIgnored()
         .fireDocument("keydown", { key: "Escape" })
         .resolve(HtmlCommand.Focus, { found: true })

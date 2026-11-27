@@ -161,10 +161,9 @@ export const NoteTags = Html.component({
 // A scene of the picker
 // ---------------------------------------------------------------------------
 
-// A scene of a composed component runs its own `update`, so `childEmit`
-// can stand in for the Listbox it owns and send it the Listbox's events. A
-// scene of `NoteTags` refuses that: the Listbox's events go through the
-// picker's `update`, which a scene of its consumer doesn't run.
+// `childEmit` sends the picker what the Listbox it owns emits. A scene of
+// `NoteTags` runs both: a click on an option goes through the Listbox's
+// `update`, then the picker's.
 //
 // A test runs this with `it.effect`, which provides the scope `Scene.make` needs.
 export const pickedAndRemoved = Effect.gen(function*() {

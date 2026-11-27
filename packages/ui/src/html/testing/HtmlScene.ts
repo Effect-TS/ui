@@ -391,24 +391,16 @@ class StepsImpl extends internal.SceneCursor {
         const description = locator.description
         let out = state
         let reached = false
-        let childOnly: string | undefined
         const send = (
           node: Locator.Node,
           event: string,
-          payload: unknown = internal.pointer,
-          at = description
+          payload: unknown = internal.pointer
         ): boolean => {
-          const fired = engine.tryFireNode(out, node, event, payload, step, at)
+          const fired = engine.tryFireNode(out, node, event, payload)
           if (fired === undefined) return false
-          if ("error" in fired) {
-            if (childOnly === undefined || event === "click") {
-              childOnly = fired.error
-            }
-          } else {
-            reached = true
-            handled ||= fired.handled
-            out = fired.story
-          }
+          reached = true
+          handled ||= fired.handled
+          out = fired.story
           return fired.prevented
         }
         const pathOf = (node: Locator.Node) => ancestry(out, node)
@@ -460,16 +452,14 @@ class StepsImpl extends internal.SceneCursor {
               }
               return at
             })
-            if (send(now, planned.event, payload, planned.description)) {
+            if (send(now, planned.event, payload)) {
               prevented = true
             }
           }
         }
         run()
         if (!reached) {
-          throw new Error(
-            childOnly ?? `${step}: nothing handles "click" at ${description}`
-          )
+          throw new Error(`${step}: nothing handles "click" at ${description}`)
         }
         return out
       },

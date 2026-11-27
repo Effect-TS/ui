@@ -337,7 +337,8 @@ export const start = <C extends AnyComponent>(
  *
  * For a component that builds on another with `p.child`, the parts are the
  * ones the consumer gets. Each child it declares gives the parts of its
- * `init` Model, or, given a Scene's record, of the Model `givenChild` set.
+ * `init` Model, or, given a Scene's record, of the Model the scene holds for
+ * it, which `givenChild` set or its `update` returned.
  *
  * @stability experimental
  * @category queries

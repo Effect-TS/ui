@@ -11,7 +11,15 @@
  * Commands stay pending as data until a step resolves them, as in a story,
  * and every step follows the acknowledgement rule described in `Steps`. An
  * interaction that no handler turned into a message must be followed by
- * `expectIgnored()`. A child is a leaf: `childEmit` stands in for what it
+ * `expectIgnored()`.
+ *
+ * A headless child is expanded: the scene renders its parts into the
+ * closure it was declared with and runs its `update` for the messages its
+ * parts' handlers send. Its events go to the component that declared it,
+ * and its `$.send` to the nearest owner the scene expanded, or the scene's
+ * component. Its Commands, mounts, subscriptions, `collects` and
+ * `reads.onChange` don't run, and a send to an owner above the scene is
+ * dropped. Any other child is a leaf: `childEmit` stands in for what it
  * emits, and anything that crosses into one is a `Play`. A child step
  * names the child by its component, then by its key when it has one:
  * `childEmit(Listbox, event)`, `childEmit(TodoItem, "t1", event)`.
@@ -255,6 +263,8 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never>
    *
    * **Details**
    *
+   * The message goes to the component that declared the child: the scene's
+   * component, or the headless child that declared it with `p.child`.
    * `child` is the component, a provided copy of it, the lazy component or
    * the feature service the child was rendered from. Throws when the view has no such
    * child, or several, as two unkeyed children in different headless
@@ -344,14 +354,15 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never>
   ): this
   /**
    * Sets the Model the headless child of `child` without a key is expanded
-   * from, in place of its `init` Model. The scene never runs the child's
-   * `update`.
+   * from, in place of its current Model. The child's `update` runs from it.
    *
    * **Details**
    *
    * The Model is for the instance the step found, at its path: a child at
    * another path keeps its own, even one with the same component and key in
-   * another closure, or one a later step renders.
+   * another closure, or one a later step renders. Once a render no longer
+   * places the child, its Model is gone, and a child placed there again
+   * starts from `init`, as in the runtime.
    */
   givenChild(child: Component.Headless.Any, model: unknown): this
   /**

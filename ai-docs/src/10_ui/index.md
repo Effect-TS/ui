@@ -580,7 +580,11 @@ props, and keep richer row content in the closure, looked up by id. The
 closure runs whenever the consumer renders, so wrap a headless child in a
 small normal component when the consumer renders often. Test one with
 `Story.parts`, which needs no runtime, and render it in a `Scene`, which
-runs it with a stand-in view for the consumer.
+runs it with a stand-in view for the consumer. A `Scene` of the consumer
+runs the headless child too: a click on one of its parts goes through the
+child's `update`, then to the consumer through `onEmit`. The child's
+Commands, mounts and subscriptions don't run there, so `childEmit` stands
+in for an event only they would produce.
 
 Name the closure's argument after the component, in camel case and in full:
 `view: (listbox) => listbox.trigger(h.button)` for a `Listbox`, and
@@ -598,9 +602,10 @@ A headless component can build on another: `parts` returns
 and the consumer's closure gets what that `parts` returns. The component owns
 the child: the child's events and failures go through its `update`. A child
 that fails shows nothing, the consumer's closure with it, and the failure
-goes no further than its `onFailure`. A `Scene` of the
-component stands in for the child with `childEmit`, and a `Scene` of a
-consumer refuses to, because it doesn't run the component's `update`.
+goes no further than its `onFailure`. A `Scene` runs every `update` on
+the way: in a scene of the consumer, a click on a Listbox option goes
+through the Listbox, then the component, and `childEmit(Listbox, event)`
+sends the event to the component.
 
 ### Shared state
 
@@ -644,7 +649,9 @@ describes. In a `Scene`,
 `s.shared(TooltipProvider, value)` or
 `s.given(model, {}, [[TooltipProvider, value]])` gives readers a value, and
 each send to the owner is acknowledged with
-`s.sent(TooltipProvider, message)`.
+`s.sent(TooltipProvider, message)`. A headless reader the scene expands
+sends to the nearest owner the scene expanded, or the scene's component,
+and a send of its to an owner above the scene is dropped.
 
 A component can read its own kind, as a submenu reads the menu it's in:
 `reads: { parent: { owner: "self", optional: true } }` reads the nearest

@@ -236,6 +236,66 @@ describe("headless components in a story", () => {
         .expect(trigger).toHaveAttribute("aria-expanded", "false")
     }))
 
+  it.effect("a layer whose owner an earlier layer removed sends nothing, and a child placed again starts from init", () =>
+    Effect.gen(function*() {
+      const Message = UiSchema.TaggedEnum({
+        Show: {},
+        Picked: { id: Schema.String },
+        Clicked: { id: Schema.String },
+        Closed: {}
+      })
+      const Picker = Html.component({
+        name: "Picker",
+        model: Schema.Struct({
+          open: Schema.Boolean,
+          log: Schema.Array(Schema.String)
+        }),
+        message: Message
+      }).make({
+        init: () => ({ open: true, log: [] }),
+        update: ($, message) => ({
+          open: message._tag === "Show" ||
+            ($.model.open && message._tag !== "Picked"),
+          log: [...$.model.log, message._tag]
+        }),
+        view: (h, model) =>
+          h.div(
+            h.button.on("click", Message.Show()).children("Show"),
+            model.open && Dialog(h, {
+              props: { label: "Pick" },
+              onEmit: () => Message.Closed(),
+              view: (dialog) =>
+                dialog.popup(h.dialog).children(
+                  Menu(h, {
+                    key: "menu",
+                    props: { items },
+                    onEmit: (event) => Message.Picked({ id: event.id }),
+                    view: (menu) =>
+                      h.div(
+                        menu.trigger(h.button).children("Actions"),
+                        h.ul.children(menu.visible.map((item) =>
+                          dialog.close(menu.item(h.li.key(item.id), item))
+                            .on("click", Message.Clicked({ id: item.id }))
+                            .children(item.label)
+                        ))
+                      )
+                  })
+                )
+            }),
+            h.output(model.log.join(", "))
+          )
+      })
+      const copy = Locator.text("Copy")
+      const scene = yield* HtmlScene.make(Picker, {})
+      scene.fire(trigger, "keydown", { key: "c" })
+        .expect(copy).toHaveAttribute("data-active", "")
+      // The Menu's pick removes the Dialog, so the Dialog's close has no instance to reach.
+      scene.click("Copy")
+        .expect(Locator.tag("output")).toHaveText("Picked, Clicked")
+        .expect(Locator.tag("dialog")).toBeAbsent()
+      scene.click("Show").expect(copy).toHaveAttribute("data-active", false)
+    }))
+
   it.effect("an author's story renders with the vocabulary it's given", () =>
     Effect.gen(function*() {
       const Neutral = Component.define({

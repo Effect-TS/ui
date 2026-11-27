@@ -1847,9 +1847,10 @@ const dialogPropsOf = Struct.omit([
  * and `drawer.snapStatus` are its own. The popup carries the swipe's mount,
  * so it can't take one of the consumer's.
  *
- * The drawer owns its `Dialog` and emits what it emits, so a `Scene` of the
- * consumer gives `childEmit(Drawer, event)` every event. A `Scene` of the
- * `Drawer` stands in for the `Dialog` with `childEmit(Dialog, event)`.
+ * The drawer owns its `Dialog` and emits what it emits. A `Scene` of the
+ * consumer runs both: a click on `drawer.close` goes through the `Dialog`,
+ * then the drawer. An event only a mount or a Command would produce, such
+ * as a swipe's, is `childEmit(Drawer, event)`.
  *
  * History restore saves nothing of it: after Back, forward or a reload it
  * starts from `init`.

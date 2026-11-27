@@ -4,7 +4,7 @@ import { Html } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Effect, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Dialog, DialogEvents, Item, Menu } from "./fixtures/headless.ts"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -297,20 +297,15 @@ describe("p.child in a Scene", () => {
     )
   })
 
-  it("a scene of a consumer refuses to run an owned child's events, and gives its Model only when it can tell which", () => {
+  it("a scene of a consumer runs an owned child's events through its owner, and gives its Model only when it can tell which", () => {
     const scene = Scene.start(App, {})
-    assert.throws(
-      () => scene.childEmit(Dialog, { _tag: "Closed" }),
-      /^Scene\.childEmit: \/App\/Combo\[combo\]\/WrappedDialog\[\]\/Dialog\[\] is declared with p\.child by \/App\/Combo\[combo\]\/WrappedDialog\[\], whose update takes its events\. A scene doesn't run a child's update/
-    )
-    assert.throws(
-      () => scene.childFailure(Dialog, Cause.fail("x")),
-      /^Scene\.childFailure: .* is declared with p\.child/
-    )
-    assert.throws(
-      () => scene.childPending(Dialog),
-      /^Scene\.childPending: .* is declared with p\.child/
-    )
+    // The row's layers run deepest owner first: the Menu's pick reaches App through Combo, the Dialog's
+    // close reaches Combo through WrappedDialog, and App's own handler runs last.
+    scene.click("Copy")
+      .expect(Locator.tag("output")).toHaveText("picked c, clicked c")
+      .expect(Locator.tag("output")).toHaveAttribute("data-count", "2")
+    scene.childEmit(Dialog, { _tag: "Closed" })
+      .expect(Locator.tag("output")).toHaveAttribute("data-count", "3")
     scene.givenChild(Dialog, { open: true }).expect(Locator.tag("dialog"))
       .toExist()
 

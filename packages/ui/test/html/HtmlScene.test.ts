@@ -611,15 +611,16 @@ describe("HtmlScene", () => {
         )
       }))
 
-    it.effect("skips child-only press handlers when the parent handles click, and honors unconditional child cancellation", () =>
+    it.effect("runs a child's press handlers with the parent's, and honors unconditional child cancellation", () =>
       Effect.gen(function*() {
         const TooltipLike = Html.component({
           name: "TooltipLike",
           model: Schema.Boolean,
-          message: Schema.Literal("Pressed")
+          message: Schema.Literal("Pressed"),
+          events: Schema.Literal("Pressed")
         }).make({
           init: () => false,
-          update: () => true,
+          update: ($) => $.set(true).emit("Pressed"),
           parts: (p) => ({
             trigger: p.part("button", (b) => b.on("mousedown", "Pressed")),
             cancelPointer: p.part(
@@ -643,6 +644,7 @@ describe("HtmlScene", () => {
           view: (h, entries) =>
             h.div(
               TooltipLike(h, {
+                onEmit: () => "pressed",
                 view: (tip) =>
                   h.div(
                     tip.trigger(h.button.on("click", "saved")).children("Save"),
@@ -663,15 +665,12 @@ describe("HtmlScene", () => {
             )
         })
         const scene = yield* HtmlScene.make(Parent, {})
-        scene.click("Save").expect(log).toHaveText("saved")
-        scene.click("ChildPD").expect(log).toHaveText("saved|ck")
+        scene.click("Save").expect(log).toHaveText("pressed|saved")
+        scene.click("ChildPD").expect(log).toHaveText(/\|pressed\|ck$/)
         scene.click("ChildClick")
           .expectDefaultPrevented()
-          .expect(log).toHaveText("saved|ck|form-md")
-        assert.throws(
-          () => scene.click("ChildOnly"),
-          /only \/Parent\/TooltipLike\[\] handles "mousedown"/
-        )
+          .expect(log).toHaveText(/\|form-md\|pressed$/)
+        scene.click("ChildOnly").expect(log).toHaveText(/\|pressed\|pressed$/)
       }))
 
     it.effect("drops release when a headless root replaces its keyed button or a button moves across slots", () =>

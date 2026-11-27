@@ -106,7 +106,7 @@ export const ownerValue = (
 
 /** @internal */
 export const record = (
-  component: Component.Any,
+  component: { readonly definition: Component.Definition.Any },
   lookup: Component.SharedLookup | undefined
 ): Component.SharedRecord | undefined => {
   const reads = readsOf(component.definition)

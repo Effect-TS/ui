@@ -1,4 +1,3 @@
-import { Tabs, TabsEvents } from "@effect/ui-kit"
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { describe, it } from "@effect/vitest"
 import { Effect } from "effect"
@@ -52,16 +51,7 @@ describe("AgentPrompts", () => {
   it.effect("copies the prompt whose tab is selected", () =>
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(AgentPrompts, { prompts })
-      // A scene doesn't run a child, so the Tabs' event stands in for
-      // a click on the second tab.
-      scene.childEmit(
-        Tabs,
-        "prompts",
-        TabsEvents.Selected({
-          value: "Your app",
-          activationDirection: "right"
-        })
-      )
+      scene.click(HtmlLocator.role("tab", { name: "Your app" }))
         .click(copy)
         .expectExact(
           CopyPrompt.make({

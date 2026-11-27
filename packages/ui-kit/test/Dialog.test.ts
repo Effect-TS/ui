@@ -6,7 +6,7 @@ import {
   DialogTrigger
 } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
-import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing"
+import { HtmlLocator, HtmlPlay, HtmlScene } from "@effect/ui/html/testing"
 import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -137,6 +137,46 @@ describe("Dialog", () => {
       assert.strictEqual(scene.get(other).attrs?.["aria-expanded"], "false")
       scene.props({ open: false })
       assert.isNull(partsOf(scene).openMethod)
+    }))
+
+  it.effect("a scene of a consumer closes and opens a controlled dialog with its parts", () =>
+    Effect.gen(function*() {
+      const SettingsMessage = UiSchema.TaggedEnum({ Opened: {}, Closed: {} })
+      const Settings = Html.component({
+        name: "Settings",
+        model: Schema.Boolean,
+        message: SettingsMessage
+      }).make({
+        init: () => true,
+        update: (_, message) => message._tag === "Opened",
+        view: (h, open) =>
+          Dialog(h, {
+            props: { open },
+            onEmit: (event) =>
+              event._tag === "Settled"
+                ? undefined
+                : event._tag === "RequestedOpen"
+                ? SettingsMessage.Opened()
+                : SettingsMessage.Closed(),
+            view: (dialog) =>
+              h.div(
+                dialog.trigger(h.button).children("Settings"),
+                dialog.portal(h.dialog)?.children(
+                  dialog.popup(h.div).children(
+                    dialog.title(h.h2).children("Settings"),
+                    dialog.close(h.button).children("Close")
+                  )
+                )
+              )
+          })
+      })
+      const settings = HtmlLocator.role("dialog", { name: "Settings" })
+      const scene = yield* HtmlScene.make(Settings, {})
+      scene.expect(settings).toExist()
+        .click(HtmlLocator.role("button", { name: "Close" }))
+        .expect(settings).toBeAbsent()
+        .click(HtmlLocator.role("button", { name: "Settings" }))
+        .expect(settings).toExist()
     }))
 
   it.effect("labels the portal with the drawn title and description, and draws a layer for a modal", () =>

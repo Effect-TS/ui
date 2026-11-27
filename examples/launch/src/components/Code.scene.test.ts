@@ -1,5 +1,4 @@
 import { bodies } from "#domain/Fold"
-import { Collapsible, CollapsibleEvents } from "@effect/ui-kit"
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { describe, it } from "@effect/vitest"
@@ -32,11 +31,6 @@ const expanded = Locator.attr("aria-expanded", "true")
 const count = Locator.text("count: 0")
 const output = Locator.text("String(model.count)")
 
-// Each fold is a Collapsible, and a scene doesn't run a child's update,
-// so a press on a fold's row is the event the Collapsible emits for it.
-const press = (open: boolean) =>
-  CollapsibleEvents.Toggled({ open, reason: "trigger-press" })
-
 describe("CodeWindow", () => {
   it.effect("starts with each fold collapsed to a row that counts its lines", () =>
     Effect.gen(function*() {
@@ -54,14 +48,14 @@ describe("CodeWindow", () => {
   it.effect("expands the fold that is clicked and collapses it again", () =>
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(CodeWindow, { snippet })
-      scene.childEmit(Collapsible, "fold-1", press(true))
+      scene.click(view)
         .expect(expanded).toHaveAccessibleName("view body, 3 lines")
         .expect(output).toExist()
         .expect(count).toBeAbsent()
-        .childEmit(Collapsible, "fold-0", press(true))
+        .click(init)
         .expect(expanded).toHaveCount(2)
         .expect(count).toExist()
-        .childEmit(Collapsible, "fold-1", press(false))
+        .click(view)
         .expect(expanded).toHaveAccessibleName("init body, 1 line")
         .expect(output).toBeAbsent()
         .expect(count).toExist()
