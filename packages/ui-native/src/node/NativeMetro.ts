@@ -37,10 +37,7 @@ export interface MetroConfig {
     readonly unstable_conditionNames?: ReadonlyArray<string> | undefined
     readonly sourceExts?: ReadonlyArray<string> | undefined
     readonly resolverMainFields?: ReadonlyArray<string> | undefined
-    readonly [key: string]: unknown
-  } | undefined
-  readonly transformer?: {
-    readonly babelTransformerPath?: string | undefined
+    readonly resolveRequest?: ResolveRequest | undefined
     readonly [key: string]: unknown
   } | undefined
   readonly serializer?: {
@@ -76,6 +73,18 @@ export interface Options {
    */
   readonly external?: ReadonlyArray<string | RegExp> | undefined
 }
+
+type Resolution = { readonly type: string; readonly filePath?: string }
+
+type ResolveRequest = (
+  context: {
+    readonly dev: boolean
+    readonly resolveRequest: ResolveRequest
+    readonly [key: string]: unknown
+  },
+  moduleName: string,
+  platform: string | null
+) => Resolution
 
 const own = (file: string) => {
   const self = fileURLToPath(import.meta.url)
@@ -125,22 +134,13 @@ export const withEffectUi = async <Config extends MetroConfig>(
   const root = resolved.projectRoot
   if (process.env.NODE_ENV === "production") {
     const conditions = resolved.resolver?.unstable_conditionNames ?? []
-    const out = {
-      ...resolved,
-      resolver: {
-        ...resolved.resolver,
-        unstable_conditionNames: conditions.includes("production")
-          ? conditions
-          : [...conditions, "production"]
-      }
+    const resolver = {
+      ...resolved.resolver,
+      unstable_conditionNames: conditions.includes("production")
+        ? conditions
+        : [...conditions, "production"]
     }
-    if (options?.prebundle === false) return out
-    const upstream = resolved.transformer?.babelTransformerPath
-    if (upstream === undefined) {
-      throw new Error(
-        "[@effect/ui-native] the Metro config has no transformer.babelTransformerPath to wrap"
-      )
-    }
+    if (options?.prebundle === false) return { ...resolved, resolver }
     const entry = Path.resolve(root, options?.entry ?? mainOf(root))
     // Metro reads its files when it starts, so every platform is built now.
     const bundles = Object.fromEntries(
@@ -151,20 +151,26 @@ export const withEffectUi = async <Config extends MetroConfig>(
         ])
       )
     )
-    // Metro's workers start after the config loads, and inherit these.
-    process.env.EFFECT_UI_NATIVE_PREBUNDLE = JSON.stringify({
-      entry,
-      bundles,
-      upstream
-    })
+    const upstream = resolved.resolver?.resolveRequest
     return {
-      ...out,
-      transformer: {
-        ...resolved.transformer,
-        babelTransformerPath: own("internal/prebundleTransformer"),
-        // Part of Metro's cache key, so a cached entry from another setup isn't reused.
-        effectUiNativePrebundle: Path.relative(root, entry)
-      }
+      ...resolved,
+      resolver: {
+        ...resolver,
+        // Metro resolves the entry too, so the platform's pre-bundle takes
+        // its place. A platform with no pre-bundle, such as web, gets the sources.
+        resolveRequest: (context, moduleName, platform) => {
+          const found = (upstream ?? context.resolveRequest)(
+            context,
+            moduleName,
+            platform
+          )
+          const bundle = platform === null ? undefined : bundles[platform]
+          return !context.dev && bundle !== undefined &&
+              found.filePath === entry
+            ? { type: "sourceFile", filePath: bundle }
+            : found
+        }
+      } satisfies MetroConfig["resolver"]
     }
   }
   const before = resolved.serializer?.getModulesRunBeforeMainModule
