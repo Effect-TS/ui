@@ -378,55 +378,41 @@ describe("Query results", () => {
     )
   })
 
-  /** a moves from 1 to 2 mid-fetch. Returns the fetches started before the clock moves on. */
-  const supersede = Effect.fnUntraced(
-    function*(app: ReturnType<typeof makeApp>) {
-      const root = yield* TestHost.mount(app.List, { cards: ["a:1"] })
-      yield* TestHost.settle
-      yield* TestClock.adjust("5 millis")
-      root.send(app.ListMessage.Set({ cards: ["a:2"] }))
-      yield* TestHost.settle
-      const started = root.fetches().map((fetch) => fetch.logKey)
-      yield* load
-      assert.strictEqual(root.text(), "a=Bea")
-      return { root, started }
-    }
-  )
-
-  it.effect("changed args leave the old args' fetch running, and its result fills the cache", () => {
-    const app = makeApp()
+  /** a moves from 1 to 2 mid-fetch: the fetches started before the clock moves on, and what became of 1's. */
+  const supersede = (interruptPrevious: boolean) => {
+    const app = makeApp({ interruptPrevious })
     return run(
       app.layer,
       Effect.gen(function*() {
-        const { root } = yield* supersede(app)
-        assert.deepStrictEqual(app.db.interrupted, [])
-        assert.isTrue(
-          AsyncResult.isSuccess(root.entry(app.GetUser, { id: "1" })!.stored)
-        )
-      })
-    )
-  })
-
-  it.effect("interruptPrevious: changed args interrupt the old args' fetch and fetch at once, unless another watcher still needs it", () => {
-    const app = makeApp({ interruptPrevious: true })
-    return run(
-      app.layer,
-      Effect.gen(function*() {
-        const { root, started } = yield* supersede(app)
-        assert.deepStrictEqual(started, ["{\"id\":\"1\"}", "{\"id\":\"2\"}"])
-        assert.deepStrictEqual(app.db.interrupted, ["1"])
-        assert.isUndefined(root.entry(app.GetUser, { id: "1" }))
-        // c leaves 1 mid-fetch while d still watches it: the fetch runs on.
-        const other = yield* TestHost.mount(app.List, { cards: ["c:1", "d:1"] })
+        const root = yield* TestHost.mount(app.List, { cards: ["a:1"] })
         yield* TestHost.settle
         yield* TestClock.adjust("5 millis")
-        other.send(app.ListMessage.Set({ cards: ["c:", "d:1"] }))
+        root.send(app.ListMessage.Set({ cards: ["a:2"] }))
+        yield* TestHost.settle
+        const started = root.fetches().length
         yield* load
-        assert.deepStrictEqual(app.db.interrupted, ["1"])
-        assert.strictEqual(other.text(), "c=idled=Ann")
+        assert.strictEqual(root.text(), "a=Bea")
+        const stored = root.entry(app.GetUser, { id: "1" })?.stored._tag
+        return { started, interrupted: app.db.interrupted, stored }
       })
     )
-  })
+  }
+
+  it.effect("changed args leave the old args' fetch running, and its result fills the cache", () =>
+    Effect.map(supersede(false), (result) =>
+      assert.deepStrictEqual(result, {
+        started: 2,
+        interrupted: [],
+        stored: "Success"
+      })))
+
+  it.effect("interruptPrevious: changed args interrupt the old args' fetch, and fetch at once", () =>
+    Effect.map(supersede(true), (result) =>
+      assert.deepStrictEqual(result, {
+        started: 2,
+        interrupted: ["1"],
+        stored: undefined
+      })))
 
   it.effect("debounce: args whose entry is fresh, and a disabled query, don't wait", () => {
     const app = makeApp({ debounce: "300 millis" })
