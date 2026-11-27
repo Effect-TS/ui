@@ -2,11 +2,12 @@
  * @title Testing @effect/ui components
  *
  * Test a component's logic as a `Story`, its view as a `Scene`, a Command
- * against a fake Layer, and components working together as a `Play`. The
- * last test renders on the server and hydrates with `ssr`.
+ * against a fake Layer, and a wrapper with its headless part as a `Play`.
+ * The last test renders on the server and hydrates with `ssr`.
  */
 // @vitest-environment happy-dom
 import { Component, Router } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 import { HtmlLocator, HtmlPlay, HtmlScene, ssr } from "@effect/ui/html/testing"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -17,6 +18,7 @@ import { TestClock } from "effect/testing"
 // to what it tests: `notes/components/NoteEditor.story.test.ts` and
 // `App.play.test.ts`.
 import type { Note } from "#domain/Note"
+import { ListNotes } from "#queries/ListNotes"
 import { App } from "./fixtures/App.ts"
 import { Collapsible } from "./fixtures/kit/Collapsible.ts"
 import {
@@ -26,6 +28,10 @@ import {
   NoteEditorNoDeps,
   SaveNote
 } from "./fixtures/notes/components/NoteEditor.ts"
+import {
+  NoteLinkPickerEvents,
+  NoteLinkPickerNoDeps
+} from "./fixtures/notes/components/NoteLinkPicker.ts"
 import { Notes } from "./fixtures/notes/services/Notes.ts"
 import { NotePageNoDeps } from "./fixtures/pages/notes/NotePage.ts"
 import { NotesIndexNoDeps } from "./fixtures/pages/NotesIndex.ts"
@@ -315,6 +321,74 @@ it.layer(Notes.layerMemory([note]).pipe(Layer.provideMerge(TestHost.layer())), {
         assert.deepStrictEqual(play.root.emitted, [
           NoteEditorEvents.Saved({ note: edited })
         ])
+      }))
+  }
+)
+
+// For a wrapper around a headless or `@effect/ui-kit` part, test each event
+// it maps in `onEmit` and the props it feeds back. Locate controls by ARIA
+// role and name. Test the part's keyboard navigation, highlight and typeahead
+// in the part itself. Omitting an `onEmit` handler is already a compile error.
+//
+// This test provides a no-op `Html.Host` for `Listbox`'s focus and scroll
+// commands. It checks wrapper state and events, not browser focus.
+const otherNote: Note = { id: "n2", title: "Recipes", body: "Soup" }
+
+const NoopHtmlHost = Layer.succeed(Html.Host, {
+  focus: () => {},
+  blur: () => {},
+  scrollIntoView: () => {},
+  measure: () => ({
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: 0,
+    height: 0
+  }),
+  select: () => {},
+  requestSubmit: () => false,
+  showPicker: () => false
+})
+
+it.layer(
+  Layer.mergeAll(
+    ListNotes.toLayer(() => Effect.succeed([note, otherNote])),
+    TestHost.layer(),
+    NoopHtmlHost
+  ),
+  { buildPerTest: true }
+)(
+  "NoteLinkPicker",
+  (it) => {
+    it.effect("links the picked note", () =>
+      Effect.gen(function*() {
+        const play = yield* HtmlPlay.make(NoteLinkPickerNoDeps, {
+          noteId: note.id
+        })
+        // Pick a note to exercise the wrapper's `Picked` handler.
+        yield* play.keydown(
+          HtmlLocator.role("button", { name: "Link to a note…" }),
+          "ArrowDown"
+        )
+        yield* play.keydown(
+          HtmlLocator.role("combobox", { name: "Filter notes" }),
+          "Enter"
+        )
+        const trigger = HtmlLocator.role("button", {
+          name: `Linked: ${otherNote.title}`
+        })
+        assert.deepStrictEqual(play.root.emitted, [
+          NoteLinkPickerEvents.Linked({ id: otherNote.id })
+        ])
+        // Reopen by click to check the `selected` prop fed back by the wrapper.
+        // `ArrowDown` would move past that option.
+        yield* play.click(trigger)
+        yield* play.expect(
+          HtmlLocator.role("option", { name: /^Recipes/ })
+        ).toHaveAttribute("aria-selected", "true")
       }))
   }
 )
