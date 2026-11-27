@@ -240,6 +240,45 @@ describe("NativeHost", () => {
     )
   })
 
+  it("sets React Native's text defaults and commits only changed object props", () => {
+    const fabric = FakeFabric.make()
+    const surface = (rootTag: number, os: string) => {
+      const { host, root } = NativeHost.make({
+        ui: fabric.ui,
+        rootTag,
+        os,
+        processColor: (c) => c
+      })
+      const view = host.createElement("view")
+      host.setProp(view, "transform", [{ rotate: "45deg" }])
+      host.insertBefore(root, view, undefined)
+      host.insertBefore(root, host.createElement("text"), undefined)
+      host.insertBefore(root, host.createElement("input"), undefined)
+      host.commit!()
+      return { host, view }
+    }
+    surface(1, "android")
+    assert.deepStrictEqual(
+      fabric.committed().slice(1).map((n) => n.props),
+      [{ ellipsizeMode: "tail" }, { accessible: true }]
+    )
+    const { host, view } = surface(11, "ios")
+    const [shadow, text] = fabric.committed()
+    assert.deepStrictEqual(text!.props, {
+      ellipsizeMode: "tail",
+      accessible: true
+    })
+
+    host.setProp(view, "transform", [{ rotate: "45deg" }])
+    host.commit!()
+    assert.strictEqual(fabric.committed()[0], shadow)
+    host.setProp(view, "transform", [{ rotate: "90deg" }])
+    host.commit!()
+    assert.deepStrictEqual(fabric.committed()[0]!.props.transform, [
+      { rotate: "90deg" }
+    ])
+  })
+
   it("runs the Host operations on committed nodes", async () => {
     const { fabric, made, find } = await setup()
     const input = find(FakeFabric.byName("AndroidTextInput"))

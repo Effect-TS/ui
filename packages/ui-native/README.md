@@ -9,8 +9,8 @@ React Native vocabulary and Fabric host for `@effect/ui`. Apps render native vie
 
 ## Modules
 
-- `Native`: `Native.component`, `Native.H`, the element vocabulary (`view`, `text`, `scroll`, `input`), style and event types, `Native.Host`, and `Native.defineView` for custom native views
-- `@effect/ui-native/kit`: native controls and APIs beyond the vocabulary, bundled only when imported
+- `Native`: `Native.component`, `Native.H`, the element vocabulary (`view`, `text`, `scroll`, `input`), style, prop and event types, `Native.Host`, and `Native.defineView` for custom native views
+- `@effect/ui-native/kit`: native controls and APIs beyond the vocabulary, bundled only when imported, such as `Css`, which parses CSS strings into the style forms native reads
 - `NativeHost`: `make`, the `Renderer.Host` that builds Fabric shadow trees and commits them to a surface
 - `NativeApp`: `mount`, `mountEffect`, and `register`, which runs an app on every surface native starts; the `Surface` service
 - `@effect/ui-native/node`: `NativeMetro.withEffectUi`, the Metro configuration
@@ -54,6 +54,12 @@ In development Metro serves the sources. Editing a module that exports only comp
 On Android, Back closes the app when nothing handles it. An app that adds handlers with React Native's `BackHandler` takes over that default, as it does in a React app.
 
 React Native doesn't load the `expo` package itself: an app that doesn't import it saves about 1 MB of Hermes bytecode.
+
+## Styles and props
+
+`.style()` takes React Native's style names and `.prop()` its other props, such as `testID`, `role`, `accessibilityLabel` or a `text`'s `numberOfLines`. Both are typed, and `.prop()` takes any value for a name without a type.
+
+Style values take the structured forms native reads, so `transform` is `[{ rotate: "45deg" }]` rather than `"rotate(45deg)"`. `Css` from `@effect/ui-native/kit` parses CSS strings into those forms. A colour nested inside a value, as in `boxShadow`, must come from `Css.color` or another `Css` helper. React Native's `aria-*` and `id` aliases and `StyleSheet` aren't provided: use the native prop names and plain style objects.
 
 ## Example
 

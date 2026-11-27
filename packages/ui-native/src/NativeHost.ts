@@ -124,11 +124,13 @@ export class NativeNode {
   constructor(
     kind: Native.ViewKind,
     host: Native.ViewHost,
-    props: Record<string, unknown> = { ...kind.defaults }
+    props?: Record<string, unknown>
   ) {
+    const defaults = kind.defaults
     this.kind = kind
     this.host = host
-    this.props = props
+    this.props = props ??
+      { ...(typeof defaults === "function" ? defaults(host) : defaults) }
   }
 }
 
@@ -174,7 +176,7 @@ export const make = (options: Options): {
   }
   const setNative = (n: NativeNode, name: string, value: unknown) => {
     if (value !== undefined && isColor.test(name)) value = color(value)
-    if (n.props[name] === value) return
+    if (same(n.props[name], value)) return
     if (value === undefined) delete n.props[name]
     else n.props[name] = value
     // A node not created yet takes all its props at createNode.
@@ -347,6 +349,16 @@ export const make = (options: Options): {
     }
   }
   return { host, root, operations }
+}
+
+// An inline object, such as a `transform` array, is a new one each render, so
+// objects compare by value to skip committing an unchanged prop.
+const same = (a: any, b: any): boolean => {
+  if (a === b) return true
+  if (!(a instanceof Object && b instanceof Object)) return false
+  const keys = Object.keys(a)
+  return keys.length === Object.keys(b).length &&
+    keys.every((key) => same(a[key], b[key]))
 }
 
 const markDirty = (n: NativeNode | undefined) => {

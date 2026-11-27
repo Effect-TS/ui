@@ -40,12 +40,20 @@ const scroll: ViewKind = {
 const text: ViewKind = {
   // Fabric represents text nested inside text as virtual text.
   viewName: (n) => n.parent?.kind.text === true ? "RCTVirtualText" : "RCTText",
+  // As React Native's `Text` sets them: native clips truncated text by
+  // default, and VoiceOver skips text that isn't accessible.
+  defaults: (host) =>
+    host.os === "ios"
+      ? { ellipsizeMode: "tail", accessible: true }
+      : { ellipsizeMode: "tail" },
   text: true
 }
 
 const input: ViewKind = {
   viewName: (_, host) =>
     host.os === "ios" ? "RCTSinglelineTextInputView" : "AndroidTextInput",
+  // As React Native's `TextInput` sets it, so screen readers reach the field.
+  defaults: { accessible: true },
   props: {
     value(n, value, host) {
       // Skip if native already shows `value`; include `eventCount` so native accepts it.
