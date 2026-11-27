@@ -2110,9 +2110,9 @@ describe("HtmlServer", { concurrent: false }, () => {
     "defers an instance whose view is too deep to render, instead of dying",
     () =>
       Effect.gen(function*() {
+        let depth = 1000
         const Deep = Html.component({
           name: "Deep",
-          props: Schema.Struct({ depth: Schema.Number }),
           model: Schema.Struct({}),
           message: Schema.Never
         }).make({
@@ -2120,13 +2120,12 @@ describe("HtmlServer", { concurrent: false }, () => {
           update: ($) => $.model,
           view: (h) => {
             let node: View.Content<never> = h.span("leaf")
-            for (let i = 0; i < h.props.depth; i++) node = h.div(node)
+            for (let i = 0; i < depth; i++) node = h.div(node)
             return node
           }
         })
         const Page = Html.component({
           name: "Page",
-          props: Schema.Struct({ depth: Schema.Number }),
           model: Schema.Struct({}),
           message: Schema.Never
         }).make({
@@ -2134,22 +2133,15 @@ describe("HtmlServer", { concurrent: false }, () => {
           update: ($) => $.model,
           view: (h) =>
             h.main(
-              Deep(h, {
-                key: "d",
-                props: { depth: h.props.depth },
-                fallback: () => h.p("too deep")
-              })
+              Deep(h, { key: "d", props: {}, fallback: () => h.p("too deep") })
             )
         })
 
-        // Deepen until the view no longer renders, so no stack depth is assumed. Each render must
-        // complete, through the default budget's idle check. 20,000 bounds the work: a renderer that
-        // draws every depth passes, and one that stops must defer.
-        let depth = 1000
-        let rendered = yield* HtmlServer.renderToHtml(Page, { depth })
+        // Deepen until the view no longer renders, so no stack depth is assumed; 20,000 bounds the work.
+        let rendered = yield* HtmlServer.renderToHtml(Page, {})
         while (rendered.html.includes("leaf") && depth < 20_000) {
           depth = Math.ceil(depth * 1.1)
-          rendered = yield* HtmlServer.renderToHtml(Page, { depth })
+          rendered = yield* HtmlServer.renderToHtml(Page, {})
         }
         if (!rendered.html.includes("leaf")) {
           expect(rendered.html).toContain(
