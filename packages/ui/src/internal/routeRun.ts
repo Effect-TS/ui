@@ -183,8 +183,8 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
     restored: () => {
       state.clear()
     },
-    still: (on) => {
-      instance?.tree.transitions?.still(on)
+    still: () => {
+      instance?.tree.transitions?.still()
     },
     report,
     declare: declare as never
