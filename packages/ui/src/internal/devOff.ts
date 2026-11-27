@@ -17,3 +17,5 @@ export const checkLayers: typeof On.checkLayers = () => {}
 export const checkFallback: typeof On.checkFallback = () => {}
 
 export const checkDeclarer: typeof On.checkDeclarer = () => {}
+
+export const checkSequences: typeof On.checkSequences = () => {}

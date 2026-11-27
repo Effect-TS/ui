@@ -157,3 +157,59 @@ export const checkDeclarer = (inst: Instance, view: View.Outlet): void => {
     )
   }
 }
+
+interface Row {
+  readonly key?: string | undefined
+  readonly keys?: ReadonlyArray<string> | undefined
+  readonly mod?: boolean | undefined
+  readonly shift?: boolean | undefined
+  readonly ctrl?: boolean | undefined
+  readonly alt?: boolean | undefined
+  readonly meta?: boolean | undefined
+  readonly whileTyping?: boolean | undefined
+  readonly repeat?: boolean | undefined
+}
+
+const keysOf = (row: Row): ReadonlyArray<string> => row.keys ?? [row.key!]
+
+// The `[ctrl, meta]` pairs a row accepts.
+const ctrlMeta = (row: Row): ReadonlyArray<string> =>
+  row.mod === true
+    ? ["10", "01"]
+    : [Number(row.ctrl === true) + "" + Number(row.meta === true)]
+
+// Whether every press `b` accepts at a position, `a` accepts there too.
+const covers = (a: Row, b: Row): boolean =>
+  ctrlMeta(b).every((pair) => ctrlMeta(a).includes(pair)) &&
+  (a.alt === true) === (b.alt === true) &&
+  (a.shift === undefined || a.shift === b.shift) &&
+  (a.whileTyping === true || b.whileTyping !== true) &&
+  (a.repeat === true || b.repeat !== true)
+
+const named = (row: Row): string => JSON.stringify(keysOf(row).join(" "))
+
+export const checkSequences = (table: ReadonlyArray<Row>): void => {
+  for (let j = 0; j < table.length; j++) {
+    const later = table[j]!
+    const keys = keysOf(later)
+    if (keys.length === 0) {
+      throw new Error(
+        "HtmlSubscription.keySequences: row " + j + " has no keys"
+      )
+    }
+    for (let i = 0; i < j; i++) {
+      const earlier = table[i]!
+      const before = keysOf(earlier)
+      // An earlier row that completes or begins every press run of a later one takes it first.
+      if (
+        covers(earlier, later) &&
+        before.slice(0, keys.length).every((key, k) => key === keys[k])
+      ) {
+        throw new Error(
+          "HtmlSubscription.keySequences: the row " + named(earlier) +
+            " makes the later row " + named(later) + " unreachable"
+        )
+      }
+    }
+  }
+}

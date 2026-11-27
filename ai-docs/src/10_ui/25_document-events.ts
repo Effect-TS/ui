@@ -81,6 +81,55 @@ const opposite = {
 } as const
 
 // ---------------------------------------------------------------------------
+// Key sequences
+// ---------------------------------------------------------------------------
+
+const NavMessage = UiSchema.TaggedEnum({
+  OpenedSearch: {},
+  WentToList: {},
+  WentToBoard: {}
+})
+
+// `HtmlSubscription.keySequences` takes single-key rows and `keys` rows in one
+// table. The running Subscription holds the presses so far, so the Model
+// doesn't. A press more than `timeout` (one second by default) after the one
+// before starts over, measured with the events' `timeStamp`. The first row
+// the presses match or begin wins, so a `g` row next to `g l` would leave one
+// of them dead, and in development that throws.
+export const Nav = Html.component({
+  name: "Nav",
+  model: Schema.String,
+  message: NavMessage
+}).make({
+  init: () => "home",
+  update: {
+    OpenedSearch: () => "search",
+    WentToList: () => "list",
+    WentToBoard: () => "board"
+  },
+  view: (h, page) => h.p(page),
+  subscriptions: () => [
+    HtmlSubscription.keySequences([
+      { key: "/", message: NavMessage.OpenedSearch() },
+      { keys: ["g", "l"], message: NavMessage.WentToList() },
+      { keys: ["g", "b"], message: NavMessage.WentToBoard() }
+    ])
+  ]
+})
+
+// A scene sets `timeStamp` to move time between presses, with no clock. A
+// begun row's press is handled and default-prevented, and a late press is
+// matched as a first press.
+export const navigated = Effect.gen(function*() {
+  const s = yield* HtmlScene.make(Nav, {})
+  s.fireDocument("keydown", { key: "g", timeStamp: 0 }).expectDefaultPrevented()
+    .fireDocument("keydown", { key: "l", timeStamp: 300 })
+    .expect(Locator.text("list")).toExist()
+    .fireDocument("keydown", { key: "g", timeStamp: 1000 })
+    .fireDocument("keydown", { key: "b", timeStamp: 2500 }).expectIgnored()
+})
+
+// ---------------------------------------------------------------------------
 // A scene fires document events
 // ---------------------------------------------------------------------------
 

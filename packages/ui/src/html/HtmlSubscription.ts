@@ -1,7 +1,8 @@
 /**
  * The Subscriptions to the page, as opposed to one element's events:
  * `onDocument` for a game's arrow keys or a press outside a popup,
- * `shortcuts` for a table of keyboard shortcuts, `onCustomEvent` for a
+ * `shortcuts` for a table of keyboard shortcuts, `keySequences` for one with
+ * multi-key rows such as `g` then `l`, `onCustomEvent` for a
  * `CustomEvent` dispatched on the document, `onWindow` for the window's
  * focus, `onAnimationFrame` for animation, and `onMediaQuery` for CSS media
  * queries.
@@ -14,8 +15,10 @@
  * @stability experimental
  * @since 0.1.0
  */
+import { checkSequences } from "#dev"
 import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
+import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Stream from "effect/Stream"
 import { handle } from "../internal/handler.ts"
@@ -26,6 +29,7 @@ import type * as Html from "./Html.ts"
 import * as HtmlKeyboard from "./HtmlKeyboard.ts"
 import * as frames from "./internal/frames.ts"
 import * as globalEvents from "./internal/globalEvents.ts"
+import * as keys from "./internal/keys.ts"
 import * as mediaQueries from "./internal/mediaQueries.ts"
 
 /**
@@ -71,8 +75,9 @@ export interface WindowEvents {
 }
 
 /**
- * The payload of a document or window listener: the event's payload, and
- * whether something already cancelled the event's default.
+ * The payload of a document or window listener: the event's payload,
+ * whether something already cancelled the event's default, and the event's
+ * `timeStamp` in ms.
  *
  * **Details**
  *
@@ -81,11 +86,17 @@ export interface WindowEvents {
  * document in the capture phase. In the capture phase it depends on the
  * order the listeners were added in, so don't read it there.
  *
+ * The test tools default `timeStamp` to `0`, so a test sets it to move
+ * time between presses for {@link keySequences}.
+ *
  * @stability experimental
  * @category events
  * @since 0.1.0
  */
-export type GlobalPayload<P> = P & { readonly defaultPrevented: boolean }
+export type GlobalPayload<P> = P & {
+  readonly defaultPrevented: boolean
+  readonly timeStamp: number
+}
 
 /**
  * The payload of `onCustomEvent`: the event's `detail`, which is `null`
@@ -121,7 +132,7 @@ export interface GlobalEventOptions extends View.EventOptions {
  *
  * `listen` adds a listener to the host's `document` or its window and
  * returns the function that removes it. The listener gets the plain payload,
- * `defaultPrevented` included, and a function that cancels the event's
+ * `defaultPrevented` and `timeStamp` included, and a function that cancels the event's
  * default. With `custom: true` the payload is a `CustomEventPayload`,
  * whatever the event's type.
  *
@@ -164,7 +175,8 @@ const listenFor = (
   event: string,
   handler: View.Handler<unknown, any>,
   options: GlobalEventOptions | undefined,
-  custom = false
+  custom = false,
+  held?: true
 ): Subscription.Subscription<any> => {
   const capture = options?.capture === true
   const declared: globalEvents.Listener = {
@@ -172,7 +184,8 @@ const listenFor = (
     event,
     capture,
     handler,
-    preventDefault: options?.preventDefault
+    preventDefault: options?.preventDefault,
+    held
   }
   // The runtime attaches the listener here and runs no Stream, as for `Router.prefetch`. `enter`
   // renders the pending ancestors first, so an event goes to the latest declaration, or nowhere if
@@ -184,6 +197,8 @@ const listenFor = (
     enter
   ) => {
     const source = Context.get(context, GlobalEvents)
+    // What a `keySequences` declaration holds, kept while the key's declarations are ones.
+    let state: globalEvents.Held = {}
     return {
       initial: Effect.void,
       close: source.listen(
@@ -192,13 +207,10 @@ const listenFor = (
         { capture, custom },
         (payload, preventDefault) =>
           enter((latest) => {
+            const listener = globalEvents.listenerOf(latest) ?? declared
+            if (!listener.held) state = {}
             try {
-              globalEvents.run(
-                globalEvents.listenerOf(latest) ?? declared,
-                payload,
-                preventDefault,
-                emit
-              )
+              globalEvents.run(listener, payload, preventDefault, emit, state)
             } catch (error) {
               fail(Cause.die(error))
             }
@@ -304,7 +316,8 @@ export const onDocument = <K extends keyof DocumentEvents, Msg>(
  * Use when an instance's document shortcuts fit in a table. An instance has
  * one `keydown` listener per phase, so to combine a table with other keydown
  * logic, or to listen on `"keyup"`, call `HtmlKeyboard.shortcuts` inside
- * {@link onDocument} instead.
+ * {@link onDocument} instead. For rows of several keys, such as `g` then
+ * `l`, use {@link keySequences}.
  *
  * **Details**
  *
@@ -362,6 +375,145 @@ export const shortcuts = <
     ...options,
     preventDefault: options?.preventDefault ?? true
   })
+
+/**
+ * The options of {@link keySequences}: those of {@link onDocument}, and
+ * `timeout`, the longest gap allowed between two presses of a row.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface KeySequenceOptions extends GlobalEventOptions {
+  readonly timeout?: Duration.Input | undefined
+}
+
+/**
+ * A Subscription that listens for a table of shortcuts on the host's
+ * document whose rows can take several keys in turn, such as `g` then `l`.
+ *
+ * **When to use**
+ *
+ * Use for Vim- or GitHub-style key sequences. For single-key rows only, use
+ * {@link shortcuts}, which is smaller.
+ *
+ * **Details**
+ *
+ * A row is a `HtmlKeyboard.Shortcut` with one `key`, or a
+ * `HtmlKeyboard.Sequence` with `keys`. Each press is matched with the
+ * presses so far against the latest table, and the first row they match or
+ * begin wins: a complete row sends its message, and a begun one waits for
+ * the next press. So a row that an earlier one begins or completes can never
+ * fire, and in development `keySequences` throws for it, naming both.
+ *
+ * A press more than `timeout` (`1 second` by default) after the one before
+ * starts over, measured with the events' `timeStamp`, so no timer runs. A
+ * press that doesn't continue a row is matched again as a first press. A
+ * modifier key's own press, or an auto-repeat, that no row takes keeps the
+ * presses so far, and a `composing` or `defaultPrevented` press drops them.
+ * They also end when the entry is gated off.
+ *
+ * `preventDefault` defaults to `true`, and then cancels every press a row
+ * takes, a begun row's included. Such a press counts as handled in a test.
+ * The key is that of {@link onDocument}: `@effect/ui/html/document:"keydown"`.
+ *
+ * **Example** (Go-to shortcuts)
+ *
+ * ```ts import.meta.vitest
+ * import { UiSchema } from "@effect/ui"
+ * import { Html, HtmlSubscription } from "@effect/ui/html"
+ * import { HtmlScene } from "@effect/ui/html/testing"
+ * import { Locator } from "@effect/ui/testing"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Message = UiSchema.TaggedEnum({ WentToList: {}, WentToBoard: {} })
+ *
+ * const Nav = Html.component({
+ *   name: "Nav",
+ *   model: Schema.String,
+ *   message: Message
+ * }).make({
+ *   init: () => "home",
+ *   update: { WentToList: () => "list", WentToBoard: () => "board" },
+ *   view: (h, page) => h.p(page),
+ *   subscriptions: () => [
+ *     HtmlSubscription.keySequences([
+ *       { keys: ["g", "l"], message: Message.WentToList() },
+ *       { keys: ["g", "b"], message: Message.WentToBoard() }
+ *     ])
+ *   ]
+ * })
+ *
+ * Effect.gen(function*() {
+ *   const s = yield* HtmlScene.make(Nav, {})
+ *   s.fireDocument("keydown", { key: "g", timeStamp: 0 })
+ *     .fireDocument("keydown", { key: "l", timeStamp: 400 })
+ *     .expect(Locator.text("list")).toExist()
+ *     // Too late: `b` starts over, and begins no row.
+ *     .fireDocument("keydown", { key: "g", timeStamp: 1000 })
+ *     .fireDocument("keydown", { key: "b", timeStamp: 2500 }).expectIgnored()
+ * }).pipe(Effect.scoped, Effect.runSync)
+ * ```
+ *
+ * @stability experimental
+ * @category subscriptions
+ * @since 0.1.0
+ */
+export const keySequences = <
+  const Rows extends ReadonlyArray<
+    HtmlKeyboard.Shortcut<unknown> | HtmlKeyboard.Sequence<unknown>
+  >
+>(
+  table: Rows,
+  options?: KeySequenceOptions | undefined
+): Subscription.Subscription<Rows[number]["message"]> => {
+  checkSequences(table)
+  const timeout = Duration.toMillis(options?.timeout ?? 1000)
+  const step: globalEvents.Step = (
+    payload: GlobalPayload<Html.KeyPayload>,
+    held
+  ) => {
+    const pending = held.value as Pending | undefined
+    held.value = undefined
+    if (payload.composing || payload.defaultPrevented) return
+    // A custom `GlobalEvents` source may not supply it.
+    const at = payload.timeStamp ?? 0
+    // A clock that went back counts as expired too.
+    const gap = pending === undefined ? -1 : at - pending.at
+    const tries = gap >= 0 && gap <= timeout
+      ? [[...pending!.presses, payload], [payload]]
+      : [[payload]]
+    for (const presses of tries) {
+      for (const row of table) {
+        const want = "keys" in row ? row.keys : [row.key]
+        if (
+          presses.length <= want.length &&
+          presses.every((press, i) => keys.matches(row, want[i]!, press))
+        ) {
+          if (presses.length === want.length) return row.message
+          held.value = { presses, at }
+          return globalEvents.consumed
+        }
+      }
+    }
+    if (payload.repeat || modifiers.includes(payload.key)) held.value = pending
+  }
+  return listenFor(
+    "document",
+    "keydown",
+    step,
+    { ...options, preventDefault: options?.preventDefault ?? true },
+    false,
+    true
+  )
+}
+
+interface Pending {
+  readonly presses: ReadonlyArray<Html.KeyPayload>
+  readonly at: number
+}
+
+const modifiers = ["Shift", "Control", "Alt", "Meta", "AltGraph"]
 
 /**
  * A Subscription that listens for an event on the host's window.

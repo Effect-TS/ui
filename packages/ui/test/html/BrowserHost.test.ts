@@ -2171,8 +2171,10 @@ describe("BrowserHost", { concurrent: false }, () => {
             update: ($, stamp) => [...$.model, stamp],
             view: (h) => h.div(),
             subscriptions: () => [
-              HtmlSubscription.onDocument("keydown", ({ timeStamp }) =>
-                timeStamp)
+              HtmlSubscription.onDocument(
+                "keydown",
+                ({ timeStamp }) => timeStamp
+              )
             ]
           })
           const root = yield* BrowserHost.mountEffect(Stamps, {}, app)

@@ -26,9 +26,9 @@ const pointerEvents: ReadonlySet<string> = new Set([
  *
  * `listening` is asked for a phase's listeners as the phase starts, as a
  * browser reads them, so a bubble listener the capture phase added hears the
- * event. Each gets `given` over a key's or a pointer's defaults, with
- * `defaultPrevented` true when given so or once an earlier listener
- * cancelled.
+ * event. Each gets `given` over a key's or a pointer's defaults and a
+ * `timeStamp` of `0`, with `defaultPrevented` true when given so or once an
+ * earlier listener cancelled.
  *
  * @internal
  */
@@ -53,6 +53,7 @@ export const fire = (
     for (const listener of listening(capture)) {
       listener({
         ...defaults,
+        timeStamp: 0,
         ...given,
         defaultPrevented: prevented || cancelled
       }, preventDefault)
