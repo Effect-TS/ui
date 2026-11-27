@@ -256,7 +256,7 @@ describe("NativeHost", () => {
   })
 
   it("renders a view another module defines, and sends its events only to it", () => {
-    Native.defineView(new Native.Element("toggle"), {
+    Native.defineView(() => new Native.Element("toggle"), {
       viewName: (_, host) => host.os === "ios" ? "RCTSwitch" : "AndroidSwitch",
       defaults: { enabled: true },
       props: { checked: (n, value, host) => host.set(n, "value", value) }

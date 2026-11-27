@@ -33,7 +33,7 @@ describe("Native.defineView", () => {
   write(
     "src/toggle.ts",
     `import * as Native from "@effect/ui-native/Native"
-export const toggle = Native.defineView(new Native.Element("toggle"), {
+export const toggle = Native.defineView(() => new Native.Element("toggle"), {
   viewName: "FixtureToggleView"
 })
 `
@@ -49,6 +49,7 @@ const App = Native.component({ name: "App", model: Schema.Number }).make({
 })
 NativeApp.register(NativeApp.mount(App, {}))
 `
+  write("src/plain.ts", app("", ""))
   write(
     "src/unused.ts",
     app(
@@ -79,9 +80,12 @@ import "./toggle"`,
   }
 
   it(
-    "is dropped from an app that imports it without rendering it",
+    "adds nothing to an app that imports it without rendering it",
     async () => {
-      assert.notInclude(await bundle("src/unused.ts"), "FixtureToggleView")
+      assert.strictEqual(
+        await bundle("src/unused.ts"),
+        await bundle("src/plain.ts")
+      )
       assert.include(await bundle("src/used.ts"), "FixtureToggleView")
     },
     30_000
