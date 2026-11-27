@@ -266,7 +266,8 @@ export const makeHost = (
     if (current !== false) closeDialog(dialog, true)
     if (want === "modal") {
       keepingScroll(() => dialog.showModal())
-      modals.set(dialog, modalHolds.hold(dialog))
+      // A reopen before the browser's `close` arrived keeps its hold.
+      if (!modals.has(dialog)) modals.set(dialog, modalHolds.hold(dialog))
       modalPseudo ??= matches(dialog, ":modal")
     } else dialog.show()
     showingsOf(dialog).push({ byHost: false, closed: false })

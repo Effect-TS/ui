@@ -5,26 +5,30 @@
  *
  * @internal
  */
-const held = new Set<{ readonly element: Element }>()
+const held = new WeakMap<Document, Set<{ readonly element: Element }>>()
 
 /** @internal */
 export const hold = (element: Element): () => void => {
+  const document = element.ownerDocument
+  let holds = held.get(document)
+  if (holds === undefined) held.set(document, holds = new Set())
   const entry = { element }
-  held.add(entry)
+  holds.add(entry)
   return () => {
-    held.delete(entry)
+    holds.delete(entry)
   }
 }
 
 /**
  * Whether a held element is in `document`. One that left it, as when its
- * root is gone without releasing it, no longer counts.
+ * root is gone without releasing it, doesn't count until it's back.
  *
  * @internal
  */
 export const open = (document: Document): boolean => {
-  for (const { element } of held) {
-    if (element.isConnected && element.ownerDocument === document) return true
+  const holds = held.get(document)
+  if (holds !== undefined) {
+    for (const { element } of holds) if (element.isConnected) return true
   }
   return false
 }
