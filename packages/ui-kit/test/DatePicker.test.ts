@@ -189,4 +189,54 @@ describe("DatePicker", () => {
       assert.strictEqual(scene.get(grid).attrs?.["aria-readonly"], "true")
       scene.click(trigger).emitted(opened)
     }))
+
+  it.effect("multi-month picker does not request a new month when picking or typing a date in another visible month", () =>
+    Effect.gen(function*() {
+      const scene = yield* HtmlScene.make(
+        DatePicker,
+        props({ months: 2 }),
+        {
+          elements: Html,
+          view: (datePicker: Parts, h: H) =>
+            h.div(
+              datePicker.input(h.input.class("input")),
+              datePicker.trigger(h.button.class("trigger")),
+              datePicker.positioner(h.div.class("positioner")).children(
+                datePicker.popup(h.div.class("popup")).children(
+                  ...datePicker.months.map((m, i) =>
+                    m.grid(h.table.class("grid-" + i)).children(
+                      h.tbody(
+                        ...m.weeks.map((week) =>
+                          h.tr(
+                            ...week.map((date) =>
+                              m.cell({ element: h.td, date }).children(
+                                m.day({ element: h.button, date }).children(
+                                  DateTime.formatIsoDateUtc(date)
+                                )
+                              )
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+        }
+      )
+
+      scene.parts((datePicker) => {
+        assert.strictEqual(datePicker.months.length, 2)
+      })
+
+      // Picking or typing a date in December (already visible alongside November) emits no RequestedMonth
+      scene.childEmit(Calendar, { _tag: "Picked", date: utc("2026-12-10") })
+        .emitted(picked(utc("2026-12-10")), closed("day-press"))
+      scene.childEmit(DateField, { _tag: "Committed", date: utc("2026-12-20") })
+        .emitted(picked(utc("2026-12-20")))
+      // Typing a date outside the 2-month window still requests that month
+      scene.childEmit(DateField, { _tag: "Committed", date: utc("2027-01-05") })
+        .emitted(picked(utc("2027-01-05")), month("2027-01-01"))
+    }))
 })

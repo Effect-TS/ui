@@ -195,4 +195,105 @@ describe("RangeCalendar", () => {
       yield* play.click(Locator.attr("class", "lock"))
       shows(play, span(2, 4), span(2, 4))
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
+
+  it.effect("previews and picks a range across visible months without previewing disabled duplicate days", () =>
+    Effect.gen(function*() {
+      const MultiMonthStay = Html.component({
+        name: "MultiMonthStay",
+        model: Schema.Struct({ value: Schema.NullOr(Range) }),
+        message: StayMessage
+      }).make({
+        init: () => ({ value: null }),
+        update: {
+          Locked: ($) => $.model,
+          Picked: ($, { end, start }) => $.evolve({ value: { start, end } }),
+          RequestedMonth: ($) => $.model
+        },
+        view: (h, model) =>
+          h.div(
+            h.output.class("picked").children(
+              model.value === null
+                ? ""
+                : DateTime.formatIsoDateUtc(model.value.start) + "/" +
+                  DateTime.formatIsoDateUtc(model.value.end)
+            ),
+            RangeCalendar(h, {
+              props: {
+                value: model.value,
+                month: utc(1),
+                today: utc(26),
+                months: 2,
+                firstDayOfWeek: 1,
+                locale: "en-US"
+              },
+              onEmit: {
+                Picked: ({ end, start }) => StayMessage.Picked({ start, end }),
+                RequestedMonth: ({ month }) =>
+                  StayMessage.RequestedMonth({ month })
+              },
+              view: (rangeCalendar) =>
+                rangeCalendar.root(h.div).children(
+                  ...rangeCalendar.months.map((month, monthIndex) =>
+                    month.grid(h.table.class("grid-" + monthIndex)).children(
+                      h.tbody(
+                        ...month.weeks.map((week) =>
+                          h.tr(
+                            ...week.map((date) => {
+                              const key = DateTime.formatIsoDateUtc(date)
+                              return month.cell({ element: h.td, date })
+                                .children(
+                                  month.day({
+                                    element: h.button.class(
+                                      `day-${monthIndex}-${key}`
+                                    ),
+                                    date
+                                  }).children(key)
+                                )
+                            })
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+            })
+          )
+      })
+
+      const dayIn = (monthIndex: number, iso: string) =>
+        Locator.attr("class", `day-${monthIndex}-${iso}`)
+      const play = yield* HtmlPlay.make(MultiMonthStay, {})
+
+      yield* play.click(dayIn(0, "2026-11-28"))
+      yield* play.fire(dayIn(1, "2026-12-03"), "mouseenter")
+
+      assert.strictEqual(
+        play.root.get(dayIn(0, "2026-11-28")).attrs?.["data-range-start"],
+        ""
+      )
+      assert.strictEqual(
+        play.root.get(dayIn(0, "2026-11-30")).attrs?.["data-in-range"],
+        ""
+      )
+      assert.strictEqual(
+        play.root.get(dayIn(1, "2026-12-01")).attrs?.["data-in-range"],
+        ""
+      )
+      assert.strictEqual(
+        play.root.get(dayIn(1, "2026-12-03")).attrs?.["data-range-end"],
+        ""
+      )
+
+      // Hovering the disabled duplicate Dec 1 in November's grid does not alter the preview
+      yield* play.fire(dayIn(0, "2026-12-01"), "mouseenter")
+      assert.strictEqual(
+        play.root.get(dayIn(1, "2026-12-03")).attrs?.["data-range-end"],
+        ""
+      )
+
+      yield* play.click(dayIn(1, "2026-12-03"))
+      yield* play.expect(Locator.attr("class", "picked")).toHaveText(
+        "2026-11-28/2026-12-03"
+      )
+    }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 })

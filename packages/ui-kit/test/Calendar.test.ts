@@ -656,4 +656,192 @@ describe("Calendar", () => {
         CalendarEvents.Picked({ date: utc("2026-11-25") })
       )
     }))
+
+  it.effect("shows multiple consecutive months with one tab stop, disabled duplicate outside days, and cross-grid keyboard navigation", () =>
+    Effect.gen(function*() {
+      const dayIn = (monthIndex: number, date: string) =>
+        loc(`day-${monthIndex}-${date}`)
+      const scene = yield* HtmlScene.make(
+        Calendar,
+        baseProps({
+          value: utc("2026-11-15"),
+          month: utc("2026-11-01"),
+          today: utc("2026-11-26"),
+          months: 2,
+          firstDayOfWeek: 1
+        }),
+        {
+          elements: Html,
+          view: (calendar: Parts, h: H) =>
+            calendar.root(h.div.class("root")).children(
+              calendar.previous(h.button.class("prev")).children("‹"),
+              calendar.next(h.button.class("next")).children("›"),
+              ...calendar.months.map((month, monthIndex) =>
+                h.section(
+                  month.heading(h.h2.class("heading-" + monthIndex)).children(
+                    month.title
+                  ),
+                  month.grid(h.table.class("grid-" + monthIndex)).children(
+                    h.tbody(
+                      ...month.weeks.map((week) =>
+                        h.tr(
+                          ...week.map((date) => {
+                            const key = iso(date)
+                            return month.cell({ element: h.td, date }).children(
+                              month.day({
+                                element: h.button.class(
+                                  `day-${monthIndex}-${key}`
+                                ),
+                                date
+                              }).children(
+                                String(DateTime.getPartUtc(date, "day"))
+                              )
+                            )
+                          })
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+        }
+      ).pipe(
+        Effect.map((scene) => {
+          scene.expectMount(mountOf(scene, loc("root")))
+          return scene
+        })
+      )
+
+      scene.parts((calendar) => {
+        assert.strictEqual(calendar.months.length, 2)
+        assert.strictEqual(iso(calendar.months[0].month), "2026-11-01")
+        assert.strictEqual(calendar.months[0].title, "November 2026")
+        assert.strictEqual(iso(calendar.months[1].month), "2026-12-01")
+        assert.strictEqual(calendar.months[1].title, "December 2026")
+      })
+
+      const heading0 = scene.get(loc("heading-0")).attrs!.id!
+      const heading1 = scene.get(loc("heading-1")).attrs!.id!
+      assert.notStrictEqual(heading0, heading1)
+      owns(scene, loc("grid-0"), { "aria-labelledby": heading0 })
+      owns(scene, loc("grid-1"), { "aria-labelledby": heading1 })
+
+      // One roving tab stop across both grids
+      assert.strictEqual(scene.all(Locator.attr("tabindex", "0")).length, 1)
+      owns(scene, dayIn(0, "2026-11-15"), { tabindex: "0" })
+
+      // Duplicate outside-month days in a neighbour's grid are disabled; real and outer-edge days stay enabled
+      owns(scene, dayIn(0, "2026-12-01"), {
+        disabled: "",
+        "data-disabled": "",
+        "data-outside-month": "",
+        tabindex: "-1",
+        "data-focused": undefined
+      })
+      owns(scene, dayIn(1, "2026-12-01"), {
+        disabled: undefined,
+        "data-disabled": undefined,
+        "data-outside-month": undefined
+      })
+      owns(scene, dayIn(1, "2026-11-30"), {
+        disabled: "",
+        "data-disabled": "",
+        "data-outside-month": "",
+        tabindex: "-1"
+      })
+      owns(scene, dayIn(0, "2026-10-26"), {
+        disabled: undefined,
+        "data-outside-month": ""
+      })
+
+      // ArrowRight from the last day of month 0 focuses month 1 with no RequestedMonth
+      scene.focus(dayIn(0, "2026-11-30"))
+      assert.deepStrictEqual(
+        focused(
+          scene.keydown(dayIn(0, "2026-11-30"), "ArrowRight")
+            .expectDefaultPrevented()
+        ),
+        ["2026-12-01"]
+      )
+      assert.deepStrictEqual(scene.current.emitted, [])
+      scene.focus(dayIn(1, "2026-12-01"))
+      assert.strictEqual(scene.all(Locator.attr("tabindex", "0")).length, 1)
+      owns(scene, dayIn(1, "2026-12-01"), {
+        tabindex: "0",
+        "data-focused": ""
+      })
+      owns(scene, dayIn(0, "2026-12-01"), {
+        tabindex: "-1",
+        "data-focused": undefined
+      })
+
+      // Leaving the end of the window shifts the first month minimally so target is last shown
+      scene.focus(dayIn(1, "2026-12-31"))
+      scene.keydown(dayIn(1, "2026-12-31"), "ArrowRight")
+        .expectDefaultPrevented()
+        .emitted(CalendarEvents.RequestedMonth({ month: utc("2026-12-01") }))
+      syncMonth(
+        scene,
+        baseProps({
+          value: null,
+          month: utc("2026-12-01"),
+          today: utc("2026-11-26"),
+          months: 2,
+          firstDayOfWeek: 1
+        })
+      )
+      assert.deepStrictEqual(focused(scene), ["2027-01-01"])
+      owns(scene, dayIn(1, "2027-01-01"), { tabindex: "0" })
+
+      // Leaving the start of the window puts the target's month first
+      scene.focus(dayIn(0, "2026-12-01"))
+      scene.keydown(dayIn(0, "2026-12-01"), "ArrowLeft")
+        .expectDefaultPrevented()
+        .emitted(CalendarEvents.RequestedMonth({ month: utc("2026-11-01") }))
+
+      // Next steps by 1 month and disables against the window's last month
+      scene.click(loc("next")).emitted(
+        CalendarEvents.RequestedMonth({ month: utc("2027-01-01") })
+      )
+      scene.props(
+        baseProps({
+          value: null,
+          month: utc("2026-12-01"),
+          today: utc("2026-11-26"),
+          months: 2,
+          max: utc("2027-01-31"),
+          firstDayOfWeek: 1
+        })
+      )
+      owns(scene, loc("next"), { disabled: "", "data-disabled": "" })
+
+      // Shrinking `months` moves focus out of a dropped month, and preserves focus when still in window
+      scene.focus(dayIn(1, "2027-01-15"))
+      syncMonth(
+        scene,
+        baseProps({
+          value: null,
+          month: utc("2026-12-01"),
+          today: utc("2026-11-26"),
+          months: 1,
+          firstDayOfWeek: 1
+        })
+      )
+      assert.deepStrictEqual(focused(scene), ["2026-12-15"])
+      owns(scene, dayIn(0, "2026-12-15"), { tabindex: "0" })
+
+      scene.focus(dayIn(0, "2026-12-20"))
+      syncMonth(
+        scene,
+        baseProps({
+          value: utc("2026-12-05"),
+          month: utc("2026-12-01"),
+          today: utc("2026-11-26"),
+          months: 2,
+          firstDayOfWeek: 1
+        })
+      )
+      owns(scene, dayIn(0, "2026-12-20"), { tabindex: "0", "data-focused": "" })
+    }))
 })
