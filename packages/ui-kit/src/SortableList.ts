@@ -245,7 +245,8 @@ const SortableListMessage = UiSchema.TaggedEnum({
 
 type SortableListMessage = typeof SortableListMessage.Type
 
-// `moving.over`: a drag is over one of the list's drop targets.
+// `moving.over`: the landing place shows. A drag's shows only while it is
+// over one of the list's drop targets.
 // `ended`: the last move's outcome, with the `count` of rows at that time.
 // `pressed`: a handle's `mousedown` during a move, until its `mouseup`.
 // Safari and iOS blur on that `mousedown` without focusing the button, so
@@ -283,43 +284,44 @@ type SortableListUpdate =
 const Handle = Html.ref("SortableListHandle", "button")
 const Item = Renderer.ref<globalThis.Element>("SortableListItem")
 
-const rtlOf = ($: Directed & { readonly model: SortableListModel }) =>
-  rightToLeft($.reads.provider, $.model.rtl)
-
-// The index the row ends at when dropped before or after the row at `over`.
-const landing = (from: number, over: number, after: boolean): number => {
-  const slot = after ? over + 1 : over
-  return slot > from ? slot - 1 : slot
-}
-
 const fromOf = ($: SortableListUpdate) =>
   $.model.moving === null ? -1 : $.props.items.indexOf($.model.moving.id)
 
+// The index of the row being dragged, or -1.
+const dragFrom = ($: SortableListUpdate): number =>
+  $.props.disabled !== true && $.model.moving?.dragging === true
+    ? fromOf($)
+    : -1
+
+const pickUp = (
+  $: SortableListUpdate,
+  id: string,
+  at: number,
+  dragging: boolean
+) =>
+  $.evolve({
+    moving: { id, to: at, stepped: false, dragging, over: !dragging },
+    ended: null,
+    pressed: false
+  })
+
 const commit = ($: SortableListUpdate, target: number, focus: boolean) => {
-  const moving = $.model.moving!
-  const from = $.props.items.indexOf(moving.id)
+  const { id } = $.model.moving!
+  const from = fromOf($)
+  const count = $.props.items.length
   // Rows may have been removed since the landing place was chosen.
-  const to = Math.min(target, $.props.items.length - 1)
-  const next = $.set({
-    ...$.model,
+  const to = Math.min(target, count - 1)
+  const next = $.evolve({
     moving: null,
     pressed: false,
-    ended: {
-      dropped: true,
-      id: moving.id,
-      from,
-      to,
-      count: $.props.items.length
-    }
+    ended: { dropped: true, id, from, to, count }
   })
   const emitted = to === from
     ? next
     : next.emit(SortableListEvents.Reordered({ from, to }))
   return focus
     ? emitted.run(
-      HtmlCommand.Focus.make({ ref: Handle.at(moving.id) }).pipe(
-        Command.asNoop
-      )
+      HtmlCommand.Focus.make({ ref: Handle.at(id) }).pipe(Command.asNoop)
     )
     : emitted
 }
@@ -328,8 +330,7 @@ const cancel = ($: SortableListUpdate) => {
   const moving = $.model.moving
   if (moving === null) return $.model
   const from = fromOf($)
-  return $.set({
-    ...$.model,
+  return $.evolve({
     moving: null,
     pressed: false,
     ended: moving.dragging || from < 0 ? null : {
@@ -342,18 +343,29 @@ const cancel = ($: SortableListUpdate) => {
   })
 }
 
-const dragging = ($: SortableListUpdate): boolean =>
-  $.props.disabled !== true && $.model.moving?.dragging === true &&
-  fromOf($) >= 0
-
-// `undefined` when the row under the pointer is gone from `items`.
+// The index a drag ends at when dropped before or after the row `id`, or
+// `undefined` without a drag or when that row is gone from `items`.
 const dragTo = (
   $: SortableListUpdate,
   id: string,
   after: boolean
 ): number | undefined => {
+  const from = dragFrom($)
   const over = $.props.items.indexOf(id)
-  return over < 0 ? undefined : landing(fromOf($), over, after)
+  if (from < 0 || over < 0) return undefined
+  const slot = after ? over + 1 : over
+  return slot > from ? slot - 1 : slot
+}
+
+// Records whether a drag is over a drop target, and where it would land.
+// A pointer moving within one half of a row changes nothing.
+const hover = ($: SortableListUpdate, over: boolean, to?: number) => {
+  if (dragFrom($) < 0) return $.model
+  const moving = $.model.moving!
+  const next = to ?? moving.to
+  return moving.over === over && next === moving.to
+    ? $.model
+    : $.evolve({ moving: { ...moving, to: next, over } })
 }
 
 const step = ($: SortableListUpdate, key: string) => {
@@ -364,11 +376,11 @@ const step = ($: SortableListUpdate, key: string) => {
     at: Math.min(moving.to, last),
     last,
     orientation: $.props.orientation ?? "vertical",
-    rtl: rtlOf($),
+    rtl: rightToLeft($.reads.provider, $.model.rtl),
     loop: "none"
   })
   if (to === undefined || to === moving.to) return $.model
-  return $.set({ ...$.model, moving: { ...moving, to, stepped: true } }).run(
+  return $.evolve({ moving: { ...moving, to, stepped: true } }).run(
     HtmlCommand.ScrollIntoView.make({
       ref: Item.at($.props.items[to]!),
       options: { block: "nearest", inline: "nearest" }
@@ -376,15 +388,18 @@ const step = ($: SortableListUpdate, key: string) => {
   )
 }
 
-// The last outcome still describes `items`: the row is where it landed, or
-// where it started when the consumer refused the move.
-const current = (
+// Where the last outcome's row is, or -1 once `items` no longer matches the
+// outcome: the row is where it landed, or where it started when the consumer
+// refused the move.
+const endedAt = (
   ended: NonNullable<SortableListModel["ended"]>,
   items: ReadonlyArray<string>
-): boolean => {
+): number => {
   const at = items.indexOf(ended.id)
-  return at >= 0 && ended.count === items.length &&
-    (at === ended.to || at === ended.from)
+  return ended.count === items.length &&
+      (at === ended.to || at === ended.from)
+    ? at
+    : -1
 }
 
 const releasedPointer = HtmlSubscription.onDocument(
@@ -412,10 +427,12 @@ const announcementOf = (
     }
   }
   const ended = model.ended
-  return ended === null || !current(ended, items) ? undefined : {
+  if (ended === null) return undefined
+  const at = endedAt(ended, items)
+  return at < 0 ? undefined : {
     _tag: ended.dropped ? "Dropped" : "Cancelled",
     id: ended.id,
-    position: items.indexOf(ended.id) + 1,
+    position: at + 1,
     count
   }
 }
@@ -471,21 +488,9 @@ export const SortableList = Html.component({
       const at = $.props.items.indexOf(id)
       if ($.props.disabled === true || at < 0) return $.model
       const moving = $.model.moving
-      if (moving === null || moving.dragging || fromOf($) < 0) {
-        return $.set({
-          ...$.model,
-          moving: {
-            id,
-            to: at,
-            stepped: false,
-            dragging: false,
-            over: true
-          },
-          ended: null,
-          pressed: false
-        })
-      }
-      return commit($, id === moving.id ? moving.to : at, true)
+      return moving === null || moving.dragging || fromOf($) < 0
+        ? pickUp($, id, at, false)
+        : commit($, id === moving.id ? moving.to : at, true)
     },
     PressedKey: ($, { key }) =>
       $.model.moving === null || $.model.moving.dragging || fromOf($) < 0
@@ -494,41 +499,24 @@ export const SortableList = Html.component({
     PressedHandle: ($) => $.evolve({ pressed: true }),
     ReleasedPointer: ($) => $.evolve({ pressed: false }),
     LeftList: ($) => $.model.pressed ? $.model : cancel($),
-    StartedDrag: ($, { id }) =>
-      $.props.disabled === true || !$.props.items.includes(id)
+    StartedDrag: ($, { id }) => {
+      const at = $.props.items.indexOf(id)
+      return $.props.disabled === true || at < 0
         ? $.model
-        : $.set({
-          ...$.model,
-          moving: {
-            id,
-            to: $.props.items.indexOf(id),
-            stepped: false,
-            dragging: true,
-            over: false
-          },
-          ended: null,
-          pressed: false
-        }),
-    DraggedOver: ($, { after, id }) => {
-      const to = dragging($) ? dragTo($, id, after) : undefined
-      return to === undefined
-        ? $.model
-        : $.evolve({ moving: { ...$.model.moving!, to, over: true } })
+        : pickUp($, id, at, true)
     },
-    LeftDropTarget: ($) =>
-      dragging($)
-        ? $.evolve({ moving: { ...$.model.moving!, over: false } })
-        : $.model,
-    EnteredList: ($) =>
-      dragging($)
-        ? $.evolve({ moving: { ...$.model.moving!, over: true } })
-        : $.model,
+    DraggedOver: ($, { after, id }) => {
+      const to = dragTo($, id, after)
+      return to === undefined ? $.model : hover($, true, to)
+    },
+    LeftDropTarget: ($) => hover($, false),
+    EnteredList: ($) => hover($, true),
     DroppedOnItem: ($, { after, id }) => {
-      const to = dragging($) ? dragTo($, id, after) : undefined
+      const to = dragTo($, id, after)
       return to === undefined ? $.model : commit($, to, false)
     },
     DroppedOnList: ($) =>
-      dragging($) ? commit($, $.model.moving!.to, false) : $.model,
+      dragFrom($) < 0 ? $.model : commit($, $.model.moving!.to, false),
     EndedDrag: ($) => $.model.moving?.dragging === true ? cancel($) : $.model,
     ChangedItems: ($) => $.evolve({ ended: null }),
     FoundDirection: ($, { rtl }) => $.evolve({ rtl })
@@ -537,7 +525,8 @@ export const SortableList = Html.component({
     model.pressed && releasedPointer,
     // Once `items` no longer matches the last outcome, forget it, so a later
     // edit that restores the old count can't bring the announcement back.
-    model.ended !== null && !current(model.ended, props.items) && changedItems
+    model.ended !== null && endedAt(model.ended, props.items) < 0 &&
+    changedItems
   ],
   parts: (p, model) => {
     const { items } = p.props
@@ -545,39 +534,33 @@ export const SortableList = Html.component({
     const orientation = p.props.orientation ?? "vertical"
     const horizontal = orientation === "horizontal"
     const rtl = rightToLeft(p.reads.provider, model.rtl)
-    const indexes = new Map<string, number>()
-    for (const [at, id] of items.entries()) {
-      if (indexes.has(id)) {
-        throw new Error(
-          "SortableList: two items have the id " + JSON.stringify(id)
-        )
-      }
-      indexes.set(id, at)
+    const ids = new Set(items)
+    if (ids.size !== items.length) {
+      throw new Error(
+        "SortableList: two items have the id " +
+          JSON.stringify(items.find((id, at) => items.indexOf(id) !== at))
+      )
     }
-    const indexOf = (id: string): number => {
-      const at = indexes.get(id)
-      if (at === undefined) {
+    const known = (id: string): void => {
+      if (!ids.has(id)) {
         throw new Error(
           "SortableList: no item with id " + JSON.stringify(id) + " in items"
         )
       }
-      return at
     }
 
-    const from = model.moving === null
-      ? undefined
-      : indexes.get(model.moving.id)
-    const move: SortableListMove | undefined = disabled || from === undefined ?
+    const from = model.moving === null ? -1 : items.indexOf(model.moving.id)
+    const move: SortableListMove | undefined = disabled || from < 0 ?
       undefined :
       {
         id: model.moving!.id,
         from,
         to: Math.min(model.moving!.to, items.length - 1)
       }
-    const indicated = move !== undefined && move.to !== move.from &&
-        (!model.moving!.dragging || model.moving!.over)
-      ? items[move.to]
-      : undefined
+    const indicated =
+      move !== undefined && move.to !== move.from && model.moving!.over
+        ? items[move.to]
+        : undefined
     const keyboard = move !== undefined && !model.moving!.dragging
 
     // Browsers lowercase drag types, so escape capitals to keep ids apart.
@@ -588,12 +571,14 @@ export const SortableList = Html.component({
       dropEffect: "move",
       preventDefault: "always"
     }
-    const after = (
-      { height, width, x, y }: Html.DragOverPayload
-    ): boolean => horizontal ? x >= width / 2 !== rtl : y >= height / 2
+    // `dragover` and `drop` both say where in the row the pointer is.
+    const after = (payload: unknown): boolean => {
+      const { height, width, x, y } = payload as Html.DragOverPayload
+      return horizontal ? x >= width / 2 !== rtl : y >= height / 2
+    }
 
     const itemPart = p.part((b, id: string) => {
-      indexOf(id)
+      known(id)
       const own = b.attrs({
         draggable: disabled ? undefined : "true",
         "data-moving": flag(move?.id === id),
@@ -601,34 +586,30 @@ export const SortableList = Html.component({
           ? (move!.to > move!.from ? "after" : "before")
           : undefined
       }).ref(Item.at(id) as never)
-      return disabled ? own : own
-        .on("dragstart", SortableListMessage.StartedDrag({ id }), {
-          data: { [dragType]: id },
-          effectAllowed: "move"
-        } as Html.DragSourceOptions)
+      if (disabled) return own
+      const source: Html.DragSourceOptions = {
+        data: { [dragType]: id },
+        effectAllowed: "move"
+      }
+      return own
+        .on("dragstart", SortableListMessage.StartedDrag({ id }), source)
         .on(
           "dragover",
           (payload) =>
-            SortableListMessage.DraggedOver({
-              id,
-              after: after(payload as Html.DragOverPayload)
-            })
+            SortableListMessage.DraggedOver({ id, after: after(payload) })
         )
         .on("dragleave", SortableListMessage.LeftDropTarget())
         .on(
           "drop",
           (payload) =>
-            SortableListMessage.DroppedOnItem({
-              id,
-              after: after(payload as Html.DropPayload)
-            }),
+            SortableListMessage.DroppedOnItem({ id, after: after(payload) }),
           dropTarget
         )
         .on("dragend", SortableListMessage.EndedDrag())
     })
 
     const handlePart = p.part("button", (b, id: string) => {
-      indexOf(id)
+      known(id)
       return b
         .attrs({
           type: "button",
