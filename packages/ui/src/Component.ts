@@ -712,12 +712,11 @@ export interface Step<
    *
    * A step asks for the transition and the host decides. `BrowserHost`
    * runs the flush that renders this update inside
-   * `document.startViewTransition`. Where the browser lacks the API, the
-   * user prefers reduced motion, or the browser already animated a history
-   * traversal (`PopStateEvent.hasUAVisualTransition`), the flush commits once
-   * without animation. A host with no document, such as `TestHost` or the
-   * server, ignores the request. The step's `viewTransitionTypes` and the
-   * log's `Update` entry hold it.
+   * `document.startViewTransition`, unless the API is unavailable or the
+   * user prefers reduced motion. `BrowserRouter` suppresses new transitions
+   * for history traversals with `hasUAVisualTransition: true`. A host with
+   * no document, such as `TestHost` or the server, ignores the request.
+   * The step's `viewTransitionTypes` and the log's `Update` entry record it.
    *
    * The rest of the flush runs inside the transition, and every update it
    * renders is animated. Until the browser calls back, about a frame later,

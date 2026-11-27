@@ -1145,10 +1145,10 @@ export class PrefetchEntryNotWatched
  *
  * `go` moves through the entries and, synchronously or later, reports the
  * entry it landed on to the listener given to `listen`, as the browser's
- * `popstate` does. Pass `animated: true` when the host already animated the
- * traversal, as with a swipe-back gesture, so the route update skips its
- * view transition. `state` is opaque to the history; the Router stores the
- * entry's index and its history-restore snapshot in it.
+ * `popstate` does. Pass `true` as the callback's third argument when the
+ * host already animated the traversal to suppress a second view transition.
+ * `state` is opaque to the history; the Router stores the entry's index and
+ * its history-restore snapshot in it.
  *
  * @stability experimental
  * @category models

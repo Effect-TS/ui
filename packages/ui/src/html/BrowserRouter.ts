@@ -32,9 +32,8 @@
  * still restore the saved position, and a `patchSearch` given
  * `{ scroll: true }` scrolls to the top.
  *
- * When a `popstate` event reports `hasUAVisualTransition` (as after a
- * swipe-back gesture), the route update skips its view transition so the
- * navigation is not animated twice.
+ * A `popstate` with `hasUAVisualTransition: true` suppresses a second view
+ * transition for the browser-animated traversal.
  *
  * While a `Router.blocked` block is held, `BrowserRouter` requests a browser
  * warning before the page unloads unless `warnOnUnload` is `false`. See
