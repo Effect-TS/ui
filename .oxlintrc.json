@@ -69,5 +69,22 @@
         ]
       }]
     }
+  }, {
+    // Optional readers use shared keys from internal/ so standalone bundles omit unused owners.
+    "files": [
+      "packages/ui-kit/src/Menu.ts",
+      "packages/ui-kit/src/Select.ts",
+      "packages/ui-kit/src/ToggleGroup.ts",
+      "packages/ui-kit/src/Checkbox.ts"
+    ],
+    "rules": {
+      "eslint/no-restricted-imports": ["error", {
+        "patterns": [{
+          "regex": "(^|/)(Menubar|Toolbar|CheckboxGroup)(\\.ts)?$",
+          "allowTypeImports": true,
+          "message": "Read optional owners through their shared key in internal/ so standalone bundles omit unused owner implementations."
+        }]
+      }]
+    }
   }]
 }

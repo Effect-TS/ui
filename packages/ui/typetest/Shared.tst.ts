@@ -255,6 +255,61 @@ describe("shared state", () => {
     // @ts-expect-error Property 'parts' is missing
     OwnerDef.make<{ label: string }>(handlers)
   })
+
+  it("checks an owner against the shared key it adopts", () => {
+    const TipsValue = Schema.Struct({ open: Schema.NullOr(Schema.String) })
+    const Key = Component.sharedKey({
+      name: "KeyedTips",
+      schema: TipsValue,
+      message: TipsMessage,
+      receives: ["Enter"],
+      reports: Schema.Boolean
+    })
+    const valid = {
+      name: "KeyedTips" as const,
+      model: Schema.Null,
+      message: TipsMessage,
+      shares: {
+        key: Key,
+        value: (): typeof TipsValue.Type => ({ open: null }),
+        schema: TipsValue,
+        receives: ["Enter"] as const,
+        collects: {
+          schema: Schema.Boolean,
+          onChange: () => TipsMessage.Elapsed()
+        }
+      }
+    }
+    expect(Component.define).type.toBeCallableWith(valid)
+    expect(Component.define).type.not.toBeCallableWith({
+      ...valid,
+      name: "WrongName" as const
+    })
+    expect(Component.define).type.not.toBeCallableWith({
+      ...valid,
+      shares: {
+        ...valid.shares,
+        value: (): { readonly open: number } => ({ open: 1 }),
+        schema: Schema.Struct({ open: Schema.Number })
+      }
+    })
+    expect(Component.define).type.not.toBeCallableWith({
+      ...valid,
+      shares: {
+        ...valid.shares,
+        receives: ["Elapsed"] as const
+      }
+    })
+    expect(Component.define).type.not.toBeCallableWith({
+      ...valid,
+      shares: {
+        key: Key,
+        value: valid.shares.value,
+        schema: TipsValue,
+        receives: ["Enter"] as const
+      }
+    })
+  })
 })
 
 describe("a component that reads its own kind", () => {

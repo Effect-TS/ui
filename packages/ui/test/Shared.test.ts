@@ -1363,3 +1363,57 @@ describe("a component that reads its own kind", () => {
     )
   })
 })
+
+describe("shared keys", () => {
+  it.effect("a reader with an optional shared key reads undefined with no owner and the owner's value below one that adopts the key", () =>
+    provideHost(Effect.gen(function*() {
+      const BannerKey = Component.sharedKey({
+        name: "Banner",
+        schema: Schema.String
+      })
+      const Banner = Component.define({
+        name: "Banner",
+        props: Schema.Struct({ text: Schema.String }),
+        model: Schema.Null,
+        message: Schema.Never,
+        shares: {
+          key: BannerKey,
+          value: ({ props }) => props.text,
+          schema: Schema.String
+        }
+      }).make({ init: () => null, update: ($) => $.model })
+      const Badge = Component.define({
+        name: "Badge",
+        model: Schema.Null,
+        message: Schema.Never,
+        reads: { banner: { owner: BannerKey, optional: true } }
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.el("span", h.reads.banner ?? "alone")
+      })
+      const Page = Component.define({
+        name: "Page",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          h.el("div", [
+            Badge(h, { key: "outside" }),
+            Banner(h, {
+              key: "b",
+              props: { text: "live" },
+              view: () => Badge(h, { key: "inside" })
+            })
+          ])
+      })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      assert.deepStrictEqual(
+        root.all(Locator.tag("span")).map(Locator.textOf),
+        ["alone", "live"]
+      )
+    })))
+})
