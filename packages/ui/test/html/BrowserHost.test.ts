@@ -4503,8 +4503,8 @@ describe("BrowserHost", { concurrent: false }, () => {
       )
       const slot = shadow.querySelector("slot[name=title]") as HTMLSlotElement
       const span = host.querySelector("span")!
-      expect(slot.localName).toBe("slot")
-      expect(span.assignedSlot).toBe(slot)
+      expect(slot).toBeInstanceOf(HTMLSlotElement)
+      expect(slot.assignedElements()).toEqual([span])
       slot.dispatchEvent(new Event("slotchange", { bubbles: true }))
       yield* tick
       expect(root.model()).toBe(1)

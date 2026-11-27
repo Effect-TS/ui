@@ -732,6 +732,9 @@ export interface Events {
  * dialog between modal and non-modal, and a close the browser reports after
  * the dialog was shown again.
  *
+ * A `slot`'s `slotchange` carries no data and doesn't fire for assignments made
+ * before hydration; a view that needs the assigned nodes reads them in a mount.
+ *
  * @stability experimental
  * @category events
  * @since 0.1.0
@@ -759,6 +762,7 @@ export type EventsOf<K extends string> =
   & (K extends "img" | "iframe" | "video" | "audio"
     ? { readonly load: {}; readonly error: {} }
     : {})
+  & (K extends "slot" ? { readonly slotchange: {} } : {})
 
 // ---------------------------------------------------------------------------
 // elements
@@ -1338,6 +1342,7 @@ export const containerTags = [
   "search",
   "section",
   "select",
+  "slot",
   "small",
   "span",
   "strong",
