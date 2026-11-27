@@ -29,7 +29,9 @@
  * shell renders the container the client hydrates. `document` inserts
  * `html` and `head` as given, so pass the shell's markup there and spread
  * the rest of `rendered`. Append the shell's own `<html>` or `<body>`
- * attributes to `htmlAttributes` or `bodyAttributes`, after a space.
+ * attributes to `htmlAttributes` or `bodyAttributes`, after a space. Give
+ * `<title>` and each `<html>` or `<body>` attribute a single owner, since
+ * neither is merged.
  *
  * **Gotchas**
  *
