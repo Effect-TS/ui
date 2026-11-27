@@ -532,7 +532,6 @@ export interface TextStyle extends ViewStyle {
     | undefined
   /** Android only. */
   readonly textAlignVertical?: "auto" | "top" | "bottom" | "center" | undefined
-  readonly verticalAlign?: "auto" | "top" | "bottom" | "middle" | undefined
   /** Android only. */
   readonly includeFontPadding?: boolean | undefined
   readonly writingDirection?: "auto" | "ltr" | "rtl" | undefined
@@ -558,7 +557,6 @@ export interface TextStyle extends ViewStyle {
     | "uppercase"
     | "lowercase"
     | undefined
-  readonly userSelect?: "auto" | "text" | "none" | "contain" | "all" | undefined
 }
 
 /**

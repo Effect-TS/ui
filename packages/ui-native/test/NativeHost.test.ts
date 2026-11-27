@@ -249,9 +249,14 @@ describe("NativeHost", () => {
         os,
         processColor: (c) => c
       })
-      host.insertBefore(root, host.createElement("text"), undefined)
-      host.insertBefore(root, host.createElement("input"), undefined)
+      const nodes = [host.createElement("text"), host.createElement("input")]
+      for (const n of nodes) host.insertBefore(root, n, undefined)
       host.commit!()
+      // Removing a prop puts its default back.
+      for (const value of [false, undefined]) {
+        for (const n of nodes) host.setProp(n, "accessible", value)
+        host.commit!()
+      }
       return fabric.committed().map((n) => n.props)
     }
     assert.deepStrictEqual(props("android"), [
@@ -273,17 +278,21 @@ describe("NativeHost", () => {
       processColor: (c) => c
     })
     const view = host.createElement("view")
-    const rotate = (rotate: string) => {
-      host.setProp(view, "transform", [{ rotate }])
+    const set = (name: string, value: unknown) => {
+      host.setProp(view, name, value)
       host.commit!()
-      return fabric.committed()[0]!
+      return fabric.committed()[0]!.props[name]
     }
     host.insertBefore(root, view, undefined)
-    const shadow = rotate("45deg")
-    assert.strictEqual(rotate("45deg"), shadow)
-    assert.deepStrictEqual(rotate("90deg").props.transform, [
+    const transform = set("transform", [{ rotate: "45deg" }])
+    assert.strictEqual(set("transform", [{ rotate: "45deg" }]), transform)
+    assert.deepStrictEqual(set("transform", [{ rotate: "90deg" }]), [
       { rotate: "90deg" }
     ])
+    set("accessibilityState", { disabled: undefined })
+    assert.deepStrictEqual(set("accessibilityState", { selected: true }), {
+      selected: true
+    })
   })
 
   it("runs the Host operations on committed nodes", async () => {

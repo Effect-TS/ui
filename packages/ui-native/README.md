@@ -59,7 +59,7 @@ React Native doesn't load the `expo` package itself: an app that doesn't import 
 
 `.style()` takes React Native's style names and `.prop()` its other props, such as `testID`, `role`, `accessibilityLabel` or a `text`'s `numberOfLines`. Both are typed, and `.prop()` takes any value for a name without a type.
 
-Style values take the structured forms native reads, so `transform` is `[{ rotate: "45deg" }]` rather than `"rotate(45deg)"`. `Css` from `@effect/ui-native/kit` parses CSS strings into those forms. A colour nested inside a value, as in `boxShadow`, must come from `Css.color` or another `Css` helper. React Native's `aria-*` and `id` aliases and `StyleSheet` aren't provided: use the native prop names and plain style objects.
+Style values take the structured forms native reads with React Native's default `enableNativeCSSParsing: false`, so `transform` is `[{ rotate: "45deg" }]` rather than `"rotate(45deg)"`. Turning the flag on changes how native reads `filter` drop shadows and `backgroundImage`, so those forms and their `Css` helpers expect it off. `Css` from `@effect/ui-native/kit` parses CSS strings into those forms. A colour nested inside a value, as in `boxShadow`, must come from `Css.color` or another `Css` helper. React Native's `aria-*` and `id` aliases and `StyleSheet` aren't provided: use the native prop names and plain style objects.
 
 ## Example
 

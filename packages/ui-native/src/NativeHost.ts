@@ -126,13 +126,14 @@ export class NativeNode {
     host: Native.ViewHost,
     props?: Record<string, unknown>
   ) {
-    const defaults = kind.defaults
     this.kind = kind
     this.host = host
-    this.props = props ??
-      { ...(typeof defaults === "function" ? defaults(host) : defaults) }
+    this.props = props ?? { ...defaultsOf(this) }
   }
 }
+
+const defaultsOf = ({ host, kind: { defaults } }: NativeNode) =>
+  typeof defaults === "function" ? defaults(host) : defaults
 
 const rawText: Native.ViewKind = { viewName: "RCTRawText" }
 // Distinct references so restore can tell mounted roots from kept containers.
@@ -175,6 +176,8 @@ export const make = (options: Options): {
     return out
   }
   const setNative = (n: NativeNode, name: string, value: unknown) => {
+    // Removing a prop puts back the kind's default, as leaving it out does.
+    value ??= defaultsOf(n)?.[name]
     if (value !== undefined && isColor.test(name)) value = color(value)
     if (same(n.props[name], value)) return
     if (value === undefined) delete n.props[name]
@@ -355,10 +358,13 @@ export const make = (options: Options): {
 // objects compare by value to skip committing an unchanged prop.
 const same = (a: any, b: any): boolean => {
   if (a === b) return true
-  if (!(a instanceof Object && b instanceof Object)) return false
+  if (
+    typeof a !== "object" || typeof b !== "object" ||
+    a?.constructor !== b?.constructor
+  ) return false
   let extra = 0
   for (const key in a) {
-    if (!same(a[key], b[key])) return false
+    if (!(key in b) || !same(a[key], b[key])) return false
     extra--
   }
   for (const _ in b) extra++

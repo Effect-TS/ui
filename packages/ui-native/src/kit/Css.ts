@@ -6,7 +6,8 @@
  * `Native` styles take the structured forms native reads, so an app that
  * writes those ships no parser. These helpers turn a CSS string, or React
  * Native's object form with plain colours, into that form. Each one is
- * bundled only when used.
+ * bundled only when used. The forms assume React Native's default
+ * `enableNativeCSSParsing: false`.
  *
  * @example
  * ```ts
