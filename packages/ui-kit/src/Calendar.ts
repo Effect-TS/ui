@@ -352,7 +352,8 @@ const navigate = ($: CalendarUpdate, move: CalendarGridKey) => {
   if (sameMonth(target, mountedMonth)) {
     const step = $.evolve({
       focusedDay: target,
-      pendingFocus: null
+      pendingFocus: null,
+      pickedDay: null
     }).run(focusDay(target))
     return syncing
       ? step.emit(
@@ -361,9 +362,9 @@ const navigate = ($: CalendarUpdate, move: CalendarGridKey) => {
       : step
   }
   if (sameMonth(target, context.monthStart)) {
-    return $.evolve({ pendingFocus: target })
+    return $.evolve({ pendingFocus: target, pickedDay: null })
   }
-  return $.evolve({ pendingFocus: target }).emit(
+  return $.evolve({ pendingFocus: target, pickedDay: null }).emit(
     CalendarEvents.RequestedMonth({ month: startOfMonth(target) })
   )
 }
@@ -420,6 +421,7 @@ export const Calendar = Html.component({
     focused: false,
     shownMonth: monthOf(props),
     pendingFocus: null,
+    pickedDay: null,
     rtl: false
   }),
   update: {
@@ -438,9 +440,7 @@ export const Calendar = Html.component({
         return $.model
       }
       if (unavailable || $.props.readOnly === true) return settled($)
-      return ($.model.pendingFocus === null
-        ? $
-        : $.evolve({ pendingFocus: null }))
+      return $.evolve({ pendingFocus: null, pickedDay: date })
         .emit(CalendarEvents.Picked({ date }))
     },
     ClickedStep: ($, { months }) => {
@@ -462,7 +462,12 @@ export const Calendar = Html.component({
       if ($.props.disabled === true || isOutOfRange(date, min, max)) {
         return $.model
       }
-      return $.evolve({ focusedDay: date, focused: true, pendingFocus: null })
+      return $.evolve({
+        focusedDay: date,
+        focused: true,
+        pendingFocus: null,
+        pickedDay: null
+      })
     },
     BlurredDay: ($) =>
       $.model.focused || $.model.pendingFocus !== null
@@ -478,7 +483,11 @@ export const Calendar = Html.component({
       )
       const date = phase.focusedDay
       if (!shouldFocus || date === null) {
-        return $.evolve({ ...phase, shownMonth: context.monthStart })
+        return $.evolve({
+          ...phase,
+          shownMonth: context.monthStart,
+          pickedDay: null
+        })
       }
       // Focus the stable root before replacing the day to avoid focus
       // falling to `<body>` and marking an enclosing Field touched.
@@ -493,6 +502,7 @@ export const Calendar = Html.component({
       $.evolve({
         focusedDay: date,
         pendingFocus: null,
+        pickedDay: null,
         shownMonth: monthOf($.props)
       }).run(focusDay(date)),
     FoundDirection: ($, { rtl }) => $.evolve({ rtl })
@@ -525,7 +535,12 @@ export const Calendar = Html.component({
     const weekdays = weekdayNames(props.locale, weekStartsOn)
     const title = formatMonthTitle(monthStart, props.locale)
     const phase = syncMonthPhase(model, context, weeks)
-    const tabStop = tabStopOf(phase.focusedDay, phase.focused, context, weeks)
+    const tabStop = tabStopOf(
+      phase.focusedDay,
+      phase.focused ? null : model.pickedDay,
+      context,
+      weeks
+    )
     const fullDate = fullDateFormatter(props.locale)
     const headingId = p.id("heading")
     const isSelected = (date: DateTime.Utc) =>
