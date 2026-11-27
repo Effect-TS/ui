@@ -307,12 +307,13 @@ const drawn = () =>
   Array.from(document.querySelectorAll("[role=option]")).map((option) =>
     option.textContent
   )
-const keydown = (
+const keyEvent = (type: "keydown" | "keyup") =>
+(
   target: Element,
   key: string,
   init: KeyboardEventInit = {}
 ) => {
-  const event = new KeyboardEvent("keydown", {
+  const event = new KeyboardEvent(type, {
     key,
     bubbles: true,
     cancelable: true,
@@ -321,6 +322,8 @@ const keydown = (
   target.dispatchEvent(event)
   return event
 }
+const keydown = keyEvent("keydown")
+const keyup = keyEvent("keyup")
 const mousedown = (target: Element) => {
   const event = new MouseEvent("mousedown", {
     bubbles: true,
@@ -397,6 +400,53 @@ describe("Combobox in a document", { concurrent: false }, () => {
         "Picked banana",
         "RequestedInputValue \"Banana\" item-press",
         "RequestedClose item-press"
+      ])
+    }).pipe(Effect.scoped))
+
+  it.effect("the Enter that commits an IME composition keeps the text and the list, and a later Enter still closes it", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage()
+      const target = input()
+      target.focus()
+      target.dispatchEvent(
+        new CompositionEvent("compositionstart", { bubbles: true })
+      )
+      target.value = "京都"
+      target.dispatchEvent(
+        new InputEvent("input", {
+          bubbles: true,
+          isComposing: true,
+          inputType: "insertCompositionText",
+          data: "京都"
+        })
+      )
+      yield* tick
+      // UI Events order: the key that commits is a composing keydown, then
+      // compositionend, then a keyup that alone looks like a plain Enter.
+      keydown(target, "Enter", {
+        code: "Enter",
+        isComposing: true,
+        keyCode: 229
+      })
+      yield* tick
+      target.dispatchEvent(
+        new CompositionEvent("compositionend", { bubbles: true, data: "京都" })
+      )
+      yield* tick
+      keyup(target, "Enter", { code: "Enter", keyCode: 13 })
+      yield* tick
+      assert.strictEqual(target.value, "京都")
+      assert.isTrue(shown())
+      keydown(target, "Enter", { code: "Enter", keyCode: 13 })
+      yield* tick
+      keyup(target, "Enter", { code: "Enter", keyCode: 13 })
+      yield* tick
+      assert.isFalse(shown())
+      assert.deepStrictEqual(log(), [
+        "RequestedOpen input-change",
+        "RequestedInputValue \"京都\" input-change",
+        "RequestedClose none",
+        "RequestedInputValue \"\" input-clear"
       ])
     }).pipe(Effect.scoped))
 

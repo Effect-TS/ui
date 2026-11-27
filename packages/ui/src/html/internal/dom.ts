@@ -9,6 +9,7 @@ import { bubblingEvents, ownEvents } from "./ownEvents.ts"
 import {
   type FieldState,
   fieldStateOf,
+  noteKey,
   offsetIn,
   payloadOf
 } from "./payload.ts"
@@ -649,6 +650,9 @@ export const makeHost = (
       }
     }
     if (name === "pointerdown") lastPointer = pointerTypeOf(event) || undefined
+    else if (
+      name === "keyup" || (name === "keydown" && listening.has("keyup"))
+    ) noteKey(event)
     else if (name === "beforeinput") {
       const state = composed || composing.has(target)
         ? undefined
@@ -722,7 +726,8 @@ export const makeHost = (
       listen("pointerdown")
       listen("pointerup")
       listen("pointercancel")
-    } else if (name === "dragend") listen("dragstart")
+    } else if (name === "keyup") listen("keydown")
+    else if (name === "dragend") listen("dragstart")
     else if (name === "drop") {
       for (const targetEvent of dropTargetEvents) listen(targetEvent)
       listen("dragend")

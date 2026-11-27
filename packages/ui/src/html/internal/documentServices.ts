@@ -9,7 +9,7 @@ import * as globalEvents from "./globalEvents.ts"
 import * as images from "./images.ts"
 import * as mediaQueries from "./mediaQueries.ts"
 import * as modals from "./modals.ts"
-import { payloadOf } from "./payload.ts"
+import { noteKey, payloadOf } from "./payload.ts"
 
 const signals = (document: Document) => {
   const view = document.defaultView
@@ -64,8 +64,22 @@ const globalEventsOf = (
         },
         () => event.preventDefault()
       )
+    // Each subscription needs its own listener; browsers deduplicate shared callbacks.
+    const note = !custom && name === "keyup"
+      ? (event: Event) => noteKey(event)
+      : undefined
+    if (note !== undefined) {
+      on.addEventListener("keydown", note, true)
+      on.addEventListener("keyup", note, true)
+    }
     on.addEventListener(name, f, { capture })
-    return () => on.removeEventListener(name, f, { capture })
+    return () => {
+      on.removeEventListener(name, f, { capture })
+      if (note !== undefined) {
+        on.removeEventListener("keydown", note, true)
+        on.removeEventListener("keyup", note, true)
+      }
+    }
   }
 })
 

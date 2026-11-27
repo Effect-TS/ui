@@ -2326,6 +2326,107 @@ describe("BrowserHost", { concurrent: false }, () => {
           expect(root.model()).toEqual([event.timeStamp])
         }).pipe(Effect.scoped))
 
+      it.effect("a keyup reports composing when the keydown of the same key composed, until that keyup or the window losing focus, with only keyup handled", () =>
+        Effect.gen(function*() {
+          const Released = Html.component({
+            name: "Released",
+            props: Schema.Struct({ watch: Schema.Boolean }),
+            model: Schema.Array(Schema.String),
+            message: Schema.String
+          }).make({
+            init: (): ReadonlyArray<string> => [],
+            update: ($, entry) => [...$.model, entry],
+            view: (h) =>
+              h.div(
+                h.input.attr("aria-label", "Text").on(
+                  "keyup",
+                  ({ composing, key }) => `el:${key}:${composing}`
+                ),
+                h.button.children("Sibling")
+              ),
+            subscriptions: ({ props }) =>
+              props.watch
+                ? [
+                  HtmlSubscription.onDocument(
+                    "keyup",
+                    ({ composing, key }) => `doc:${key}:${composing}`
+                  )
+                ]
+                : []
+          })
+          const fire = (
+            target: Element,
+            type: string,
+            init: KeyboardEventInit
+          ) =>
+            target.dispatchEvent(
+              new KeyboardEvent(type, { bubbles: true, code: "Enter", ...init })
+            )
+          // Chrome on Windows reports the keydown that commits as "Process", and
+          // its keyup, after compositionend, as a plain Enter.
+          const commit = (text: Element) => {
+            fire(text, "keydown", {
+              key: "Process",
+              isComposing: true,
+              keyCode: 229
+            })
+            text.dispatchEvent(
+              new CompositionEvent("compositionend", { bubbles: true })
+            )
+          }
+          const released = Effect.fnUntraced(
+            function*(watch: boolean, keys: (text: HTMLElement) => void) {
+              const app = yield* container
+              const root = yield* BrowserHost.mountEffect(
+                Released,
+                { watch },
+                app
+              )
+              yield* tick
+              const text = HtmlLocator.getByRole(app, "textbox", {
+                name: "Text"
+              })
+              text.focus()
+              keys(text)
+              yield* tick
+              return root.model()
+            },
+            Effect.scoped
+          )
+          expect(
+            yield* released(true, (text) => {
+              // The commit key held while focus moves and another key is pressed.
+              commit(text)
+              const sibling = text.nextElementSibling as HTMLElement
+              sibling.focus()
+              fire(sibling, "keydown", { key: "Shift", code: "ShiftLeft" })
+              fire(sibling, "keyup", { key: "Shift", code: "ShiftLeft" })
+              fire(sibling, "keydown", { key: "Enter", repeat: true })
+              text.focus()
+              fire(text, "keyup", { key: "Enter" })
+            })
+          ).toEqual(["doc:Shift:false", "el:Enter:true", "doc:Enter:true"])
+          const outside = (yield* container).appendChild(
+            document.createElement("button")
+          )
+          expect(
+            yield* released(false, (text) => {
+              // The commit key released outside the host, then pressed again
+              // there before focus comes back.
+              commit(text)
+              outside.focus()
+              fire(outside, "keyup", { key: "Enter" })
+              fire(outside, "keydown", { key: "Enter" })
+              text.focus()
+              fire(text, "keyup", { key: "Enter" })
+              // The window losing focus while the commit key is held.
+              commit(text)
+              window.dispatchEvent(new FocusEvent("blur"))
+              fire(text, "keyup", { key: "Enter" })
+            })
+          ).toEqual(["el:Enter:false", "el:Enter:false"])
+        }).pipe(Effect.scoped))
+
       it.effect("a composing field's value isn't written until compositionend, including inside shadow DOM", () =>
         Effect.gen(function*() {
           const Typed = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })

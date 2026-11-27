@@ -148,6 +148,52 @@ const fieldOf = (
     ? target
     : element) as HTMLInputElement
 
+const composingCodes = new Set<string>()
+// Cache the result after releasing the key so all listeners of the event agree.
+const composingKeyups = new WeakSet<Event>()
+
+// Safari reports the key that ends a composition with `isComposing` false and `keyCode` 229.
+const isComposingKey = (event: KeyboardEvent): boolean =>
+  event.isComposing === true ||
+  (event as { readonly keyCode?: number }).keyCode === 229
+
+// Observe releases outside the host too, since focus can move while a key is held.
+// Window blur clears pending keys whose releases may occur in another window or frame.
+let watched: Window | null = null
+const watch = (view: Window | null): void => {
+  if (view === watched) return
+  watched?.removeEventListener("keyup", noteKey, true)
+  watched?.removeEventListener("blur", forgetKeys)
+  view?.addEventListener("keyup", noteKey, true)
+  view?.addEventListener("blur", forgetKeys)
+  watched = view
+}
+const forgetKeys = (): void => {
+  composingCodes.clear()
+  watch(null)
+}
+
+/**
+ * Preserves `composing: true` for a commit key released after `compositionend`.
+ * Call for both keydown and keyup before reading the event payload.
+ */
+export const noteKey = (event: Event): void => {
+  const e = event as KeyboardEvent
+  if (!e.code) return
+  if (e.type === "keydown" && isComposingKey(e)) {
+    const node = event.target as Node
+    watch((node.ownerDocument ?? node as Document).defaultView ?? null)
+    composingCodes.add(e.code)
+    return
+  }
+  // Auto-repeat after compositionend still belongs to the held commit key.
+  if (e.type === "keydown" && e.repeat) return
+  if (composingCodes.delete(e.code)) {
+    if (e.type === "keyup") composingKeyups.add(event)
+    if (composingCodes.size === 0) watch(null)
+  }
+}
+
 /**
  * Builds the payload a handler gets: plain data, read from the event and the
  * elements involved.
@@ -187,13 +233,10 @@ export const payloadOf = (
     case "keydown":
     case "keyup": {
       const e = event as KeyboardEvent
-      // Safari reports the key that ends a composition with `isComposing` false and `keyCode` 229.
-      const composing = e.isComposing === true ||
-        (e as { readonly keyCode?: number }).keyCode === 229
       return {
         key: e.key ?? "",
         ...modifiers(event),
-        composing,
+        composing: isComposingKey(e) || composingKeyups.has(event),
         repeat: e.repeat === true,
         editable: isEditable(event.composedPath()[0] ?? target),
         ...selectionOf(target)
