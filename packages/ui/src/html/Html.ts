@@ -899,8 +899,10 @@ export class VoidElement<
       ? tokens[0] || ""
       : joinClassTokens(tokens)
     const current = this.elementAttrs.class
-    if (added === "") return current ? this : this.attr("class", undefined)
-    return this.attr("class", current ? current + " " + added : added)
+    return this.attr(
+      "class",
+      current && added ? current + " " + added : current || added || undefined
+    )
   }
   /**
    * Sets or removes the `disabled` boolean attribute.

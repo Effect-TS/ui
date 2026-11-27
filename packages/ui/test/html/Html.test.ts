@@ -560,6 +560,12 @@ describe("Html", () => {
       assert.deepStrictEqual(base.attr("class", undefined).elementAttrs, {})
     })
 
+    it("returns a plain builder from a shorthand root when no token is added", () => {
+      const out = View.shorthand(button().class("btn")).class(false)
+      assert.strictEqual(typeof out, "object")
+      assert.deepStrictEqual(out.elementAttrs, { class: "btn" })
+    })
+
     it.effect("renders the same classes on the server", () =>
       Effect.gen(function*() {
         const Classes = Html.component({
