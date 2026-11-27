@@ -5,7 +5,7 @@
  * `HtmlScene.Steps` extends `Scene.Steps`, so every scene step works here.
  * Each payload is typed from the host's own payload types in `Html`, so a
  * test can't send a shape the host never would. `click` sends `pointerdown`,
- * `mousedown`, `mouseup` and `click`, then runs the browser's defaults: it
+ * `mousedown`, `pointerup`, `mouseup` and `click`, then runs the browser's defaults: it
  * throws on a disabled control, a submit button submits its form with the
  * fields read from the view, a checkbox or radio button fires `input` and
  * `change`, and a `popovertarget` button toggles its popover. The events of
@@ -86,6 +86,7 @@ import * as fireGlobal from "../internal/fireGlobal.ts"
 import * as frames from "../internal/frames.ts"
 import * as globalEvents from "../internal/globalEvents.ts"
 import * as mediaQueries from "../internal/mediaQueries.ts"
+import * as signals from "../internal/signals.ts"
 import * as HtmlLocator from "./HtmlLocator.ts"
 
 /**
@@ -140,7 +141,7 @@ type AnyComponent =
 
 type KeyDetails = Partial<Omit<Html.KeyPayload, "key">>
 
-type EditDetails = Partial<Pick<Html.InputPayload, "composing" | "inputType">>
+type EditDetails = Partial<Omit<Html.ValuePayload, "value">>
 
 /**
  * A cursor over one HTML scene: the scene's steps, plus a step per user
@@ -160,15 +161,19 @@ export interface Steps<C extends AnyComponent, Parts = never>
 {
   /**
    * Clicks the one element `target` matches, as a browser does: `pointerdown`,
-   * `mousedown`, `mouseup` and `click` go to the innermost element that
+   * `mousedown`, `pointerup`, `mouseup` and `click` go to the innermost element that
    * handles each, then the defaults run. A string means `Locator.text(target)`.
    *
    * **Details**
    *
    * - Each pointer and mouse event carries the mouse's primary button at the
-   *   origin with no modifier keys. `fire` sends an event with another payload,
+   *   origin with no modifier keys, and the pointer events pointer id 1 where
+   *   the mouse events have none. `fire` sends an event with another payload,
    *   such as a tap's `pointerType`.
-   * - Cancelling `pointerdown` skips `mousedown` and `mouseup` but not `click`.
+   * - A `pointerdown` handler set with `capturePointer: true` that sends a
+   *   message takes the rest of the click, `mousedown` aside, and its defaults.
+   * - Cancelling `pointerdown` skips `mousedown` and `mouseup` but not
+   *   `pointerup` or `click`.
    *   Cancelling `mousedown` or `mouseup` skips nothing. Only a cancelled
    *   `click` skips the defaults, and only `click` and its defaults set
    *   `defaultPrevented`.
@@ -193,14 +198,16 @@ export interface Steps<C extends AnyComponent, Parts = never>
    * `input` also sends its current `checked`. `details` sets `composing`,
    * `false` otherwise, and `inputType`, `"insertText"` otherwise, so an
    * input method's text or an autofill's `"insertReplacementText"` can be
-   * sent too.
+   * sent too. It also sets `selectionStart` and `selectionEnd`, `null`
+   * otherwise, as `keydown` does.
    */
   type(locator: Locator.Locator, value: string, details?: EditDetails): this
   /**
    * Sends `change`, as a field does once its edit is committed. A string is
    * the new value; an object also sets `checked` on an `input`, its current
    * `checked` otherwise, `files` on a file input, none otherwise, and
-   * `composing` and `inputType`, `false` and `""` otherwise.
+   * `composing`, `inputType` and the selection, `false`, `""` and `null`
+   * otherwise.
    * `change(locator, { files })` chooses files in a file input.
    */
   change(
@@ -266,8 +273,8 @@ export interface Steps<C extends AnyComponent, Parts = never>
   /**
    * Fires `event` on the document, as the browser host delivers it to the
    * component's `HtmlSubscription.onDocument` listeners. Missing payload
-   * fields default as `keydown` and `click` default them, and
-   * `defaultPrevented` to `false`.
+   * fields default as `keydown` and `click` default them,
+   * `defaultPrevented` to `false` and `timeStamp` to `0`.
    *
    * **Details**
    *
@@ -326,6 +333,22 @@ export interface Steps<C extends AnyComponent, Parts = never>
    * is ignored when the handler returns `undefined`.
    */
   mediaQuery(query: string, matches: boolean): this
+  /**
+   * Sends `visible` to the component's `HtmlSubscription.onVisibility` handler,
+   * simulating an initial state or a change.
+   *
+   * It throws when nothing listens for visibility, listing the active keys, and
+   * is ignored when the handler returns `undefined`.
+   */
+  visibility(visible: boolean): this
+  /**
+   * Sends `online` to the component's `HtmlSubscription.onConnectivity`
+   * handler, simulating an initial state or a change.
+   *
+   * It throws when nothing listens for connectivity, listing the active keys,
+   * and is ignored when the handler returns `undefined`.
+   */
+  connectivity(online: boolean): this
 
   /** Asserts on the elements `locator` matches in the current view. */
   expect(locator: Locator.Locator): Expect<this>
@@ -391,6 +414,7 @@ class StepsImpl extends internal.SceneCursor {
         const description = locator.description
         let out = state
         let reached = false
+        let captured: Locator.Node | undefined
         const send = (
           node: Locator.Node,
           event: string,
@@ -400,6 +424,7 @@ class StepsImpl extends internal.SceneCursor {
           if (fired === undefined) return false
           reached = true
           handled ||= fired.handled
+          captured ??= fired.captured
           out = fired.story
           return fired.prevented
         }
@@ -423,10 +448,9 @@ class StepsImpl extends internal.SceneCursor {
           const skipMouse = send(found, "pointerdown")
           if (!skipMouse) {
             const held = enabled(state.root, found)
-            if (held === undefined) return
-            send(held, "mousedown")
+            if (held !== undefined) send(held, "mousedown", internal.mouse)
           }
-          const pressed = enabled(state.root, found)
+          const pressed = enabled(state.root, captured ?? found)
           if (pressed === undefined) return
           const root = out.root
           const plan = defaults.planClickDefaults(
@@ -435,7 +459,12 @@ class StepsImpl extends internal.SceneCursor {
             pathOf(pressed),
             description
           )
-          if (!skipMouse) send(pressed, "mouseup")
+          send(pressed, "pointerup")
+          if (!skipMouse) {
+            const up = enabled(root, pressed)
+            if (up === undefined) return
+            send(up, "mouseup", internal.mouse)
+          }
           const released = enabled(root, pressed)
           if (released === undefined) return
           prevented = send(released, "click")
@@ -593,26 +622,37 @@ class StepsImpl extends internal.SceneCursor {
         let out = state
         let heard = false
         cancelled = fireGlobal.fire(event, given, (capture) => {
-          const declared = out.declared().map(globalEvents.listenerOf).find((
-            declared
-          ) =>
-            declared !== undefined && declared.target === target &&
-            declared.event === event &&
-            declared.capture === capture
-          )
-          if (declared === undefined) return []
+          const sub = out.declared().find((sub) => {
+            const declared = globalEvents.listenerOf(sub)
+            return declared !== undefined && declared.target === target &&
+              declared.event === event &&
+              declared.capture === capture
+          })
+          if (sub === undefined) return []
           heard = true
-          return [(payload, preventDefault) =>
-            globalEvents.run(
-              declared,
-              payload,
-              preventDefault,
-              (message, cancel) => {
-                cancel()
-                handled = true
-                out = engine.dispatch(out, message)
-              }
-            )]
+          return [(payload, preventDefault) => {
+            const before = engine.heldBy.get(out)?.get(sub.key)
+            const held: globalEvents.Held = { value: before }
+            // A press a held listener consumed is handled too, with no message.
+            handled = globalEvents.observe(() =>
+              globalEvents.run(
+                globalEvents.listenerOf(sub)!,
+                payload,
+                preventDefault,
+                (message, cancel) => {
+                  cancel()
+                  out = engine.dispatch(out, message)
+                },
+                held
+              )
+            ).handled || handled
+            if (held.value !== before) {
+              const next = new Map(engine.heldBy.get(out))
+              if (held.value === undefined) next.delete(sub.key)
+              else next.set(sub.key, held.value)
+              out = engine.update(out, { held: next })
+            }
+          }]
         })
         if (!heard) {
           throw new Error(
@@ -631,6 +671,23 @@ class StepsImpl extends internal.SceneCursor {
       })
     )
   }
+  // A held listener's state ends with its entry, or once the key's declaration isn't held, as in the runtime.
+  protected override settled(
+    state: engine.State<any, any, any, any>,
+    step: string
+  ): engine.State<any, any, any, any> {
+    const held = engine.heldBy.get(state)
+    if (held !== undefined && held.size > 0) {
+      const kept = new Map<string, unknown>()
+      for (const sub of state.declared()) {
+        if (held.has(sub.key) && globalEvents.listenerOf(sub)?.held) {
+          kept.set(sub.key, held.get(sub.key))
+        }
+      }
+      if (kept.size < held.size) state = engine.update(state, { held: kept })
+    }
+    return super.settled(state, step)
+  }
   frame(delta = 16): this {
     return this.fireDeclared(
       "frame",
@@ -648,6 +705,22 @@ class StepsImpl extends internal.SceneCursor {
         const declared = mediaQueries.listenerOf(subscription)
         return declared?.query === query ? declared.handler : undefined
       }
+    )
+  }
+  visibility(visible: boolean): this {
+    return this.fireDeclared(
+      "visibility",
+      "visibility",
+      visible,
+      signals.visibilityHandlerOf
+    )
+  }
+  connectivity(online: boolean): this {
+    return this.fireDeclared(
+      "connectivity",
+      "connectivity",
+      online,
+      signals.connectivityHandlerOf
     )
   }
   private fireDeclared<A>(

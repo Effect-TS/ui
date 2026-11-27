@@ -8,6 +8,7 @@ import * as Option from "effect/Option"
 import * as Scheduler from "effect/Scheduler"
 import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
+import * as Tracer from "effect/Tracer"
 import type * as Command from "../Command.ts"
 import type * as MessageLog from "../MessageLog.ts"
 import type * as Query from "../Query.ts"
@@ -229,7 +230,7 @@ class Runs implements Kernel.Runs {
           spanId: span.spanId,
           traceId: span.traceId
         }
-        const work: Effect.Effect<unknown, unknown, any> =
+        const body: Effect.Effect<unknown, unknown, any> =
           command._tag === "Effect"
             ? command.work
             : Stream.runForEach(
@@ -237,6 +238,7 @@ class Runs implements Kernel.Runs {
               (element) =>
                 Effect.sync(() => send(command.resolve(element as never)))
             )
+        const work = Effect.provideService(body, Tracer.ParentSpan, span)
         const writes = command.writes as
           | ((success: unknown) => ReadonlyArray<Query.Write>)
           | undefined

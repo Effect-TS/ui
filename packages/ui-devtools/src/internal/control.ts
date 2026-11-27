@@ -19,6 +19,10 @@ export const Request = Schema.Union([
     instance: Schema.Number,
     messages: Schema.Array(Schema.Json),
     within: Schema.Number
+  }),
+  Schema.TaggedStruct("Find", {
+    session: Schema.String,
+    selector: Schema.String
   })
 ])
 
@@ -41,11 +45,24 @@ export const Paused = Schema.Struct({
 
 export type Paused = typeof Paused.Type
 
+// What an element picked on the page resolved to, without its text.
+export const Picked = Schema.Struct({
+  session: Schema.String,
+  tag: Schema.String,
+  instance: Schema.Number,
+  path: Schema.String,
+  component: Schema.String
+})
+
+export type Picked = typeof Picked.Type
+
 export const ToServer = Schema.Union([
   Schema.TaggedStruct("State", {
     sessions: Schema.Array(Schema.String),
     paused: Schema.NullOr(Paused),
-    notRecording: Schema.Array(Schema.String)
+    notRecording: Schema.Array(Schema.String),
+    // The last pick of each session.
+    picks: Schema.Array(Picked)
   }),
   Schema.TaggedStruct("Reply", {
     id: Schema.Number,
@@ -81,9 +98,16 @@ export const decodeToServer = Schema.decodeUnknownOption(
 
 export const metaName = "effect-ui-devtools"
 
+// Escape JSON for a single-quoted HTML attribute.
+export const metaTag = (content: object): string =>
+  "<meta name=\"" + metaName + "\" content='" +
+  JSON.stringify(content).replace(/&/g, "&amp;").replace(/'/g, "&#39;") +
+  "'>"
+
 export const fromPage = (): {
   readonly url?: unknown
   readonly size?: unknown
+  readonly fields?: unknown
 } => {
   const content = document.querySelector<HTMLMetaElement>(
     "meta[name=\"" + metaName + "\"]"

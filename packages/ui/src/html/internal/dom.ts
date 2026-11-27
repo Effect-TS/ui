@@ -1,14 +1,15 @@
-import * as Cause from "effect/Cause"
 import * as Kernel from "../../internal/kernel.ts"
 import * as transitionRun from "../../internal/transitionRun.ts"
 import type * as View from "../../View.ts"
 import type * as Html from "../Html.ts"
 import * as documentHead from "./documentHead.ts"
 import { attributeName, isCustomTag, svgTagSet } from "./elements.ts"
+import * as modalHolds from "./modals.ts"
 import { bubblingEvents, ownEvents } from "./ownEvents.ts"
 import {
   type FieldState,
   fieldStateOf,
+  noteKey,
   offsetIn,
   payloadOf
 } from "./payload.ts"
@@ -119,7 +120,10 @@ const canonicalAttrs = (
 
 const ignore = () => {}
 
-type Node = globalThis.Node & { $r?: Kernel.Rec }
+type Node = globalThis.Node & {
+  $r?: Kernel.Rec
+  moveBefore?: ParentNode["moveBefore"]
+}
 
 /** @internal */
 export const written = new WeakMap<globalThis.Node, Map<string, unknown>>()
@@ -212,7 +216,11 @@ export const makeHost = (
     }
   }
 
-  const modals = new WeakSet<globalThis.Node>()
+  const modals = new WeakMap<globalThis.Node, () => void>()
+  const unmodal = (dialog: globalThis.Node) => {
+    modals.get(dialog)?.()
+    modals.delete(dialog)
+  }
   const showings = new WeakMap<globalThis.Node, Array<Showing>>()
   const modalWanted = new Set<HTMLDialogElement>()
   const shown = new Set<HTMLDialogElement>()
@@ -232,7 +240,7 @@ export const makeHost = (
   }
   const closeDialog = (dialog: HTMLDialogElement, byHost: boolean) => {
     if (!dialog.open) return
-    modals.delete(dialog)
+    unmodal(dialog)
     adoptShowing(dialog)
     shown.delete(dialog)
     const current = showingsOf(dialog).at(-1)!
@@ -260,7 +268,8 @@ export const makeHost = (
     if (current !== false) closeDialog(dialog, true)
     if (want === "modal") {
       keepingScroll(() => dialog.showModal())
-      modals.add(dialog)
+      // A reopen before the browser's `close` arrived keeps its hold.
+      if (!modals.has(dialog)) modals.set(dialog, modalHolds.hold(dialog))
       modalPseudo ??= matches(dialog, ":modal")
     } else dialog.show()
     showingsOf(dialog).push({ byHost: false, closed: false })
@@ -353,6 +362,23 @@ export const makeHost = (
   const elementOf = (node: globalThis.Node) =>
     (node as Node).$r?.v as View.Element<any, any> | undefined
 
+  /** Applies a sending handler's options to its event. */
+  const sent = (
+    node: globalThis.Node,
+    event: Event | undefined,
+    options: Html.PointerDownOptions | undefined
+  ) => {
+    if (options?.preventDefault === true) event?.preventDefault()
+    if (options?.capturePointer === true && event?.type === "pointerdown") {
+      // Throws for a pointer that isn't active, such as a synthetic event's.
+      try {
+        ;(node as globalThis.Element).setPointerCapture(
+          (event as PointerEvent).pointerId
+        )
+      } catch {}
+    }
+  }
+
   const dispatch = (
     node: globalThis.Node,
     name: string,
@@ -363,25 +389,21 @@ export const makeHost = (
     const element = rec?.v as View.Element<any, any> | undefined
     const handler = element?.handlers[name]
     if (handler === undefined) return false
-    const prevents = element!.eventOptions[name]?.preventDefault
-    if (prevents === "always") event?.preventDefault()
+    const options = element!.eventOptions[name]
+    if (options?.preventDefault === "always") event?.preventDefault()
     const inst = rec!.inst
     step(() => {
       if (inst.closed) return false
       if (handler?.["~fire"] !== undefined) {
-        return handler["~fire"](payload(), name, () => event?.preventDefault())
+        return handler["~fire"](
+          payload(),
+          name,
+          (own: View.EventOptions) => sent(node, event, own)
+        )
       }
-      let message = handler
-      if (typeof handler === "function") {
-        try {
-          message = handler(payload())
-        } catch (error) {
-          Kernel.fail(inst, "event", Cause.die(error))
-          return false
-        }
-      }
+      const message = inst.message(handler, payload)
       if (message === undefined) return false
-      if (prevents === true) event?.preventDefault()
+      sent(node, event, options)
       Kernel.send(inst, message, name)
       return true
     })
@@ -397,6 +419,53 @@ export const makeHost = (
     | readonly [globalThis.Element, Html.DragOverPayload, ReadonlyArray<string>]
     | undefined
   let overSent: Html.DragOverPayload | undefined
+  type Moves = Map<number, readonly [globalThis.Element, PointerEvent]>
+  /** The latest move of each pointer, by id, while a frame is pending. */
+  let moves: Moves | undefined
+  /** The frame's moves not sent yet, so a reentrant release or cancel finds them. */
+  let flushing: Moves | undefined
+
+  const sendMove = (
+    [element, event]: readonly [globalThis.Element, PointerEvent]
+  ) =>
+    element.isConnected &&
+    dispatch(
+      element,
+      "pointermove",
+      () => payloadOf("pointermove", event, null, element, undefined)
+    )
+
+  const queueMove = (event: PointerEvent, path: ReadonlyArray<Node>) => {
+    for (const node of path) {
+      if (node === container) return
+      if (elementOf(node)?.handlers.pointermove === undefined) continue
+      if (moves === undefined) {
+        const queued = moves = new Map()
+        later(() => {
+          // Teardown took the queue.
+          if (moves !== queued) return
+          moves = undefined
+          flushing = queued
+          for (const [id, move] of queued) {
+            queued.delete(id)
+            sendMove(move)
+          }
+          flushing = undefined
+        })
+      }
+      moves.set(event.pointerId, [node as globalThis.Element, event])
+      return
+    }
+  }
+
+  const endMove = (name: string, event: PointerEvent) => {
+    const id = event.pointerId
+    const queued = moves?.get(id) ?? flushing?.get(id)
+    if (queued === undefined) return
+    moves?.delete(id)
+    flushing?.delete(id)
+    if (name !== "pointercancel") sendMove(queued)
+  }
 
   const accepts = (node: globalThis.Node, types: ReadonlyArray<string>) => {
     const element = elementOf(node)
@@ -539,6 +608,9 @@ export const makeHost = (
     const name = event.type
     const path = event.composedPath() as Array<Node>
     const custom = view !== null && event instanceof view.CustomEvent
+    if (name === "pointermove" && !custom) {
+      return queueMove(event as PointerEvent, path)
+    }
     const detailFor = (node: Node) =>
       custom && isCustomTag((node as globalThis.Element).localName ?? "")
     if (detailFor(event.target as Node)) {
@@ -553,6 +625,11 @@ export const makeHost = (
     if (dropTargetEvents.has(name)) {
       return onDropTarget(name, event as DragEvent, path)
     }
+    if (
+      (moves !== undefined || flushing !== undefined) &&
+      (name === "pointerdown" || name === "pointerup" ||
+        name === "pointercancel")
+    ) endMove(name, event as PointerEvent)
     const target = path[0] ?? event.target as Node
     const entry = name === "toggle" ? reported.get(target) : undefined
     if (entry !== undefined) {
@@ -569,10 +646,13 @@ export const makeHost = (
         const list = showings.get(target)
         const ended = list?.shift()
         if (ended !== undefined && (ended.byHost || list!.length > 0)) return
-        if (!target.open) modals.delete(target)
+        if (!target.open) unmodal(target)
       }
     }
     if (name === "pointerdown") lastPointer = pointerTypeOf(event) || undefined
+    else if (
+      name === "keyup" || (name === "keydown" && listening.has("keyup"))
+    ) noteKey(event)
     else if (name === "beforeinput") {
       const state = composed || composing.has(target)
         ? undefined
@@ -624,19 +704,13 @@ export const makeHost = (
           )
     )
     if (
-      name === "submit" && event.target !== null && forms.has(event.target)
-    ) {
-      submit.ownedUnhandled.delete(event)
-      if (handled) event.preventDefault()
-      else {
-        const kind = submit.kindOf(
-          event.target as globalThis.Element,
-          (event as SubmitEvent).submitter ?? null
-        )
-        if (kind !== "native") event.preventDefault()
-        if (kind === "get") submit.ownedUnhandled.add(event)
-      }
-    }
+      name === "submit" && event.target !== null && forms.has(event.target) &&
+      (handled ||
+        submit.methodOf(
+            event.target as globalThis.Element,
+            (event as SubmitEvent).submitter ?? null
+          ) === "dialog")
+    ) event.preventDefault()
     if (name === "dragend") endTargets()
     if (restoring.has(name) && target !== undefined && target !== null) {
       restoreSoon(target)
@@ -648,6 +722,11 @@ export const makeHost = (
     listening.add(name)
     container.addEventListener(name, listener, true)
     if (name === "click") listen("pointerdown")
+    else if (name === "pointermove") {
+      listen("pointerdown")
+      listen("pointerup")
+      listen("pointercancel")
+    } else if (name === "keyup") listen("keydown")
     else if (name === "dragend") listen("dragstart")
     else if (name === "drop") {
       for (const targetEvent of dropTargetEvents) listen(targetEvent)
@@ -824,8 +903,22 @@ export const makeHost = (
       // `dragend` brings `dragstart` with it.
       if (eventOptions.dragstart !== undefined) listen("dragend")
     },
-    insert(parent, node, before) {
-      parent.insertBefore(node, before)
+    insert(parent: Node, node, before) {
+      if (node.parentNode !== parent) parent.insertBefore(node, before)
+      // A form control named `moveBefore` shadows the method.
+      else if (typeof parent.moveBefore === "function") {
+        parent.moveBefore(node, before)
+      } else {
+        const focused = (node.getRootNode() as Document | ShadowRoot)
+          .activeElement as HTMLElement | null
+        parent.insertBefore(node, before)
+        // Do not override focus set by a blur handler.
+        if (
+          document.activeElement === document.body && node.contains(focused)
+        ) {
+          focused!.focus({ preventScroll: true })
+        }
+      }
     },
     remove(parent, node) {
       if (shown.size > 0) closeShownIn(node, true)
@@ -842,7 +935,9 @@ export const makeHost = (
     runsMounts: true,
     commit() {
       for (const dialog of shown) {
-        if (!dialog.open || !dialog.isConnected) shown.delete(dialog)
+        if (dialog.open && dialog.isConnected) continue
+        unmodal(dialog)
+        shown.delete(dialog)
       }
       if (modalWanted.size > 0) {
         for (const dialog of inOrder([...modalWanted])) {
@@ -903,7 +998,26 @@ export const makeHost = (
         container.removeEventListener(name, listener, true)
       }
       listening.clear()
+      moves = undefined
+      flushing?.clear()
       endTargets()
+      restore?.clear()
+      // Keep `shown` so node removal still closes dialogs. After disposal,
+      // release each remaining hold on close, ignoring stale close events
+      // from an earlier showing of the same dialog.
+      for (const dialog of shown) {
+        if (!modals.has(dialog)) continue
+        if (!dialog.open) {
+          unmodal(dialog)
+          continue
+        }
+        const closed = () => {
+          if (dialog.open) return
+          dialog.removeEventListener("close", closed)
+          unmodal(dialog)
+        }
+        dialog.addEventListener("close", closed)
+      }
     }
   }
 }

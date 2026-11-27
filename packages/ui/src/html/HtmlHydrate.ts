@@ -8,10 +8,13 @@
  */
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
+import * as Schema from "effect/Schema"
+import * as SchemaIssue from "effect/SchemaIssue"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
 import * as hydrateRun from "../internal/hydrateRun.ts"
 import type * as Kernel from "../internal/kernel.ts"
+import { jsonCodecOf } from "../internal/stateCodec.ts"
 import type * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
 import * as BrowserHost from "./BrowserHost.ts"
@@ -665,12 +668,14 @@ export const adopt: hydrateRun.Adopt<Node> = (base, container, path) => {
  * **When to use**
  *
  * Use when the caller needs the root: to read its Model, send it a message,
- * or wait for `root.adopted`, which completes when no hydrating instance is
- * still waiting. `hydrate` is the form that runs an app.
+ * update its props with `setProps`, or wait for `root.adopted`, which
+ * completes when no hydrating instance is still waiting. `hydrate` is the
+ * form that runs an app.
  *
  * **Details**
  *
- * It mounts, checks the root and hydrates exactly as `hydrate` does.
+ * It mounts, checks the root and hydrates exactly as `hydrate` does, and
+ * fails with the props Effect's error.
  *
  * @stability experimental
  * @category constructors
@@ -685,18 +690,19 @@ export const hydrateEffect = <
   R,
   V extends View.Elements,
   RF = never,
-  RP = never
+  RP = never,
+  EP = never
 >(
   component:
     & Component.Members<Name, Props, Model, Msg, Events, R, V, any>
     & BrowserHost.HtmlRoot<V>,
-  props: Props | Effect.Effect<Props, never, RP>,
+  props: Props | Effect.Effect<Props, EP, RP>,
   container: globalThis.Element,
   state: Renderer.State,
   options?: Omit<BrowserHost.MountOptions<V, RF, Events>, "key">
 ): Effect.Effect<
-  Renderer.Root<Model, Msg>,
-  never,
+  Renderer.Root<Model, Msg, Props>,
+  EP,
   Exclude<R | RF | RP, Html.Host> | Scope.Scope
 > =>
   Effect.suspend(() =>
@@ -719,16 +725,18 @@ export const hydrateEffect = <
  *
  * Use to run a server-rendered app in the browser, in place of
  * `BrowserHost.mount`. Reach for `hydrateEffect` when the caller needs the
- * root, to send it messages or to wait for `root.adopted`.
+ * root, to send it messages, update its props or wait for `root.adopted`.
  *
  * **Details**
  *
  * Pass the `state` from `HtmlServer.renderToHtml`, with the server's HTML
  * already in `container` and the same props, to adopt the server's nodes
  * instead of building them. `Router.props` gives the same props on both
- * sides when both Routers are at the same URL. Options are as in
- * `BrowserHost.mount`, except `key`: hydration reads the server's key from
- * `state` automatically.
+ * sides when both Routers are at the same URL, and `decodeProps` reads the
+ * props serialized with `includeProps: true`. If the props Effect fails,
+ * the Layer fails with that error and leaves the server HTML unchanged.
+ * Options are as in `BrowserHost.mount`, except `key`: hydration reads the
+ * server's key from `state` automatically.
  *
  * Each instance adopts its server Model and replays `init` only to recover
  * its Commands, so the events `init` emits are dropped; server Commands the
@@ -792,16 +800,83 @@ export const hydrate = <
   R,
   V extends View.Elements,
   RF = never,
-  RP = never
+  RP = never,
+  EP = never
 >(
   component:
     & Component.Members<Name, Props, Model, Msg, Events, R, V, any>
     & BrowserHost.HtmlRoot<V>,
-  props: Props | Effect.Effect<Props, never, RP>,
+  props: Props | Effect.Effect<Props, EP, RP>,
   container: globalThis.Element,
   state: Renderer.State,
   options?: Omit<BrowserHost.MountOptions<V, RF, Events>, "key">
-): Layer.Layer<never, never, Exclude<R | RF | RP, Html.Host>> =>
+): Layer.Layer<never, EP, Exclude<R | RF | RP, Html.Host>> =>
   Layer.effectDiscard(
     hydrateEffect(component, props, container, state, options)
   ) as any
+
+/**
+ * Returns an Effect that decodes root props from server state using the
+ * component's props Schema, failing with `Schema.SchemaError` if missing or invalid.
+ *
+ * **When to use**
+ *
+ * Use as the props of `hydrate` or `hydrateEffect` when the server rendered
+ * with `includeProps: true` and the client has no other source for them,
+ * such as a component embedded in a page another renderer built.
+ *
+ * **Details**
+ *
+ * Hydration propagates decoding errors without changing the server HTML.
+ * Recover with `Effect.orElseSucceed` to supply fallback props; hydration
+ * then adopts the nodes that still match.
+ *
+ * **Example** (Hydrating with the server's props)
+ *
+ * ```ts
+ * import { HtmlHydrate, Html } from "@effect/ui/html"
+ * import { Effect, Layer, Schema } from "effect"
+ * import { Renderer } from "@effect/ui"
+ *
+ * const News = Html.component({
+ *   name: "News",
+ *   props: Schema.Struct({ items: Schema.Array(Schema.String) }),
+ *   model: Schema.Struct({}),
+ *   message: Schema.Never
+ * }).make({
+ *   init: () => ({}),
+ *   update: ($) => $.model,
+ *   view: (h) =>
+ *     h.ul.children(...h.props.items.map((item) => h.li.key(item).children(item)))
+ * })
+ *
+ * // From `HtmlServer.renderToHtml(News, props, { includeProps: true })`.
+ * declare const state: Renderer.State
+ *
+ * const app = HtmlHydrate.hydrate(
+ *   News,
+ *   HtmlHydrate.decodeProps(News, state),
+ *   document.getElementById("news")!,
+ *   state
+ * )
+ * Effect.runFork(Layer.launch(app))
+ * ```
+ *
+ * @stability experimental
+ * @category utils
+ * @since 0.1.0
+ */
+export const decodeProps = <Props>(
+  component: { readonly props: Schema.Codec<Props, any> },
+  state: Renderer.State
+): Effect.Effect<Props, Schema.SchemaError> =>
+  Effect.mapError(
+    state["~props"] === undefined
+      ? Effect.fail(
+        new SchemaIssue.Forbidden({
+          message: "the state has no ~props: render with includeProps: true"
+        })
+      )
+      : jsonCodecOf(component.props).decode(state["~props"]),
+    (issue) => new Schema.SchemaError(issue)
+  ) as Effect.Effect<Props, Schema.SchemaError>

@@ -18,6 +18,11 @@ import { AppRoute } from "./fixtures/routes.ts"
 // nodes instead of rebuilding them. The query results the server shipped aren't
 // fetched again.
 //
+// To ship root props the client cannot reconstruct, render with
+// `HtmlServer.renderToHtml(C, props, { includeProps: true })` and pass
+// `HtmlHydrate.decodeProps(C, state)` as the hydration props. Missing or
+// invalid props fail with a `Schema.SchemaError`, leaving the server HTML unchanged.
+//
 // A Layer that can never be ready on the server, such as a live connection,
 // is kept off it with `Component.provide(C, layer, { server: false })`. The
 // server then renders that child's fallback and the client builds it fresh.

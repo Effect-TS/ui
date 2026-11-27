@@ -16,8 +16,8 @@ import {
   HtmlServer,
   HtmlSubscription
 } from "@effect/ui/html"
-import { HtmlLocator } from "@effect/ui/html/testing"
-import { type Locator, Scene } from "@effect/ui/testing"
+import { BrowserCase, HtmlLocator } from "@effect/ui/html/testing"
+import { Case, type Locator, Scene } from "@effect/ui/testing"
 import { Context, Effect, type Layer, Schema, type Scope, Stream } from "effect"
 import { describe, expect, it } from "tstyche"
 
@@ -214,9 +214,10 @@ describe("Html", () => {
           null,
           undefined
         )
-        // Void tags take no children and aren't callable.
+        // Void tags, `textarea` among them, take no children and aren't callable.
         expect(h.input).type.not.toHaveProperty("children")
         expect(h.input.value(draft)).type.not.toHaveProperty("children")
+        expect(h.textarea).type.not.toHaveProperty("children")
         expect(h.br).type.not.toBeAssignableTo<(...args: never) => unknown>()
         expect(h.input).type.not.toBeAssignableTo<(...args: never) => unknown>()
         // A builder is a valid child and a valid view without a terminal call.
@@ -389,6 +390,16 @@ describe("Html", () => {
             selectionStart === selectionEnd ? undefined : Msg.Mounted()
         )
         expect<Html.KeyPayload["selectionStart"]>().type.toBe<number | null>()
+        expect<Html.ValuePayload["selectionEnd"]>().type.toBe<number | null>()
+        expect(h.textarea.on).type.toBeCallableWith(
+          "selectionchange",
+          ({ selectionEnd }: Html.SelectionPayload) =>
+            selectionEnd === null ? undefined : Msg.Mounted()
+        )
+        expect(h.div.on).type.not.toBeCallableWith(
+          "selectionchange",
+          () => Msg.Mounted()
+        )
         expect<Html.KeyPayload["repeat"]>().type.toBe<boolean>()
         expect<Html.KeyPayload["editable"]>().type.toBe<boolean>()
         const shortcutHandler = HtmlKeyboard.shortcuts([
@@ -438,6 +449,34 @@ describe("Html", () => {
           Msg.Mounted()
         )
         expect(h.button.on).type.not.toBeCallableWith("click", "not a message")
+        return h.div()
+      }
+    })
+  })
+
+  it("pointer gestures carry the pointer's id, and only a press can capture it", () => {
+    Html.component({
+      name: "Gestures",
+      model: Schema.String,
+      message: Msg
+    }).make({
+      init: () => "",
+      update: ($) => $.model,
+      view: (h) => {
+        const handler = ({ pointerId }: Html.PointerPayload) =>
+          pointerId === -1 ? undefined : Msg.Mounted()
+        expect(h.circle.on).type.toBeCallableWith("pointermove", handler)
+        expect(h.circle.on).type.toBeCallableWith("pointerup", handler)
+        expect(h.circle.on).type.toBeCallableWith("pointercancel", handler)
+        expect(h.circle.on).type.toBeCallableWith("pointerdown", handler, {
+          capturePointer: true
+        })
+        expect(h.div.on).type.not.toBeCallableWith("pointermove", handler, {
+          capturePointer: true
+        })
+        expect(h.circle.on).type.not.toBeCallableWith("click", handler, {
+          capturePointer: true
+        })
         return h.div()
       }
     })
@@ -867,7 +906,7 @@ describe("BrowserHost", () => {
 
   it("mountEffect needs only a Scope for an HTML root", () => {
     expect(BrowserHost.mountEffect(Counter, {}, document.body)).type.toBe<
-      Effect.Effect<Renderer.Root<number, Msg>, never, Scope.Scope>
+      Effect.Effect<Renderer.Root<number, Msg, {}>, never, Scope.Scope>
     >()
   })
 
@@ -908,7 +947,7 @@ describe("BrowserHost", () => {
   it("Renderer.mount of an HTML root needs Html.Host", () => {
     expect(Renderer.mount(Counter, {}, document.body)).type.toBe<
       Effect.Effect<
-        Renderer.Root<number, Msg>,
+        Renderer.Root<number, Msg, {}>,
         never,
         Html.Host | Renderer.Renderer | Scope.Scope
       >
@@ -957,6 +996,25 @@ describe("BrowserHost", () => {
     expect(BrowserHost.mountEffect).type.not.toBeCallableWith(
       App,
       {},
+      document.body
+    )
+  })
+
+  it("BrowserCase.mount rejects a case of another vocabulary, messages or not", () => {
+    const Native: View.Vocabulary<Native> = { name: "native", tags: {} }
+    const Silent = Component.define({
+      name: "Silent",
+      model: Schema.Number,
+      message: Schema.Never,
+      elements: Native
+    }).make({
+      init: () => 0,
+      update: ($) => $.model,
+      view: (h) => h.view
+    })
+    const cases = Case.make(Silent, { idle: {} })
+    expect(BrowserCase.mount).type.not.toBeCallableWith(
+      cases.idle,
       document.body
     )
   })

@@ -6,10 +6,10 @@
  * document, and each element stores its handlers as data, so re-rendering
  * never touches listeners. An event goes to the innermost element with a
  * handler for it, and its handler gets a plain payload built from the DOM
- * event, never the event itself. A form the app renders submits natively
- * only when it has no `submit` handler and uses POST or GET targeting another
- * window. Handled, `dialog` and same-window GET submissions are cancelled;
- * the Router can still follow an unhandled same-window GET.
+ * event, never the event itself. The host cancels a form submission when
+ * the form has a `submit` handler or uses the `dialog` method. Otherwise,
+ * it leaves the browser default intact; the Router can intercept a
+ * same-window GET whose URL the routes parse.
  *
  * A `dialog` set with `modal(true)` is shown with `showModal()` at the commit
  * after it's in the document, and closed with `close()`. Dialogs shown in
@@ -65,6 +65,10 @@
  * by the next task means the pointer left, whichever order the browser fires
  * them in. `dragover` is sent at most once per animation frame. A drop on a
  * target is always cancelled, and its strings and files are read then.
+ *
+ * A `pointerdown` handler set with `{ capturePointer: true }` captures the
+ * pointer on its element when it produces a message. `pointermove` is
+ * coalesced per animation frame, as `Html.Events` describes.
  *
  * `value`, `checked`, `selected` and `open` are controlled. The host sets them
  * after the element's children exist, skips a no-op so the caret doesn't jump,
@@ -132,7 +136,7 @@ import * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
 import * as domHost from "../internal/domHost.ts"
 import type * as hydrateRun from "../internal/hydrateRun.ts"
-import type * as Kernel from "../internal/kernel.ts"
+import * as Kernel from "../internal/kernel.ts"
 import * as messageLog from "../internal/messageLog.ts"
 import * as runtime from "../internal/runtime.ts"
 import * as Renderer from "../Renderer.ts"
@@ -147,20 +151,17 @@ const open = { closed: false }
 
 const fired = (
   handlers: Readonly<Record<string, View.Handler<unknown, any>>>,
-  dispatch: Renderer.Dispatch,
-  options: Readonly<Record<string, View.EventOptions>>
+  dispatch: Renderer.Dispatch
 ): Record<string, unknown> => {
   const out: Record<string, unknown> = {}
   for (const name in handlers) {
     const handler = handlers[name]
     out[name] = {
-      "~fire": (payload: unknown, event: string, prevent: () => void) =>
-        dispatch(
-          event,
-          handler,
-          payload,
-          options[event]?.preventDefault === true ? prevent : undefined
-        )
+      "~fire": (
+        payload: unknown,
+        event: string,
+        sent: (options: View.EventOptions) => void
+      ) => dispatch(event, handler, payload, sent)
     }
   }
   return out
@@ -235,7 +236,7 @@ const build = (
         node,
         {
           v: {
-            handlers: fired(handlers, dispatch, options),
+            handlers: fired(handlers, dispatch),
             eventOptions: options
           },
           inst: open
@@ -315,13 +316,20 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
       left: box.left
     }
   },
-  select: (element) => {
+  select: (element, options) => {
     const field = element as HTMLInputElement
     // Written first: the host would otherwise put a value `update` rejected back a frame later, which
     // drops the selection.
     const value = dom.written.get(field)?.get("value")
-    if (typeof value === "string" && field.value !== value) field.value = value
-    if (typeof field.select === "function") field.select()
+    try {
+      if (typeof value === "string" && field.value !== value) {
+        field.value = value
+      }
+      if (options === undefined) field.select()
+      else field.setSelectionRange(options.start, options.end ?? options.start)
+    } catch {
+      // Thrown by a type without a selection, such as `email`, or a file input given a value.
+    }
   },
   requestSubmit: (element) => {
     const form = element.localName === "form"
@@ -347,8 +355,9 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
 
 /**
  * Provides the browser host as the `Renderer`, `Html.Host`, the document's
- * `Query.Visibility` and `Query.Connectivity`, its events as
- * `HtmlSubscription.GlobalEvents`, its window's frames as
+ * `Query.Visibility` and `Query.Connectivity` (which also back
+ * `HtmlSubscription.onVisibility` and `HtmlSubscription.onConnectivity`), its
+ * events as `HtmlSubscription.GlobalEvents`, its window's frames as
  * `HtmlSubscription.AnimationFrames`, its window's media queries as
  * `HtmlSubscription.MediaQueries`, and an `HtmlImages.Images` and
  * `HtmlFiles.Files` over it, for the life of the Layer.
@@ -356,10 +365,11 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
  * **Details**
  *
  * `document` defaults to the global `document`. Closing the Layer removes the
- * host's listeners. The signals, `HtmlSubscription.GlobalEvents`,
- * `HtmlSubscription.AnimationFrames`, `HtmlSubscription.MediaQueries`,
- * `HtmlImages.Images` and `HtmlFiles.Files` use the document and its
- * `defaultView`, never globals.
+ * host's listeners. `Query.Visibility` reads `document.visibilityState` and
+ * `Query.Connectivity` reads `defaultView.navigator.onLine`. The signals,
+ * `HtmlSubscription.GlobalEvents`, `HtmlSubscription.AnimationFrames`,
+ * `HtmlSubscription.MediaQueries`, `HtmlImages.Images` and `HtmlFiles.Files`
+ * use the document and its `defaultView`, never globals.
  *
  * @stability experimental
  * @category layers
@@ -437,7 +447,7 @@ export interface MountOptions<
  * **When to use**
  *
  * Use to run an app. Reach for `mountEffect` when the caller needs the root,
- * to send it messages.
+ * to send it messages or update its props.
  *
  * **Details**
  *
@@ -520,8 +530,8 @@ let defaultScheduler: Scheduler.Scheduler | undefined
  *
  * **When to use**
  *
- * Use when the caller needs the root: to read its Model or send it a message.
- * `mount` is the form that runs an app.
+ * Use when the caller needs the root: to read its Model, send it a message
+ * or update its props with `setProps`. `mount` is the form that runs an app.
  *
  * **Details**
  *
@@ -549,7 +559,7 @@ export const mountEffect = <
   container: globalThis.Element,
   options?: MountOptions<V, RF, Events>
 ): Effect.Effect<
-  Renderer.Root<Model, Msg>,
+  Renderer.Root<Model, Msg, Props>,
   never,
   Exclude<R | RF | RP, Html.Host> | Scope.Scope
 > =>
@@ -568,7 +578,7 @@ export const mountRoot = (
   container: globalThis.Element,
   options: MountOptions<any, any, any> | undefined,
   hydrate: hydrateRun.Hydrating | undefined
-): Effect.Effect<Renderer.Root<any, any>, never, Scope.Scope> =>
+): Effect.Effect<Renderer.Root<any, any, any>, never, Scope.Scope> =>
   Effect.gen(function*() {
     const { host, raw, make, held, hold } = build(container.ownerDocument)
     yield* Effect.addFinalizer(() => Effect.sync(host.dispose))
@@ -579,6 +589,18 @@ export const mountRoot = (
     )
     const outer = yield* Effect.context<Scope.Scope>()
     const attached = hot.devTools(container)
+    const mountContext = attached !== undefined &&
+        Context.get(outer, messageLog.MessageLog) === messageLog.noop
+      ? Context.add(context, messageLog.MessageLog, attached.messageLog)
+      : context
+    // Props resolve before a hot snapshot clears the container, so a failure
+    // leaves its HTML.
+    const resolved = Effect.isEffect(props)
+      ? yield* Effect.provideContext(
+        props as Effect.Effect<unknown>,
+        mountContext
+      )
+      : props
     const hotSession = hot.open(component, container, options?.key)
     const hydrating = hotSession?.hasSnapshot === true ? undefined : hydrate
     if (hydrating !== hydrate) container.textContent = ""
@@ -589,18 +611,16 @@ export const mountRoot = (
     const scheduled = scheduler === undefined
       ? context
       : Context.add(context, Scheduler.Scheduler, scheduler)
-    const mountContext = attached !== undefined &&
-        Context.get(outer, messageLog.MessageLog) === messageLog.noop
-      ? Context.add(context, messageLog.MessageLog, attached.messageLog)
-      : context
     const root = yield* Effect.provideContext(
       runtime.mountDom(
         component,
-        props,
+        resolved,
         container,
         make,
         [Html.name],
-        { ...options, hydrate: hydrating, hot: hotSession, scheduler }
+        // A case's `hot`, from `BrowserCase`, overrides the session. It has
+        // already claimed and dropped the snapshot, so this one has none.
+        { hydrate: hydrating, hot: hotSession, scheduler, ...options }
       ),
       mountContext
     )
@@ -613,6 +633,8 @@ export const mountRoot = (
       () => hold(container, true),
       () => hold(container, false)
     )
+    mounted.set(controlled, [root, container])
+    containers.add(container)
     const currentControllables = Context.get(outer, Controllables)
     const activeControllables =
       attached !== undefined && currentControllables === defaultControllables
@@ -620,7 +642,13 @@ export const mountRoot = (
         : currentControllables
     const unregister = activeControllables.register(controlled)
     yield* Effect.addFinalizer(() =>
-      Effect.andThen(Effect.sync(unregister), controlled.resume)
+      Effect.andThen(
+        Effect.sync(() => {
+          unregister()
+          containers.delete(container)
+        }),
+        controlled.resume
+      )
     )
     return root
   })
@@ -634,7 +662,7 @@ export const mountRoot = (
  * **Details**
  *
  * Without `props`, the instance takes the props its parent's view passes it,
- * and the root the props it was mounted with. With them, it takes those, so
+ * and the root its current props. With them, it takes those, so
  * a child shows the props it had at that entry, even when its parent's
  * Model at that entry would pass it newer ones or its parent wasn't
  * recorded.
@@ -910,6 +938,7 @@ const controllable = (
         const copy = container.cloneNode(false) as HTMLElement
         show(copy.style, hide())
         copy.setAttribute("inert", "")
+        copies.add(copy)
         ;(painted?.copy ?? container).after(copy)
         const result = yield* runtime.paintDom(
           component,
@@ -934,15 +963,146 @@ const controllable = (
         return result
       })),
     resume,
-    instance: (born) => {
-      const inst = root.find(born)
-      return inst === undefined ? undefined : {
-        instance: born,
-        path: inst.path,
-        component: inst.component.definition.name,
-        message: inst.component.definition.message,
-        dispatch: (message) => root.dispatch(inst, message)
-      }
-    }
+    instance: (born) => controlledInstance(root, root.find(born), born)
   }
+}
+
+const controlledInstance = (
+  root: runtime.Root,
+  inst: runtime.Instance | undefined,
+  born: number | undefined
+): ControlledInstance | undefined =>
+  inst === undefined || born === undefined ? undefined : {
+    instance: born,
+    path: inst.path,
+    component: inst.component.definition.name,
+    message: inst.component.definition.message,
+    dispatch: (message) => root.dispatch(inst, message)
+  }
+
+const mounted = new WeakMap<
+  Controllable,
+  readonly [runtime.Root, globalThis.Node]
+>()
+const containers = new WeakSet<globalThis.Node>()
+const copies = new WeakSet<globalThis.Node>()
+
+/**
+ * Returns the owning instance for each node in a mounted `Controllable` root,
+ * in input order, or `undefined` for nodes with no owner in that root.
+ *
+ * **Details**
+ *
+ * Slot content belongs to the instance that passed it. An element with a
+ * headless component's part belongs to that component, or the outermost owner
+ * when parts are composed. Other rendered nodes belong to the instance whose
+ * view wrote them. A node the renderer did not create uses the nearest
+ * rendered ancestor's owner.
+ *
+ * Returns `undefined` for the root's container, nodes outside it, nodes
+ * rendered by a nested root, nodes in `pause`'s painted copy, and nodes of
+ * parked `keepAlive` children.
+ *
+ * The lookup walks the root's render records when called. Nodes looked up
+ * together share an index of each sibling list.
+ *
+ * @stability experimental
+ * @category inspection
+ * @since 0.1.0
+ */
+export const instancesAt = (
+  root: Controllable,
+  nodes: Iterable<globalThis.Node>
+): Array<ControlledInstance | undefined> => {
+  const [live, container] = mounted.get(root) ?? []
+  const top = (live?.instance as Kernel.Instance | undefined)?.rendered
+  const levels = new Map<unknown, Map<unknown, Kernel.Rec>>()
+  const level = (recs: unknown) => {
+    let byNode = levels.get(recs)
+    if (byNode === undefined) {
+      levels.set(recs, byNode = new Map())
+      byNodeOf(recs as Kernel.Rec | ReadonlyArray<Kernel.Rec>, byNode)
+    }
+    return byNode
+  }
+  return Array.from(nodes, (node) => {
+    if (live === undefined || top === undefined) return undefined
+    const path: Array<globalThis.Node> = []
+    for (
+      let at: globalThis.Node | null = node;
+      at !== container;
+      at = at.parentNode
+    ) {
+      if (at === null) return undefined
+      path.push(at)
+    }
+    let found: Kernel.Rec | undefined
+    for (let recs: unknown = top; recs !== undefined; recs = found!.kids) {
+      const byNode = level(recs)
+      const hit = path.find((at) => byNode.has(at))
+      if (hit === undefined) break
+      found = byNode.get(hit)!
+    }
+    if (found === undefined) return undefined
+    for (const at of path) {
+      if (at === found.node) break
+      // Another root's nodes, and painted copies, don't fall back to this root's elements.
+      if (copies.has(at) || containers.has(at.parentNode!)) return undefined
+    }
+    // Composed parts each add a layer; the outermost owner is the one the view used.
+    const layers = (found.v as View.Element<any, any>).owned
+    const owner = (layers?.length
+      ? layers.reduce(
+        (outer, layer) =>
+          layer.owner.path.length < outer.path.length ? layer.owner : outer,
+        layers[0]!.owner
+      )
+      : found.inst) as unknown as runtime.Instance
+    return controlledInstance(live, owner, live.numberOf(owner))
+  })
+}
+
+/**
+ * Returns a node's owning instance in a mounted `Controllable` root, or
+ * `undefined` if none exists. Uses the ownership rules of `instancesAt`.
+ *
+ * @stability experimental
+ * @category inspection
+ * @since 0.1.0
+ */
+export const instanceAt = (
+  root: Controllable,
+  node: globalThis.Node
+): ControlledInstance | undefined => instancesAt(root, [node])[0]
+
+const byNodeOf = (
+  recs: Kernel.Rec | ReadonlyArray<Kernel.Rec>,
+  byNode: Map<unknown, Kernel.Rec>
+): void => {
+  for (const rec of Array.isArray(recs) ? recs : [recs]) {
+    const inner = rec.kids ?? rec.inst?.rendered
+    if (rec.node !== undefined) byNode.set(rec.node, rec)
+    else if (inner !== undefined) byNodeOf(inner, byNode)
+  }
+}
+
+/**
+ * Returns an instance's top-level rendered nodes that are connected to a
+ * document, in render order. Returns an empty array if the instance number
+ * is unknown or none of its nodes are connected.
+ *
+ * @stability experimental
+ * @category inspection
+ * @since 0.1.0
+ */
+export const nodesOf = (
+  root: Controllable,
+  instance: number
+): ReadonlyArray<globalThis.Node> => {
+  const rendered = (mounted.get(root)?.[0].find(instance) as
+    | Kernel.Instance
+    | undefined)?.rendered
+  return rendered === undefined ? [] : (Kernel.nodesOf(rendered, []) as Array<
+    globalThis.Node
+  >).filter((node) => node.isConnected)
 }

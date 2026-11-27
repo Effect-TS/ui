@@ -1122,7 +1122,7 @@ const watch = (
 
     return Effect.acquireRelease(
       Effect.sync(() => {
-        listenOutside(document, signal, {
+        listenOutside(node, signal, {
           open: () =>
             current.open,
           inside,
@@ -1741,10 +1741,11 @@ export const make = <P, E, V extends string = string>(
         // inline list clears on Escape's keyup, so its keydown can still close a dialog around it.
         .on(
           "keyup",
-          ({ key }) =>
-            (key === "Enter" && open && !inline && highlighted === null) ||
-              (key === "Escape" && inline && !readOnly &&
-                (props.inputValue !== "" || filled))
+          ({ composing, key }) =>
+            !composing &&
+              ((key === "Enter" && open && !inline && highlighted === null) ||
+                (key === "Escape" && inline && !readOnly &&
+                  (props.inputValue !== "" || filled)))
               ? Message.ReleasedInputKey({ key })
               : undefined
         )

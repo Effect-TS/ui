@@ -16,8 +16,7 @@ export default HttpRouter.add(
       {
         snippets,
         articleUrl: new URL("/article.md", request.originalUrl).href
-      },
-      { static: import.meta.env.PROD }
+      }
     ).pipe(
       Effect.map((page) => HttpServerResponse.html(document(page)))
     )

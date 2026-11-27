@@ -105,6 +105,8 @@ describe("Query", () => {
     expect(Now.get).type.toBe<
       (args: {}) => Effect.Effect<number, never, Now | Query.Cache>
     >()
+    expect(Now.args).type.toBe<Schema.Struct<{}>>()
+    expect(Now.error).type.toBe<Schema.Never>()
     const args: { args?: { id: typeof Schema.String } } = {}
     expect(Query.Service<"Q">()).type.not.toBeCallableWith("Q", {
       ...args,
@@ -174,6 +176,15 @@ describe("Query", () => {
       boolean
     >()
     expect(writes).type.toBe<ReadonlyArray<Query.Write>>()
+  })
+
+  it("exposes its args, success and error Schemas", () => {
+    expect(GetUser.args).type.toBe<
+      Schema.Struct<{ readonly id: Schema.String }>
+    >()
+    expect(GetUser.success).type.toBe<typeof User>()
+    expect(GetUser.error).type.toBe<typeof NotFound>()
+    expect(Count.args).type.toBe<Schema.String>()
   })
 })
 
@@ -254,5 +265,13 @@ describe("InfiniteService", () => {
 
   it("has no set", () => {
     expect(ListUsers).type.not.toHaveProperty("set")
+  })
+
+  it("exposes its args and error Schemas, and the page array as success", () => {
+    expect(ListUsers.args).type.toBe<
+      Schema.Struct<{ readonly team: Schema.String }>
+    >()
+    expect(ListUsers.success).type.toBe<Schema.$Array<typeof Page>>()
+    expect(ListUsers.error).type.toBe<typeof NotFound>()
   })
 })

@@ -74,6 +74,7 @@
     "check-pause": "node test/browser/check-pause.mjs",
     "check-scale": "node test/browser/check-scale.mjs",
     "check-scrub": "node test/browser/check-scrub.mjs",
+    "check-workbench": "node test/browser/check-workbench.mjs",
     "build": "tsc -b tsconfig.json && pnpm babel && pnpm build-viewer",
     "build-viewer": "node scripts/build-viewer.mjs",
     "babel": "babel dist --plugins annotate-pure-calls --out-dir dist --source-maps",

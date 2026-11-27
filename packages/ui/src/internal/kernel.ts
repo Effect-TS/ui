@@ -206,9 +206,26 @@ export interface Runs {
   >
 }
 
+/**
+ * Opt-in phase timing. Each hook gets the `now` reading from before its
+ * phase, and `now` is read only for phases with a hook. `flush` gets `held`
+ * when a transition holds the flush, which resumes later.
+ *
+ * @internal
+ */
+export interface Slow {
+  readonly now: () => bigint
+  readonly update?:
+    | ((from: bigint, inst: Instance, message: unknown) => void)
+    | undefined
+  readonly view?: ((from: bigint, inst: Instance) => void) | undefined
+  readonly flush?: ((from: bigint, held?: boolean) => void) | undefined
+}
+
 /** @internal */
 export interface Tree {
   readonly host: Host
+  readonly slow?: Slow | undefined
   readonly report: (
     path: string,
     where: FailedIn,
@@ -342,22 +359,31 @@ export class Instance {
       (view.alive === undefined && this.under || this.parent!.path) + "/" +
       segmentOf(view.component, view.key)
   }
+  /**
+   * The message `handler` produces, unsent: `undefined` when it produces none, fails or the instance is closed.
+   * `read` is called only for a function handler, and a failed read is the handler's failure.
+   */
+  message(
+    handler: unknown,
+    read: () => unknown,
+    where: FailedIn = "event"
+  ): unknown {
+    if (this.closed) return undefined
+    if (typeof handler !== "function") return handler
+    try {
+      return handler(read())
+    } catch (error) {
+      fail(this, where, Cause.die(error))
+      return undefined
+    }
+  }
   fire(
     handler: unknown,
     payload: unknown,
     source: unknown,
     where: FailedIn = "event"
   ): boolean {
-    if (this.closed) return false
-    let message = handler
-    if (typeof handler === "function") {
-      try {
-        message = handler(payload)
-      } catch (error) {
-        fail(this, where, Cause.die(error))
-        return false
-      }
-    }
+    const message = this.message(handler, () => payload, where)
     if (message === undefined) return false
     send(this, message, source)
     return true
@@ -578,6 +604,8 @@ export const send = (
   }
   renderAbove(inst)
   if (inst.closed) return
+  const slow = inst.tree.slow
+  const from = slow?.update && slow.now()
   let next: Next | undefined
   try {
     next = inst.component.update(
@@ -590,6 +618,7 @@ export const send = (
   } catch (error) {
     return fail(inst, "update", Cause.die(error), { message, source })
   }
+  if (from !== undefined) slow!.update!(from, inst, message)
   if (next === undefined) return
   const seq = inst.tree.log?.(inst, {
     _tag: "Update",
@@ -719,13 +748,17 @@ const renderDirty = (inst: Instance): void => {
 }
 
 /** @internal */
-export const flush = (tree: Tree): void => {
+export const flush = (
+  tree: Tree,
+  from = tree.slow?.flush && tree.slow.now()
+): void => {
   tree.scheduled = true
   tree.flushing = true
   for (;;) {
     if (tree.closed) return
     if (tree.transitions?.hold()) {
       tree.flushing = false
+      if (from !== undefined) tree.slow!.flush!(from, true)
       return
     }
     const batch = tree.dirty
@@ -754,6 +787,7 @@ export const flush = (tree: Tree): void => {
     tree.committed = undefined
     for (let index = 0; index < committed.length; index++) committed[index]!()
   }
+  if (from !== undefined) tree.slow!.flush!(from)
 }
 
 // A view is called through this, as it may have a `call` of its own.
@@ -785,8 +819,11 @@ export const draw = (
 }
 
 const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
+  const slow = inst.tree.slow
+  const from = slow?.view && slow.now()
   try {
     const tree = draw(inst, inst.component, inst)
+    if (from !== undefined) slow!.view!(from, inst)
     if (dev && tree !== undefined) {
       const author = checkPaths(inst, tree)
       if (author !== undefined) inst.tree.schedule(() => recheckPlaced(author))
@@ -1336,6 +1373,14 @@ const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
   }
 }
 
+const applyProps = (inst: Instance, props: unknown): boolean => {
+  if (inst.closed || propsEqual(inst.props, props)) return false
+  inst.props = props
+  inst.tree.log?.(inst, { _tag: "PropsChanged", props })
+  inst.component["~sync"]?.(inst)
+  return !inst.closed
+}
+
 /** @internal */
 export const patchChild = (
   inst: Instance,
@@ -1369,17 +1414,8 @@ export const patchChild = (
       : patch(inst, shown[0]!, fallbackOf(inst, view, child.failure))
     return old
   }
+  const changed = applyProps(child, view.props)
   if (child.closed) return old
-  const changed = !propsEqual(child.props, view.props)
-  if (changed) {
-    child.props = view.props
-    const log = inst.tree.log
-    if (log !== undefined) {
-      log(child, { _tag: "PropsChanged", props: view.props })
-    }
-    child.component["~sync"]?.(child)
-    if (child.closed) return old
-  }
   if (changed || view.view !== undefined) {
     if (child === receiving) markDirty(child)
     else render(child)
@@ -1719,12 +1755,14 @@ const increasing = (sources: Int32Array): Array<number> => {
 export interface Root {
   readonly instance: Instance
   readonly send: (message: unknown, source?: unknown) => void
+  readonly setProps: (props: unknown) => void
   readonly close: () => void
 }
 
 /** @internal */
 export interface Options {
   readonly report: Tree["report"]
+  readonly slow?: Slow | undefined
   readonly path?: string | undefined
   readonly context?: Context.Context<any> | undefined
   readonly log?: Recorder | undefined
@@ -1745,6 +1783,8 @@ export const mount = (
   host: Host,
   options: Options
 ): Root => {
+  // The first mount is timed as one flush, from its first `init`.
+  const from = options.slow?.flush && options.slow.now()
   const tree: Tree = {
     ...options,
     host,
@@ -1773,10 +1813,13 @@ export const mount = (
     instance.rendered = stand(instance, instance.failure!)
   }
   place(host, container, instance.rendered!, null)
-  flush(tree)
+  flush(tree, from)
   return {
     instance,
     send: (message, source) => send(instance, message, source),
+    setProps: (props) => {
+      if (applyProps(instance, props)) markDirty(instance)
+    },
     close: () => {
       if (tree.closed) return
       tree.closed = true

@@ -147,7 +147,7 @@ Tests need no Vitest config: `pnpm vitest` runs Stories, Scenes and Plays in Nod
 | [`file-preview`](examples/file-preview)                   | File picker reading local files with `HtmlFiles` and switch-mode `Command`s                  |
 | [`interrupting-commands`](examples/interrupting-commands) | Concurrent uploads demonstrating `Command` interruption and `@effect/ui-devtools`            |
 | [`launch`](examples/launch)                               | The launch site deployed to [ui.effect.website](https://ui.effect.website)                   |
-| [`routing`](examples/routing)                             | Typed routes, lazy-loaded pages, `Query`, and `NavigationMenu`                               |
+| [`routing`](examples/routing)                             | Typed routes, lazy-loaded pages, `Query`, and `NavigationLinks`                              |
 | [`snake`](examples/snake)                                 | Snake game with keyboard Subscriptions, timers, and `@effect/ui-devtools`                    |
 | [`snake-tui`](examples/snake-tui)                         | Terminal port of `snake` using `@effect/ui-opentui` and `DevToolsHeadless`                   |
 | [`virtual-list`](examples/virtual-list)                   | Demos of `@effect/ui-kit`'s `VirtualList`: see [its README](examples/virtual-list/README.md) |

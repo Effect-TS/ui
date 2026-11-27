@@ -233,10 +233,13 @@ import {
   dismissSpan
 } from "./internal/blocker.ts"
 import {
+  focusedOf,
   focusFinal,
   isElement,
   isHTMLElement,
-  override
+  listenTrees,
+  override,
+  rootOf
 } from "./internal/dom.ts"
 import {
   autofillMatch,
@@ -837,17 +840,18 @@ const watch = (
 ) =>
   Stream.callback<SelectMessage>((queue) => {
     const document = node.ownerDocument
+    const root = rootOf(node)
     const view = document.defaultView
     const html = document.documentElement
     const frame = frameOf(view)
     let current = args
     const send = (message: SelectMessage) => Queue.offerUnsafe(queue, message)
     const trigger = (): HTMLElement | null =>
-      document.getElementById(current.triggerId)
+      root.getElementById(current.triggerId)
     const popup = (): HTMLElement =>
-      document.getElementById(current.popupId) ?? node
+      root.getElementById(current.popupId) ?? node
     const scroller = (): HTMLElement =>
-      document.getElementById(current.listId) ?? popup()
+      root.getElementById(current.listId) ?? popup()
     const inside = (target: Node): boolean =>
       (node.contains(target) && !blocking.is(target)) ||
       trigger()?.contains(target) === true
@@ -925,7 +929,7 @@ const watch = (
       try {
         const text = current.alignId === null
           ? null
-          : document.getElementById(current.alignId)?.querySelector<
+          : root.getElementById(current.alignId)?.querySelector<
             HTMLElement
           >("[data-select-item-text]") ?? null
         const value = anchor.querySelector<HTMLElement>("[data-select-value]")
@@ -1067,23 +1071,23 @@ const watch = (
       if (!current.open) return
       const item = current.active === null
         ? null
-        : document.getElementById(current.active)
+        : root.getElementById(current.active)
       if (item === null) {
-        if (document.activeElement !== popup()) {
+        if (focusedOf(node) !== popup()) {
           popup().focus({
             preventScroll: true
           })
         }
         return
       }
-      if (document.activeElement !== item) item.focus({ preventScroll: true })
+      if (focusedOf(node) !== item) item.focus({ preventScroll: true })
       if (scroll) item.scrollIntoView({ block: "nearest" })
     }
 
     const reveal = () =>
       frame(() => {
         if (current.open && current.active !== null) {
-          document.getElementById(current.active)?.scrollIntoView({
+          root.getElementById(current.active)?.scrollIntoView({
             block: "nearest"
           })
         }
@@ -1137,12 +1141,12 @@ const watch = (
     const closing = () => {
       clearTimeout(timer)
       stopArrow()
-      const focused = document.activeElement
+      const focused = focusedOf(node)
       const lost = focused === null || focused === document.body ||
         node.contains(focused)
       if (current.finalFocus && (lost || !current.focusLeft)) {
         focusFinal(
-          document,
+          root,
           current.popupId,
           trigger(),
           lost,
@@ -1287,25 +1291,17 @@ const watch = (
 
     return Effect.acquireRelease(
       Effect.sync(() => {
-        listenOutside(document, signal, {
+        listenOutside(node, signal, {
           open: () => current.open,
           inside,
           pressed: (pointerType) =>
             send(SelectMessage.PressedOutside({ pointerType })),
           focused: () => send(SelectMessage.FocusedOutside())
         })
-        document.addEventListener("pointerdown", onPointerDown, {
-          capture: true,
-          signal
-        })
-        document.addEventListener("mouseup", onMouseUp, {
-          capture: true,
-          signal
-        })
-        document.addEventListener("focusin", onFocusIn, {
-          capture: true,
-          signal
-        })
+        const captured = { capture: true, signal }
+        document.addEventListener("pointerdown", onPointerDown, captured)
+        listenTrees(node, "mouseup", onMouseUp, captured)
+        listenTrees(node, "focusin", onFocusIn, captured)
         node.addEventListener("pointermove", onPointerMove, { signal })
         node.addEventListener("mousemove", onMouseMove, { signal })
         node.addEventListener("mouseleave", stopArrow, { signal })
@@ -1323,9 +1319,7 @@ const watch = (
       }).pipe(
         Effect.tap(() =>
           Effect.forkScoped(Stream.runForEach(changes, (next) =>
-            Effect.sync(() =>
-              onChange(next)
-            )))
+            Effect.sync(() => onChange(next))))
         )
       ),
       () =>

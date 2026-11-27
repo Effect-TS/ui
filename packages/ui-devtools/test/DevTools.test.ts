@@ -6,6 +6,7 @@ import { HtmlLocator } from "@effect/ui/html/testing"
 import { afterEach, assert, describe, it } from "@effect/vitest"
 import { Effect, Exit, Layer, Schema, Scope } from "effect"
 import { type Capture, play } from "./fixtures/TwoEditors.ts"
+import { playTwoWrites, secret } from "./fixtures/TwoWrites.ts"
 
 const wait = (ms: number) =>
   Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, ms)))
@@ -1471,4 +1472,202 @@ describe("DevTools overlay", { concurrent: false }, () => {
         assert.isNull(document.querySelector("[data-effect-ui-devtools]"))
       }
     }))
+
+  it.live("shows declared payload fields on rows and filters across instances when clicked", () =>
+    Effect.gen(function*() {
+      yield* Layer.build(
+        DevTools.layer({ fields: ["commandId", "secret"] })
+      ).pipe(
+        Effect.flatMap((services) =>
+          playTwoWrites().pipe(Effect.provide(services))
+        )
+      )
+      yield* settle
+      const root = overlay()
+      yield* open(root)
+      const cmd = (id: string) =>
+        HtmlLocator.queryAllByRole(root, "button", { name: new RegExp(id) })
+
+      assert.notInclude(root.textContent, secret)
+      assert.strictEqual(cmd("cmd-1").length, 4)
+
+      yield* showActive(root)
+      yield* click(instance(root, "Feed[a]"))
+      assert.deepStrictEqual(
+        new Set(Array.from(root.querySelectorAll(".row .who"), text)),
+        new Set(["Feed[a]"])
+      )
+      yield* click(cmd("cmd-1")[0]!)
+
+      const rows = Array.from(root.querySelectorAll(".row"))
+      assert.strictEqual(rows.length, 4)
+      assert.deepStrictEqual(
+        new Set(rows.map((row) => text(row.querySelector(".who")))),
+        new Set(["Board", "Feed[a]", "Feed[b]"])
+      )
+      assert.strictEqual(cmd("cmd-2").length, 0)
+
+      yield* click(
+        cmd("commandId.*cmd-1").find((node) => !node.closest(".row"))!
+      )
+      assert.strictEqual(cmd("cmd-2").length, 4)
+    }))
+
+  it.live("picks a page element to scope its instance without reaching the app, and cancels picking with Escape", () =>
+    Effect.gen(function*() {
+      const { app, memory, root } = yield* mount("open")
+      sized(root)
+      const updates = () =>
+        memory.entries().filter((entry) => entry._tag === "Update").length
+      const pickButton = () =>
+        HtmlLocator.getByRole(root, "button", {
+          name: /pick/i
+        }) as HTMLButtonElement
+
+      // Escape inside the overlay iframe cancels picking started from the launcher.
+      yield* click(pickButton())
+      assert.strictEqual(pickButton().getAttribute("aria-pressed"), "true")
+      const view = root.ownerDocument.defaultView!
+      pickButton().dispatchEvent(
+        new view.KeyboardEvent("keydown", {
+          key: "Escape",
+          bubbles: true,
+          composed: true,
+          cancelable: true
+        })
+      )
+      yield* settle
+      assert.strictEqual(pickButton().getAttribute("aria-pressed"), "false")
+      assert.isNull(root.querySelector(".panel"))
+
+      // An entry selected before picking gives way to the picked instance's.
+      yield* click(
+        HtmlLocator.getByRole(root, "button", {
+          name: "Open the Effect UI inspector"
+        })
+      )
+      yield* click(oldest(root, /Mounted/))
+      assert.strictEqual(text(root.querySelector(".crumbs")), "Workspace")
+
+      const before = updates()
+      const saveN1 = HtmlLocator.getByRole(app, "button", { name: "Save n1" })
+      yield* click(pickButton())
+      yield* click(saveN1)
+      assert.strictEqual(updates(), before)
+      assert.isNotNull(root.querySelector(".panel"))
+      assert.strictEqual(pickButton().getAttribute("aria-pressed"), "false")
+      assert.strictEqual(
+        instance(root, "Editor[n1]").getAttribute("aria-pressed"),
+        "true"
+      )
+      assert.strictEqual(
+        text(root.querySelector(".crumbs")),
+        "Workspace/Editor[n1]"
+      )
+
+      // Escape on the host document also cancels picking without reaching the app.
+      yield* click(pickButton())
+      assert.strictEqual(pickButton().getAttribute("aria-pressed"), "true")
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Escape",
+          bubbles: true,
+          cancelable: true
+        })
+      )
+      yield* settle
+      assert.strictEqual(pickButton().getAttribute("aria-pressed"), "false")
+      assert.strictEqual(updates(), before)
+
+      yield* click(oldest(root, /Mounted$/))
+      yield* click(
+        HtmlLocator.getByRole(root, "button", { name: "Time travel" })
+      )
+      assert.isTrue(pickButton().disabled)
+    }))
+
+  it.live("keeps the pick outline on the element under the pointer when the page scrolls", () =>
+    Effect.gen(function*() {
+      const { app, root } = yield* mount("open")
+      const saveN1 = HtmlLocator.getByRole(app, "button", { name: "Save n1" })
+      const saveN2 = HtmlLocator.getByRole(app, "button", { name: "Save n2" })
+      let scrolled = 0
+      const tops = new Map([[saveN1, 100], [saveN2, 140]])
+      for (const [button, top] of tops) {
+        button.getBoundingClientRect = () =>
+          new DOMRect(0, top - scrolled, 80, 30)
+      }
+      const under = (y: number) =>
+        Array.from(tops).find(([, top]) =>
+          y >= top - scrolled && y < top - scrolled + 30
+        )?.[0] ?? null
+      Object.defineProperty(document, "elementFromPoint", {
+        configurable: true,
+        value: (_x: number, y: number) => under(y)
+      })
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => delete (document as any).elementFromPoint)
+      )
+      const box = () =>
+        document.querySelector<HTMLElement>(
+          "[data-effect-ui-devtools-highlight]"
+        )
+      const move = (target: Element) =>
+        target.dispatchEvent(
+          new PointerEvent("pointermove", {
+            bubbles: true,
+            clientX: 10,
+            clientY: 110
+          })
+        )
+
+      yield* click(HtmlLocator.getByRole(root, "button", { name: /pick/i }))
+      move(saveN1)
+      assert.strictEqual(box()?.style.top, "100px")
+      assert.strictEqual(text(box()), "/Workspace/Editor[n1]")
+
+      // The row moves up under the pointer: still Save n1, at its new place.
+      scrolled = 5
+      move(saveN1)
+      assert.strictEqual(box()?.style.top, "95px")
+
+      // Scrolled further with the pointer still, Save n2 is now under it.
+      scrolled = 40
+      app.dispatchEvent(new Event("scroll"))
+      assert.strictEqual(box()?.style.top, "100px")
+      assert.strictEqual(text(box()), "/Workspace/Editor[n2]")
+    }).pipe(Effect.scoped))
+
+  it.live("follows the newest root again when the picked root unmounts", () =>
+    Effect.gen(function*() {
+      localStorage.clear()
+      const services = yield* Layer.build(DevTools.layer())
+      const first = yield* Scope.make()
+      const a = yield* play("open").pipe(
+        Effect.provide(services),
+        Scope.provide(first)
+      )
+      yield* settle
+      const root = overlay()
+      sized(root)
+      yield* click(HtmlLocator.getByRole(root, "button", { name: /pick/i }))
+      yield* click(HtmlLocator.getByRole(a, "button", { name: "Save n1" }))
+      assert.strictEqual(
+        instance(root, "Editor[n1]").getAttribute("aria-pressed"),
+        "true"
+      )
+
+      yield* Scope.close(first, Exit.void)
+      yield* play("open").pipe(Effect.provide(services))
+      yield* settle
+      // The timeline is the new root's, which has no Unmounted entry, and unscoped.
+      assert.lengthOf(
+        HtmlLocator.queryAllByRole(root, "button", { name: /Unmounted/ }),
+        0
+      )
+      assert.strictEqual(
+        instance(root, "Editor[n1]").getAttribute("aria-pressed"),
+        "false"
+      )
+    }).pipe(Effect.scoped))
 })

@@ -3,22 +3,33 @@ import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer"
 import { Command, MessageLog, Query, UiSchema } from "@effect/ui"
 import { DevTools, Inspector } from "@effect/ui-devtools"
+import * as Control from "@effect/ui-devtools/internal/control"
 import * as Mcp from "@effect/ui-devtools/internal/mcp"
 import * as Remote from "@effect/ui-devtools/internal/remote"
 import * as Server from "@effect/ui-devtools/internal/server"
 import { DevToolsServer, DevToolsVite } from "@effect/ui-devtools/node"
-import { Html } from "@effect/ui/html"
-import type * as BrowserHost from "@effect/ui/html/BrowserHost"
+import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Context, Effect, Layer, Schedule, Schema, Stream } from "effect"
+import {
+  Context,
+  Effect,
+  Exit,
+  Layer,
+  Schedule,
+  Schema,
+  SchemaGetter,
+  Scope,
+  Stream
+} from "effect"
 import { McpClient, McpProtocol } from "effect/ai"
 import { HttpRouter } from "effect/http"
 import { AsyncResult } from "effect/reactivity"
 import * as Socket from "effect/socket/Socket"
 import { createServer, request } from "node:http"
 import type { AddressInfo } from "node:net"
-import { type Capture, play } from "./fixtures/TwoEditors.ts"
+import { type Capture, EditorMessage, play } from "./fixtures/TwoEditors.ts"
+import { playTwoWrites, secret } from "./fixtures/TwoWrites.ts"
 
 const wait = (ms: number) =>
   Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, ms)))
@@ -236,6 +247,7 @@ const fakePage = Effect.fnUntraced(function*(
     resume: Effect.void,
     notRecording: () => [],
     setRecording: () => {},
+    picks: () => [],
     changes: Stream.never
   }).pipe(Effect.provide(Socket.layerWebSocketConstructorGlobal))
   yield* wait(100)
@@ -266,6 +278,8 @@ describe("DevToolsServer", { concurrent: false }, () => {
           "resume",
           "set_recording",
           "get_message_schema",
+          "find_instances",
+          "get_picked",
           "dispatch",
           "wait"
         ])
@@ -653,6 +667,24 @@ describe("DevToolsServer", { concurrent: false }, () => {
           tag: "UpdatedDraft"
         })
         assert.include(JSON.stringify(schema), "text")
+        const allSchemas = yield* agent.call("get_message_schema", {
+          instance: n1
+        })
+        assert.deepStrictEqual(
+          allSchemas.examples.map((entry: any) =>
+            entry.message._tag
+          ),
+          Object.keys(EditorMessage.cases)
+        )
+        const decodeEditor = Schema.decodeUnknownSync(
+          Schema.toCodecJson(EditorMessage)
+        )
+        for (const entry of allSchemas.examples) {
+          assert.isUndefined(entry.redacted)
+          assert.isUndefined(entry.invalid)
+          assert.doesNotThrow(() => decodeEditor(entry.message))
+        }
+
         const unknownTag = yield* agent.fails("get_message_schema", {
           instance: n1,
           tag: "Nope"
@@ -677,9 +709,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
         })
         assert.strictEqual(sent.applied, 2)
         assert.deepStrictEqual(
-          sent.outcomes.map((outcome: any) =>
-            outcome._tag
-          ),
+          sent.outcomes.map((outcome: any) => outcome._tag),
           ["Updated", "Updated"]
         )
         const update = yield* agent.call("get_entry", {
@@ -705,6 +735,127 @@ describe("DevToolsServer", { concurrent: false }, () => {
         const pending = yield* agent.call("wait", { timeout: 50 })
         assert.isFalse(pending.settled)
         assert.strictEqual(pending.open.length, 1)
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
+    "returns validated, redacted, and invalid examples from get_message_schema",
+    () =>
+      Effect.gen(function*() {
+        // The JSON form: the JSON Schema drops a Redacted example.
+        const sampled = Schema.Struct({ token: Schema.Redacted(Schema.String) })
+          .pipe(
+            Schema.annotateEncoded({ examples: [{ token: "sample" }] as never })
+          )
+        const SampleMessage = UiSchema.TaggedEnum({
+          SelectedItem: {
+            index: Schema.Number,
+            maybeLabel: Schema.Option(Schema.String),
+            tags: Schema.Array(Schema.String)
+          },
+          SavedCredential: {
+            token: Schema.Redacted(Schema.String),
+            email: Schema.String.check(Schema.isPattern(/^\S+@\S+$/))
+          },
+          Impossible: { never: Schema.Never },
+          // Decodes as -0, but the client receives 0.
+          NegativeZero: {
+            point: Schema.Struct({
+              x: Schema.Finite.check(Schema.makeFilter((n) => Object.is(n, -0)))
+            }).pipe(Schema.annotateEncoded({ examples: [{ x: -0 }] as never }))
+          },
+          Truncated: { data: Schema.Struct({ "~truncated": Schema.Int }) },
+          Sampled: { payload: sampled },
+          // Decodes, but can't be encoded to mark the token.
+          Unencodable: {
+            payload: sampled,
+            extra: Schema.String.pipe(Schema.decodeTo(Schema.String, {
+              decode: SchemaGetter.passthrough(),
+              encode: SchemaGetter.forbidden(() => "no")
+            }))
+          }
+        }).annotate({ identifier: "app/SampleMessage" })
+        const Sample = Html.component({
+          name: "Sample",
+          model: Schema.Struct({ count: Schema.Number }),
+          message: SampleMessage
+        }).make({
+          init: () => ({ count: 0 }),
+          update: ($) => ({ count: $.model.count + 1 }),
+          view: (h, model) => h.p(String(model.count))
+        })
+
+        const { agent, url } = yield* serve()
+        localStorage.clear()
+        const services = yield* Layer.build(DevTools.layer({ server: url }))
+        const app = document.body.appendChild(document.createElement("div"))
+        yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+        yield* BrowserHost.mountEffect(Sample, {}, app).pipe(
+          Effect.provide(services)
+        )
+        yield* wait(150)
+
+        const [{ instance }] = yield* agent.call<ReadonlyArray<any>>(
+          "list_instances"
+        )
+        const all = yield* agent.call("get_message_schema", { instance })
+        assert.strictEqual(all.examples.length, 7)
+        const [
+          selected,
+          savedCredential,
+          impossible,
+          negativeZero,
+          truncated,
+          sampledEntry,
+          unencodable
+        ] = all.examples
+
+        assert.deepStrictEqual(selected, {
+          message: {
+            _tag: "SelectedItem",
+            index: 0,
+            maybeLabel: { _tag: "Some", value: "" },
+            tags: [""]
+          }
+        })
+        const filtered = yield* agent.call("get_message_schema", {
+          instance,
+          tag: "SelectedItem"
+        })
+        assert.deepStrictEqual(filtered.examples, [selected])
+
+        assert.deepStrictEqual(savedCredential.message, {
+          _tag: "SavedCredential",
+          token: { "~redacted": true },
+          email: ""
+        })
+        assert.isTrue(savedCredential.redacted)
+        assert.include(savedCredential.invalid, "email")
+
+        assert.strictEqual(impossible.tag, "Impossible")
+        assert.isUndefined(impossible.message)
+        assert.isString(impossible.invalid)
+
+        assert.deepStrictEqual(sampledEntry, {
+          message: {
+            _tag: "Sampled",
+            payload: { token: { "~redacted": true } }
+          },
+          redacted: true
+        })
+        assert.strictEqual(unencodable.tag, "Unencodable")
+        assert.isUndefined(unencodable.message)
+        assert.notInclude(unencodable.invalid, "sample")
+        assert.deepStrictEqual(negativeZero.message, {
+          _tag: "NegativeZero",
+          point: { x: 0 }
+        })
+        assert.include(negativeZero.invalid, "x")
+
+        assert.deepStrictEqual(truncated, {
+          message: { _tag: "Truncated", data: { "~truncated": 0 } }
+        })
       }).pipe(Effect.scoped),
     30_000
   )
@@ -832,6 +983,47 @@ describe("DevToolsServer", { concurrent: false }, () => {
   )
 
   it.live(
+    "keeps a pick the page reports before the session's first log frame",
+    () =>
+      Effect.gen(function*() {
+        const { agent, url } = yield* serveFast(300)
+        const control = yield* connectSocket(
+          url.replace("http", "ws") + "/control"
+        )
+        const pick = {
+          session: "s",
+          tag: "button",
+          instance: 1,
+          path: "/App",
+          component: "App"
+        }
+        control.send(
+          JSON.stringify({
+            _tag: "State",
+            sessions: ["s"],
+            paused: null,
+            notRecording: [],
+            picks: [pick]
+          })
+        )
+        yield* wait(100)
+        const log = yield* connectSocket(url.replace("http", "ws") + "/log")
+        log.send(JSON.stringify({ _tag: "Hello", version: 1, host: "test" }))
+        log.send(
+          JSON.stringify({ _tag: "SessionStarted", ...at, seq: 0, app: "App" })
+        )
+        yield* wait(100)
+        assert.deepStrictEqual(
+          yield* agent.call("get_picked", { session: "s" }),
+          pick
+        )
+        log.close()
+        control.close()
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
     "adds no meta tag when the plugin's port is taken, and injects overlay and hot modules unless disabled",
     () =>
       Effect.gen(function*() {
@@ -849,7 +1041,9 @@ describe("DevToolsServer", { concurrent: false }, () => {
                   warn: (message) => warnings.push(message)
                 }
               },
-              httpServer: { once: (_, listener) => close = listener }
+              httpServer: { once: (_, listener) => close = listener },
+              middlewares: { use: () => {} },
+              transformIndexHtml: async (_, html) => html
             })
             yield* Effect.addFinalizer(() => Effect.sync(close))
             return { plugin, warnings }
@@ -1001,7 +1195,8 @@ describe("DevToolsServer", { concurrent: false }, () => {
             _tag: "State",
             sessions: ["s"],
             paused: null,
-            notRecording: []
+            notRecording: [],
+            picks: []
           })
         )
         yield* wait(100)
@@ -1040,7 +1235,8 @@ describe("DevToolsServer", { concurrent: false }, () => {
             _tag: "State",
             sessions: ["s"],
             paused: { session: "s", seq: 0, fellBack: [], fallbacks: [] },
-            notRecording: []
+            notRecording: [],
+            picks: []
           })
         )
         yield* wait(100)
@@ -1139,6 +1335,140 @@ describe("DevToolsServer", { concurrent: false }, () => {
           seq: 5,
           reason: "evicted"
         }])
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
+    "filters list_entries by declared and ad-hoc payload fields across instances",
+    () =>
+      Effect.gen(function*() {
+        localStorage.clear()
+        const { agent, url } = yield* serve({
+          fields: ["commandId", "secret"]
+        })
+        const services = yield* Layer.build(DevTools.layer({ server: url }))
+        yield* playTwoWrites().pipe(Effect.provide(services))
+        yield* wait(150)
+        const list = (name: string, value: unknown) =>
+          agent.call("list_entries", { field: { name, value } })
+
+        const cmd1 = yield* list("commandId", "cmd-1")
+        assert.deepStrictEqual(
+          cmd1.rows.map((row: any) => [row.tag, row.path, row.fields]).sort(),
+          [
+            ["CommandEnded", "/Board", { commandId: "cmd-1" }],
+            ["CommandStarted", "/Board", { commandId: "cmd-1" }],
+            ["Update", "/Board/Feed[a]", { commandId: "cmd-1" }],
+            ["Update", "/Board/Feed[b]", { commandId: "cmd-1" }]
+          ]
+        )
+
+        const byAttempt = yield* list("attempt", 1)
+        assert.strictEqual(byAttempt.total, 4)
+        assert.strictEqual(byAttempt.rows[0].fields.attempt, 1)
+        assert.strictEqual((yield* list("attempt", "1")).total, 0)
+
+        assert.strictEqual((yield* list("secret", secret)).total, 0)
+        assert.notInclude(agent.results.join("\n"), secret)
+
+        const fields = ["owner's id", "a&b", "$&"]
+        const page = new DOMParser().parseFromString(
+          Control.metaTag({ fields }),
+          "text/html"
+        )
+        assert.deepStrictEqual(
+          JSON.parse(page.querySelector("meta")!.content).fields,
+          fields
+        )
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
+    "finds owning instances by CSS selector without exposing element text, and returns the last picked element after the tab closes",
+    () =>
+      Effect.gen(function*() {
+        const { agent, url } = yield* serve()
+        for (const name of ["find_instances", "get_picked"]) {
+          assert.isTrue(
+            agent.tools.find((tool) => tool.name === name)?.annotations
+              ?.readOnlyHint
+          )
+        }
+
+        const decoy = document.body.insertBefore(
+          document.createElement("button"),
+          document.body.firstChild
+        )
+        yield* Effect.addFinalizer(() => Effect.sync(() => decoy.remove()))
+
+        const scope = yield* Scope.make()
+        const app = yield* open(url, "open").pipe(Scope.provide(scope))
+        const [session] = yield* agent.call<ReadonlyArray<any>>("list_sessions")
+        const instances: ReadonlyArray<any> = yield* agent.call(
+          "list_instances"
+        )
+        const n1 = instances.find((instance) =>
+          instance.path === "/Workspace/Editor[n1]"
+        )
+
+        // find_instances keeps only matches in the root, reports their
+        // document.querySelectorAll index, and omits DOM text.
+        const buttons = yield* agent.call("find_instances", {
+          selector: "button"
+        })
+        assert.strictEqual(buttons.total, 4)
+        assert.deepStrictEqual(buttons.matches[0], {
+          tag: "button",
+          instance: n1.instance,
+          path: "/Workspace/Editor[n1]",
+          component: "Editor",
+          index: 1
+        })
+        assert.notInclude(JSON.stringify(buttons), "Save n1")
+        assert.notInclude(JSON.stringify(buttons), token)
+
+        yield* agent.fails("find_instances", { selector: "[invalid" })
+
+        const extra = document.createElement("div")
+        for (let i = 0; i < 25; i++) {
+          extra.appendChild(document.createElement("span")).className = "many"
+        }
+        app.querySelector("section")!.appendChild(extra)
+        const capped = yield* agent.call("find_instances", {
+          selector: ".many"
+        })
+        assert.strictEqual(capped.total, 25)
+        assert.lengthOf(capped.matches, 20)
+
+        // get_picked returns null before picking, then the picked metadata,
+        // and still answers after the tab closes.
+        assert.isNull(yield* agent.call("get_picked"))
+        const root = overlay()
+        HtmlLocator.click(
+          HtmlLocator.getByRole(root, "button", { name: /pick/i })
+        )
+        yield* wait(20)
+        HtmlLocator.click(
+          HtmlLocator.getByRole(app, "button", { name: "Save n1" })
+        )
+        yield* wait(100)
+        const picked = yield* agent.call("get_picked")
+        assert.deepInclude(picked, {
+          tag: "button",
+          instance: n1.instance,
+          path: "/Workspace/Editor[n1]",
+          component: "Editor"
+        })
+        assert.notInclude(JSON.stringify(picked), "Save n1")
+
+        yield* Scope.close(scope, Exit.void)
+        yield* wait(100)
+        const afterClose = yield* agent.call("get_picked", {
+          session: session.session
+        })
+        assert.deepStrictEqual(afterClose, picked)
       }).pipe(Effect.scoped),
     30_000
   )

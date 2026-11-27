@@ -2,13 +2,15 @@
  * @title Testing @effect/ui components
  *
  * Test a component's logic as a `Story`, its view as a `Scene`, a Command
- * against a fake Layer, and components working together as a `Play`. The
+ * against a fake Layer, and a wrapper with its headless part as a `Play`. A
+ * `Case` names one state for a Play and for the browser's workbench. The
  * last test renders on the server and hydrates with `ssr`.
  */
 // @vitest-environment happy-dom
 import { Component, Router } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 import { HtmlLocator, HtmlPlay, HtmlScene, ssr } from "@effect/ui/html/testing"
-import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
+import { Case, Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
@@ -17,6 +19,7 @@ import { TestClock } from "effect/testing"
 // to what it tests: `notes/components/NoteEditor.story.test.ts` and
 // `App.play.test.ts`.
 import type { Note } from "#domain/Note"
+import { ListNotes } from "#queries/ListNotes"
 import { App } from "./fixtures/App.ts"
 import { Collapsible } from "./fixtures/kit/Collapsible.ts"
 import {
@@ -26,6 +29,10 @@ import {
   NoteEditorNoDeps,
   SaveNote
 } from "./fixtures/notes/components/NoteEditor.ts"
+import {
+  NoteLinkPickerEvents,
+  NoteLinkPickerNoDeps
+} from "./fixtures/notes/components/NoteLinkPicker.ts"
 import { Notes } from "./fixtures/notes/services/Notes.ts"
 import { NotePageNoDeps } from "./fixtures/pages/notes/NotePage.ts"
 import { NotesIndexNoDeps } from "./fixtures/pages/NotesIndex.ts"
@@ -88,6 +95,32 @@ describe("NoteEditor", () => {
       // When the test ends, the end check fails if a Command is still
       // pending or an event isn't acknowledged.
     }))
+
+  it("story: every order of edits, saves and results within four steps", () => {
+    // Messages can arrive while saves run. Explore tries their settlement
+    // orders and throws a shortest failing path as Story steps.
+    const { closed } = Story.explore(NoteEditor, { note }, {
+      messages: [
+        NoteEditorMessage.UpdatedBody({ body: edited.body }),
+        NoteEditorMessage.RequestedSave()
+      ],
+      // A function takes the Command's args. A Command issued with no entry
+      // fails the search, unless it is a silent `Command.Service`.
+      commands: [[SaveNote, {
+        success: ({ note }) => [
+          NoteEditorMessage.SucceededSaveNote({ note }),
+          NoteEditorMessage.FailedSaveNote({ reason: "offline" })
+        ]
+      }]],
+      // Checked after every move, before its events are acknowledged.
+      invariant: (story) =>
+        story.emitted.every((event) => event.note.body === story.model.saved),
+      depth: 4
+    })
+    // `closed` says no move leads to a record not seen yet, so the rule holds
+    // at any length. `edits` counts every keystroke, so this one never closes.
+    assert.isFalse(closed)
+  })
 
   it.effect("scene: saves the draft and tells its parent", () =>
     Effect.gen(function*() {
@@ -318,6 +351,116 @@ it.layer(Notes.layerMemory([note]).pipe(Layer.provideMerge(TestHost.layer())), {
       }))
   }
 )
+
+// For a wrapper around a headless or `@effect/ui-kit` part, test each event
+// it maps in `onEmit` and the props it feeds back. Locate controls by ARIA
+// role and name. Test the part's keyboard navigation, highlight and typeahead
+// in the part itself. Omitting an `onEmit` handler is already a compile error.
+//
+// This test provides a no-op `Html.Host` for `Listbox`'s focus and scroll
+// commands. It checks wrapper state and events, not browser focus.
+const otherNote: Note = { id: "n2", title: "Recipes", body: "Soup" }
+
+const NoopHtmlHost = Layer.succeed(Html.Host, {
+  focus: () => {},
+  blur: () => {},
+  scrollIntoView: () => {},
+  measure: () => ({
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: 0,
+    height: 0
+  }),
+  select: () => {},
+  requestSubmit: () => false,
+  showPicker: () => false
+})
+
+it.layer(
+  Layer.mergeAll(
+    ListNotes.toLayer(() => Effect.succeed([note, otherNote])),
+    TestHost.layer(),
+    NoopHtmlHost
+  ),
+  { buildPerTest: true }
+)(
+  "NoteLinkPicker",
+  (it) => {
+    it.effect("links the picked note", () =>
+      Effect.gen(function*() {
+        const play = yield* HtmlPlay.make(NoteLinkPickerNoDeps, {
+          noteId: note.id
+        })
+        // Pick a note to exercise the wrapper's `Picked` handler.
+        yield* play.keydown(
+          HtmlLocator.role("button", { name: "Link to a note…" }),
+          "ArrowDown"
+        )
+        yield* play.keydown(
+          HtmlLocator.role("combobox", { name: "Filter notes" }),
+          "Enter"
+        )
+        const trigger = HtmlLocator.role("button", {
+          name: `Linked: ${otherNote.title}`
+        })
+        assert.deepStrictEqual(play.root.emitted, [
+          NoteLinkPickerEvents.Linked({ id: otherNote.id })
+        ])
+        // Reopen by click to check the `selected` prop fed back by the wrapper.
+        // `ArrowDown` would move past that option.
+        yield* play.click(trigger)
+        yield* play.expect(
+          HtmlLocator.role("option", { name: /^Recipes/ })
+        ).toHaveAttribute("aria-selected", "true")
+      }))
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Case: a state written once, for a test and for the browser.
+// ---------------------------------------------------------------------------
+
+// A Case names one state of a component: its props and, optionally, a Model
+// to start from, messages sent once it mounts and a Layer to provide.
+// `HtmlPlay.fromCase` (or `Play.fromCase`) starts a Play from one. With
+// `DevToolsVite.plugin({ workbench: { cases: "/src/**/*.cases.ts" } })` the
+// dev server shows each at `/__workbench/NoteEditor/<key>`, and
+// `BrowserCase.mount` mounts one into any element. In an app the cases go
+// in `NoteEditor.cases.ts`, which the workbench finds by its exports.
+const NoteEditorCases = Case.make(NoteEditorTest, {
+  clean: { props: { note }, layer: Notes.layerMemory([note]) },
+  edited: {
+    props: { note },
+    messages: [NoteEditorMessage.UpdatedBody({ body: edited.body })],
+    layer: Notes.layerMemory([note])
+  },
+  failed: {
+    props: { note },
+    model: {
+      draft: edited.body,
+      saved: note.body,
+      edits: 1,
+      error: "Offline",
+      confirming: false,
+      actionsOpen: false
+    },
+    layer: Notes.layerMemory([note])
+  }
+})
+
+it.layer(TestHost.layer())("NoteEditor's cases", (it) => {
+  it.effect("start from their message or Model", () =>
+    Effect.gen(function*() {
+      const edits = yield* HtmlPlay.fromCase(NoteEditorCases.edited)
+      yield* edits.expect(body).toHaveValue(edited.body)
+      const failed = yield* HtmlPlay.fromCase(NoteEditorCases.failed)
+      yield* failed.expect(HtmlLocator.role("alert")).toHaveText("Offline")
+    }))
+})
 
 // The app is tested as it ships, so its components keep their own domain
 // Layers. The test provides what an entry module provides. `Router.memory`

@@ -14,8 +14,6 @@ export type Listener = (payload: unknown, preventDefault: () => void) => void
 const key = defaults.keyPayload("", undefined)
 const pointerEvents: ReadonlySet<string> = new Set([
   "click",
-  "mousedown",
-  "mouseup",
   "pointerup",
   "pointercancel"
 ])
@@ -26,9 +24,9 @@ const pointerEvents: ReadonlySet<string> = new Set([
  *
  * `listening` is asked for a phase's listeners as the phase starts, as a
  * browser reads them, so a bubble listener the capture phase added hears the
- * event. Each gets `given` over a key's or a pointer's defaults, with
- * `defaultPrevented` true when given so or once an earlier listener
- * cancelled.
+ * event. Each gets `given` over a key's or a pointer's defaults and a
+ * `timeStamp` of `0`, with `defaultPrevented` true when given so or once an
+ * earlier listener cancelled.
  *
  * @internal
  */
@@ -39,6 +37,8 @@ export const fire = (
 ): boolean => {
   const defaults = event === "keydown" || event === "keyup"
     ? key
+    : event === "mousedown" || event === "mouseup"
+    ? scene.mouse
     : pointerEvents.has(event)
     ? scene.pointer
     : undefined
@@ -52,7 +52,9 @@ export const fire = (
   for (const capture of [true, false]) {
     for (const listener of listening(capture)) {
       listener({
+        modal: false,
         ...defaults,
+        timeStamp: 0,
         ...given,
         defaultPrevented: prevented || cancelled
       }, preventDefault)

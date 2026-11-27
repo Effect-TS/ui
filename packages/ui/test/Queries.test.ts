@@ -12,7 +12,7 @@ import { Html } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Schema, Tracer } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
 
@@ -761,6 +761,57 @@ describe("a query without onChange", { concurrent: false }, () => {
           assert.deepStrictEqual(replay.props, { id: "2" })
           assert.strictEqual(noteOf(replay), "Note 2")
         }
+      })
+    )
+  })
+
+  it.effect("traces each fetch under a span named after the query, and a command's work under its span", () => {
+    const app = makeApp()
+    const spans: Array<Tracer.Span> = []
+    return run(
+      Layer.mergeAll(
+        app.GetNote.toLayer(() =>
+          Effect.withSpan(Effect.succeed("Note"), "rpc GetNote")
+        ),
+        app.Touch.toLayer(() => Effect.withSpan(Effect.void, "rpc Touch"))
+      ),
+      Effect.gen(function*() {
+        const tracer = yield* Effect.tracer
+        yield* Effect.gen(function*() {
+          const root = yield* TestHost.mount(app.Note, { id: "1" })
+          yield* TestHost.settle
+          root.send(app.NoteMessage.Touch())
+          yield* TestHost.settle
+        }).pipe(Effect.provideService(
+          Tracer.Tracer,
+          Tracer.make({
+            span: (options) => {
+              const span = tracer.span(options)
+              spans.push(span)
+              return span
+            }
+          })
+        ))
+        // Each span's parent, as an index into `spans`: -1 for a root.
+        const parent = (span: Tracer.Span) =>
+          span.parent._tag === "Some"
+            ? spans.indexOf(span.parent.value as Tracer.Span)
+            : -1
+        assert.deepStrictEqual(
+          spans.map((span) => [
+            span.name,
+            span.attributes.get("trigger"),
+            parent(span)
+          ]),
+          [
+            ["notes/GetNote", "watch", -1],
+            ["rpc GetNote", undefined, 0],
+            ["notes/Touch", undefined, -1],
+            ["rpc Touch", undefined, 2],
+            ["notes/GetNote", "invalidation", -1],
+            ["rpc GetNote", undefined, 4]
+          ]
+        )
       })
     )
   })

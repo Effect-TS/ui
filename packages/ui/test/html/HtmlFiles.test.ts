@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
 import { UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlCommand, HtmlFiles } from "@effect/ui/html"
+import { TestFiles } from "@effect/ui/html/testing"
 import { assert, describe, expect, it } from "@effect/vitest"
 import { Effect, Fiber, Layer, Schema } from "effect"
+import { vi } from "vitest"
 
 const pickers = Effect.acquireRelease(
   Effect.sync(() => {
@@ -251,4 +253,43 @@ describe("HtmlFiles", { concurrent: false }, () => {
       ])
       expect(fileClicks).toBe(1)
     }).pipe(Effect.scoped))
+
+  it.effect("BrowserHost's download clicks a detached anchor named after the file and revokes its URL later", () =>
+    Effect.gen(function*() {
+      yield* Effect.acquireRelease(
+        Effect.sync(() => vi.useFakeTimers({ toFake: ["setTimeout"] })),
+        () =>
+          Effect.sync(() => {
+            vi.restoreAllMocks()
+            vi.useRealTimers()
+          })
+      )
+      const click = vi.spyOn(window.HTMLAnchorElement.prototype, "click")
+        .mockImplementation(() => {})
+      const revoke = vi.spyOn(window.URL, "revokeObjectURL")
+      const context = yield* Layer.build(BrowserHost.layer())
+      yield* HtmlFiles.download(new File(["{}"], "backup.json")).pipe(
+        Effect.provide(context)
+      )
+      assert.strictEqual(click.mock.calls.length, 1)
+      const anchor = click.mock.contexts[0] as HTMLAnchorElement
+      expect([
+        anchor.isConnected,
+        anchor.download,
+        anchor.href.startsWith("blob:")
+      ])
+        .toEqual([false, "backup.json", true])
+      expect(revoke).not.toHaveBeenCalled()
+      vi.runAllTimers()
+      expect(revoke).toHaveBeenCalledWith(anchor.href)
+    }).pipe(Effect.scoped))
+
+  it.effect("TestFiles records download requests", () =>
+    Effect.gen(function*() {
+      const file = new File(["{\"ok\":true}"], "backup.json", {
+        type: "application/json"
+      })
+      yield* HtmlFiles.download(file)
+      assert.deepStrictEqual(yield* TestFiles.downloads, [file])
+    }).pipe(Effect.provide(TestFiles.layer)))
 })

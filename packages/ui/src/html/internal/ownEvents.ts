@@ -32,6 +32,9 @@ export const bubblingEvents: ReadonlySet<string> = new Set([
   "mousedown",
   "mouseup",
   "pointerdown",
+  "pointermove",
+  "pointerup",
+  "pointercancel",
   "keydown",
   "keyup",
   "focusin",
@@ -46,6 +49,7 @@ export const bubblingEvents: ReadonlySet<string> = new Set([
   "input",
   "change",
   "compositionend",
+  "selectionchange",
   "submit",
   "reset",
   "slotchange"

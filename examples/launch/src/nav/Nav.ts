@@ -1,6 +1,6 @@
 import { Section } from "#domain/Section"
 import { Component, Subscription, UiSchema } from "@effect/ui"
-import { Collapsible, NavigationMenu } from "@effect/ui-kit"
+import { Collapsible, NavigationLinks } from "@effect/ui-kit"
 import { Html, HtmlCommand, HtmlSubscription } from "@effect/ui/html"
 import { Array, Option, Schema, Stream } from "effect"
 
@@ -95,7 +95,7 @@ export const Nav = Html.component({
         Settled: () => undefined
       },
       view: (collapsible) =>
-        NavigationMenu(h, {
+        NavigationLinks(h, {
           props: { orientation: "vertical" },
           view: (menu) =>
             collapsible.root(

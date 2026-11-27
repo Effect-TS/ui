@@ -1,6 +1,6 @@
 import { addSearchToHistory } from "#domain/SearchHistory"
 import { Component, Head, Router, UiSchema } from "@effect/ui"
-import { NavigationMenu } from "@effect/ui-kit"
+import { NavigationLinks } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Array, Schema, String } from "effect"
 import { FilesIndexPage } from "./pages/files/FilesIndexPage.ts"
@@ -104,20 +104,20 @@ export const App = AppDef.make({
   view: (h, { route, searchHistory, searchInput }) =>
     h.div.class("min-h-screen bg-gray-100").children(
       h.header.children(
-        NavigationMenu(h, {
-          view: (navigationMenu) =>
-            navigationMenu.root(
+        NavigationLinks(h, {
+          view: (navigationLinks) =>
+            navigationLinks.root(
               h.nav.class("bg-blue-500 text-white p-4 mb-6").attr(
                 "aria-label",
                 "Main"
               )
             ).children(
-              navigationMenu.list(
+              navigationLinks.list(
                 h.ul.class("max-w-4xl mx-auto flex gap-6 list-none")
               ).children(
                 navLinks(route).map(({ active, inSection, label, to }) =>
-                  navigationMenu.item(h.li.key(label)).children(
-                    navigationMenu.link({
+                  navigationLinks.item(h.li.key(label)).children(
+                    navigationLinks.link({
                       element: h.a.attr("href", AppRoute.print(to))
                         .class(
                           "hover:bg-blue-600 font-medium px-3 py-1 rounded transition data-active:bg-blue-700/50",

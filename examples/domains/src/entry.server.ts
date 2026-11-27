@@ -28,8 +28,7 @@ export default Layer.mergeAll(
   layerHttp(App, {
     routes: AppRoute,
     budget: "300 millis",
-    document: page,
-    static: import.meta.env.PROD
+    document: page
   })
 ).pipe(Layer.provide(Domains.layerSample))
 

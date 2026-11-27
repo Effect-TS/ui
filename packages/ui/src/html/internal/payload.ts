@@ -7,9 +7,10 @@ const HTML = "http://www.w3.org/1999/xhtml"
 /**
  * The `pointerType` of a click-like event's payload. A click with `detail`
  * 0, or a pointer event with an empty `pointerType`, came from no pointer:
- * the keyboard, or a script. Otherwise the last `pointerdown` says which
- * pointer it was, since a browser may report a tap's `click` as a mouse's,
- * as WebKit does. Without one, the event's own type, and `"mouse"` last.
+ * the keyboard, or a script. A pointer event reports its own type. Otherwise
+ * the last `pointerdown` says which pointer it was, since a browser may
+ * report a tap's `click` as a mouse's, as WebKit does. Without one, the
+ * event's own type, and `"mouse"` last.
  */
 const pressedWith = (
   name: string,
@@ -20,7 +21,7 @@ const pressedWith = (
   if (own === "" || (name === "click" && (event as MouseEvent).detail === 0)) {
     return ""
   }
-  return last ?? own ?? "mouse"
+  return (name.startsWith("pointer") ? own : last ?? own) ?? "mouse"
 }
 
 const fieldsOf = (
@@ -53,15 +54,15 @@ const controlPayload = (
   const e = event as Partial<InputEvent> | undefined
   const composing = e?.isComposing === true
   const inputType = typeof e?.inputType === "string" ? e.inputType : ""
+  const edit = { composing, inputType, ...selectionOf(control) }
   return control.localName === "input"
     ? {
       value: control.value,
       checked: control.checked === true,
       files: control.files ? Array.from(control.files) : noFiles,
-      composing,
-      inputType
+      ...edit
     }
-    : { value: String(control.value ?? ""), composing, inputType }
+    : { value: String(control.value ?? ""), ...edit }
 }
 
 const noFiles: ReadonlyArray<File> = []
@@ -147,6 +148,52 @@ const fieldOf = (
     ? target
     : element) as HTMLInputElement
 
+const composingCodes = new Set<string>()
+// Cache the result after releasing the key so all listeners of the event agree.
+const composingKeyups = new WeakSet<Event>()
+
+// Safari reports the key that ends a composition with `isComposing` false and `keyCode` 229.
+const isComposingKey = (event: KeyboardEvent): boolean =>
+  event.isComposing === true ||
+  (event as { readonly keyCode?: number }).keyCode === 229
+
+// Observe releases outside the host too, since focus can move while a key is held.
+// Window blur clears pending keys whose releases may occur in another window or frame.
+let watched: Window | null = null
+const watch = (view: Window | null): void => {
+  if (view === watched) return
+  watched?.removeEventListener("keyup", noteKey, true)
+  watched?.removeEventListener("blur", forgetKeys)
+  view?.addEventListener("keyup", noteKey, true)
+  view?.addEventListener("blur", forgetKeys)
+  watched = view
+}
+const forgetKeys = (): void => {
+  composingCodes.clear()
+  watch(null)
+}
+
+/**
+ * Preserves `composing: true` for a commit key released after `compositionend`.
+ * Call for both keydown and keyup before reading the event payload.
+ */
+export const noteKey = (event: Event): void => {
+  const e = event as KeyboardEvent
+  if (!e.code) return
+  if (e.type === "keydown" && isComposingKey(e)) {
+    const node = event.target as Node
+    watch((node.ownerDocument ?? node as Document).defaultView ?? null)
+    composingCodes.add(e.code)
+    return
+  }
+  // Auto-repeat after compositionend still belongs to the held commit key.
+  if (e.type === "keydown" && e.repeat) return
+  if (composingCodes.delete(e.code)) {
+    if (e.type === "keyup") composingKeyups.add(event)
+    if (composingCodes.size === 0) watch(null)
+  }
+}
+
 /**
  * Builds the payload a handler gets: plain data, read from the event and the
  * elements involved.
@@ -165,14 +212,16 @@ export const payloadOf = (
     case "mousedown":
     case "mouseup":
     case "pointerdown":
+    case "pointermove":
     case "pointerup":
     case "pointercancel": {
-      const e = event as MouseEvent
+      const e = event as PointerEvent
       return {
         button: e.button ?? 0,
         x: e.clientX ?? 0,
         y: e.clientY ?? 0,
         ...modifiers(event),
+        pointerId: e.pointerId ?? -1,
         pointerType: pressedWith(name, event, pointer)
       }
     }
@@ -184,13 +233,10 @@ export const payloadOf = (
     case "keydown":
     case "keyup": {
       const e = event as KeyboardEvent
-      // Safari reports the key that ends a composition with `isComposing` false and `keyCode` 229.
-      const composing = e.isComposing === true ||
-        (e as { readonly keyCode?: number }).keyCode === 229
       return {
         key: e.key ?? "",
         ...modifiers(event),
-        composing,
+        composing: isComposingKey(e) || composingKeyups.has(event),
         repeat: e.repeat === true,
         editable: isEditable(event.composedPath()[0] ?? target),
         ...selectionOf(target)
@@ -201,6 +247,8 @@ export const payloadOf = (
       return controlPayload(fieldOf(target, element), event)
     case "compositionend":
       return { value: String(fieldOf(target, element).value ?? "") }
+    case "selectionchange":
+      return selectionOf(element)
     case "paste":
       return { text: pastedText(event) }
     case "submit": {

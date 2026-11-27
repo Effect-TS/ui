@@ -6,7 +6,8 @@ import { Effect, Layer, Schema } from "effect"
 import { HttpRouter } from "effect/http"
 import { App, AppRoute, People } from "./fixtures/routed.ts"
 
-describe("HtmlServerHttp.layerHttp", () => {
+// Sequential: the base test sets the base of the shared `AppRoute`.
+describe("HtmlServerHttp.layerHttp", { concurrent: false }, () => {
   const request = async (
     pages: Layer.Layer<never, never, HttpRouter.HttpRouter>,
     path: string
@@ -137,5 +138,66 @@ describe("HtmlServerHttp.layerHttp", () => {
       AppRoute.Person({ params: { id: 9 } }),
       AppRoute.NotFound({ params: { "*": "nowhere" } })
     ])
+  })
+
+  it("serves routes under a base that lasts while the Layer is built", async () => {
+    const docs = layerHttp(App, {
+      routes: AppRoute,
+      document,
+      base: "/docs/"
+    }).pipe(Layer.provide(People.layer))
+
+    const person = await request(docs, "/docs/people/1")
+    assert.strictEqual(person.status, 200)
+    assert.include(person.body, "href=\"/docs/people/1\"")
+    assert.strictEqual((await request(docs, "/people/1")).status, 404)
+
+    // A reloaded dev entry is built before the one it replaces is disposed,
+    // and a subset shares the union's base.
+    const subset = layerHttp(App, {
+      routes: AppRoute.subset(["Home", "Person", "Search", "Slow", "NotFound"]),
+      document,
+      base: "/next/"
+    }).pipe(Layer.provide(People.layer))
+    const [first, second] = [docs, subset].map((layer) =>
+      HttpRouter.toWebHandler(layer, { disableLogger: true })
+    )
+    await first!.handler(new Request("http://localhost/docs/"))
+    await second!.handler(new Request("http://localhost/next/"))
+    await first!.dispose()
+    assert.strictEqual(AppRoute.base(), "/next/")
+    await second!.dispose()
+    assert.strictEqual(AppRoute.base(), "")
+  })
+
+  it("keeps apart the bases of adapters that share a setter but not a union", async () => {
+    const forward = {
+      setBase(this: { readonly to: typeof AppRoute }, base: string) {
+        this.to.setBase(base)
+      }
+    }
+    const other = Route.union(AppRoute.routes)
+    const adapt = (to: typeof AppRoute): typeof AppRoute =>
+      ({ ...to, to, ...forward }) as never
+    const [first, second] = [
+      [adapt(AppRoute), "/docs/"],
+      [adapt(other as never), "/next/"]
+    ].map(([routes, base]) =>
+      HttpRouter.toWebHandler(
+        layerHttp(App, {
+          routes: routes as typeof AppRoute,
+          document,
+          base: base as string
+        }).pipe(Layer.provide(People.layer)),
+        { disableLogger: true }
+      )
+    )
+    await first!.handler(new Request("http://localhost/docs/"))
+    await second!.handler(new Request("http://localhost/next/"))
+    await first!.dispose()
+    assert.strictEqual(AppRoute.base(), "")
+    assert.strictEqual(other.base(), "/next/")
+    await second!.dispose()
+    assert.strictEqual(other.base(), "")
   })
 })

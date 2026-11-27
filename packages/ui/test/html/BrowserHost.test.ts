@@ -18,12 +18,17 @@ import {
   Html,
   HtmlCommand,
   HtmlHydrate,
+  HtmlKeyboard,
   HtmlScheduler,
   HtmlServer,
   HtmlSubscription
 } from "@effect/ui/html"
-import { HtmlLocator, TestAnimationFrames } from "@effect/ui/html/testing"
-import { TestHost } from "@effect/ui/testing"
+import {
+  BrowserCase,
+  HtmlLocator,
+  TestAnimationFrames
+} from "@effect/ui/html/testing"
+import { Case, TestHost } from "@effect/ui/testing"
 import { assert, expect, it } from "@effect/vitest"
 import {
   Cause,
@@ -126,6 +131,29 @@ describe("BrowserHost", { concurrent: false }, () => {
       ])
       delete (document as { visibilityState?: unknown }).visibilityState
     }))
+
+  it.effect("runs a props Effect once, so props that are an Effect stay data", () =>
+    Effect.gen(function*() {
+      const Lazy = Component.define({
+        name: "Lazy",
+        props: Schema.declare((u): u is Effect.Effect<never, string> =>
+          Effect.isEffect(u)
+        ),
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.text("mounted")
+      })
+      const app = yield* container
+      yield* BrowserHost.mountEffect(
+        Lazy,
+        Effect.succeed(Effect.fail("ran inner")),
+        app
+      )
+      expect(app.textContent).toBe("mounted")
+    }).pipe(Effect.scoped))
 
   it.live("runs Commands on HtmlScheduler unless the caller provides a Scheduler", () =>
     Effect.gen(function*() {
@@ -933,6 +961,62 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(app.innerHTML).toBe("<div><span>two</span></div>")
       }).pipe(Effect.scoped))
 
+    it.effect("a focused row keeps focus when a keyed reorder moves it", () =>
+      Effect.gen(function*() {
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Lists, {}, app)
+        const ul = app.querySelector("ul")!
+        const a = ul.firstElementChild as HTMLElement
+        a.tabIndex = 0
+        a.focus()
+        root.send(ListMessage.Set({ rows: ["b", "c", "a"] }))
+        yield* tick
+        expect(Array.from(ul.children, (li) => li.textContent))
+          .toEqual(["b", "c", "a"])
+        expect(ul.lastElementChild).toBe(a)
+        expect(document.activeElement).toBe(a)
+        // Code that runs during the move, like a blur handler, keeps the focus it gives.
+        const other = yield* container
+        other.tabIndex = 0
+        customElements.define(
+          "focus-other",
+          class extends HTMLElement {
+            disconnectedCallback() {
+              other.focus()
+            }
+          }
+        )
+        a.append(document.createElement("focus-other"))
+        root.send(ListMessage.Set({ rows: ["a", "b", "c"] }))
+        yield* tick
+        expect(document.activeElement).toBe(other)
+      }).pipe(Effect.scoped))
+
+    it.effect("a keyed reorder uses moveBefore when the parent supports it", () =>
+      Effect.gen(function*() {
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Lists, {}, app)
+        const ul = app.querySelector("ul")!
+        const a = ul.firstElementChild!
+        const moved: Array<[globalThis.Node, globalThis.Node | null]> = []
+        ul.moveBefore = (node, before) => {
+          moved.push([node, before])
+          ul.insertBefore(node, before)
+        }
+        root.send(ListMessage.Set({ rows: ["b", "c", "a"] }))
+        yield* tick
+        expect(moved).toEqual([[a, null]])
+        moved.length = 0
+        root.send(ListMessage.Set({ rows: ["b", "c", "a", "d"] }))
+        yield* tick
+        expect(moved).toEqual([])
+        // A form control named `moveBefore` shadows the method.
+        Object.assign(ul, { moveBefore: document.createElement("input") })
+        root.send(ListMessage.Set({ rows: ["a", "b", "c", "d"] }))
+        yield* tick
+        expect(ul.firstElementChild).toBe(a)
+      }).pipe(Effect.scoped))
+
     it.effect("a custom element's class is set as an attribute, whatever its className does", () =>
       Effect.gen(function*() {
         const seen: Array<string | null> = []
@@ -1344,11 +1428,13 @@ describe("BrowserHost", { concurrent: false }, () => {
               h.input.attr("aria-label", "First"),
               h.input.attr("aria-label", "Second")
             ),
-          h.button.on("click", ({ pointerType }) =>
-            Message.PointerClicked({ pointerType }))
-            .on("pointerdown", ({ button, pointerType }) =>
+          h.button.on("click", ({ pointerId, pointerType }) =>
+            Message.PointerClicked({
+              pointerType: `${pointerType} ${pointerId}`
+            }))
+            .on("pointerdown", ({ button, pointerId, pointerType }) =>
               Message.PointerClicked({
-                pointerType: `down ${button} ${pointerType}`
+                pointerType: `down ${button} ${pointerType} ${pointerId}`
               }))
             .children("Pointer"),
           h.input.attr("aria-label", "Keys")
@@ -1614,6 +1700,21 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(root.model()).toEqual(["hit"])
       }).pipe(Effect.scoped))
 
+    it.effect("a constant message is sent without reading the event", () =>
+      Effect.gen(function*() {
+        const read = vi.spyOn(globalThis, "FormData")
+        yield* Effect.addFinalizer(() => Effect.sync(() => read.mockRestore()))
+        const Page = logPage((h) => h.el("form").on("submit", "sent"))
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Page, {}, app)
+        app.querySelector("form")!.dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true })
+        )
+        yield* tick
+        expect(root.model()).toEqual(["sent"])
+        expect(read).not.toHaveBeenCalled()
+      }).pipe(Effect.scoped))
+
     // A custom element that submits its form once it is in the document, and keeps whether the app took it.
     const prevented: Array<boolean> = []
     customElements.define(
@@ -1630,12 +1731,15 @@ describe("BrowserHost", { concurrent: false }, () => {
       const [name, form] of [
         [
           "a form the patch inserts",
-          (h: any, after: boolean) => after ? h.el("form") : h.el("div")
+          (h: any, after: boolean) =>
+            after ? h.el("form").attr("method", "dialog") : h.el("div")
         ],
         [
           "a form whose submit handler the patch takes away",
           (h: any, after: boolean) =>
-            after ? h.el("form") : h.el("form").on("submit", "sent")
+            after
+              ? h.el("form").attr("method", "dialog")
+              : h.el("form").on("submit", "sent")
         ]
       ] as const
     ) {
@@ -1707,7 +1811,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         assert.strictEqual(app.querySelectorAll("p").length, 2)
       }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 
-    it.effect("a pointerdown reports its button and pointer, and a click the pointer of the pointerdown before it, or none from the keyboard", () =>
+    it.effect("a pointerdown reports its button, pointer and id, and a click the pointer of the pointerdown before it, or none from the keyboard, and no id", () =>
       Effect.gen(function*() {
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Events, {}, app)
@@ -1722,6 +1826,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         button.dispatchEvent(
           new PointerEvent("pointerdown", {
             bubbles: true,
+            pointerId: 2,
             pointerType: "touch"
           })
         )
@@ -1732,18 +1837,19 @@ describe("BrowserHost", { concurrent: false }, () => {
           new PointerEvent("pointerdown", {
             bubbles: true,
             button: 2,
+            pointerId: 3,
             pointerType: "pen"
           })
         )
         click(1)
         yield* tick
         expect(root.model()).toEqual([
-          "mouse",
-          "down 0 touch",
-          "touch",
-          "",
-          "down 2 pen",
-          "pen"
+          "mouse -1",
+          "down 0 touch 2",
+          "touch -1",
+          " -1",
+          "down 2 pen 3",
+          "pen -1"
         ])
       }).pipe(Effect.scoped))
 
@@ -1945,7 +2051,8 @@ describe("BrowserHost", { concurrent: false }, () => {
                 saw("key")
               ),
             h.textarea.attr("aria-label", "Area").on("input", saw("input"))
-              .on("compositionend", saw("compositionend")),
+              .on("compositionend", saw("compositionend"))
+              .on("selectionchange", saw("selectionchange")),
             h.input.attrs({ type: "checkbox", "aria-label": "Box" }).on(
               "keydown",
               saw("key")
@@ -1992,15 +2099,15 @@ describe("BrowserHost", { concurrent: false }, () => {
           )
           yield* tick
           expect(root.model()).toEqual([
-            `input {"value":"ka","checked":false,"files":[],"composing":true,"inputType":"insertCompositionText"}`,
+            `input {"value":"ka","checked":false,"files":[],"composing":true,"inputType":"insertCompositionText","selectionStart":2,"selectionEnd":2}`,
             `compositionend {"value":"ka"}`,
-            `change {"value":"ka","checked":false,"files":[],"composing":false,"inputType":""}`,
-            `input {"value":"auto","composing":false,"inputType":"insertReplacementText"}`,
+            `change {"value":"ka","checked":false,"files":[],"composing":false,"inputType":"","selectionStart":2,"selectionEnd":2}`,
+            `input {"value":"auto","composing":false,"inputType":"insertReplacementText","selectionStart":4,"selectionEnd":4}`,
             `compositionend {"value":"auto"}`
           ])
         }).pipe(Effect.scoped))
 
-      it.effect("a key reports the selection of a text field, and none for a button or a checkbox", () =>
+      it.effect("keys and selectionchange report the selection of a text field, and none for a button or a checkbox", () =>
         Effect.gen(function*() {
           const app = yield* container
           const shadowHost = yield* container
@@ -2030,6 +2137,12 @@ describe("BrowserHost", { concurrent: false }, () => {
             HtmlLocator.getByRole(app, "button", { name: "Button" }),
             "Enter"
           )
+          const area = HtmlLocator.getByRole(app, "textbox", {
+            name: "Area"
+          }) as HTMLTextAreaElement
+          area.value = "hello"
+          area.setSelectionRange(3, 5)
+          area.dispatchEvent(new Event("selectionchange", { bubbles: true }))
           const keyEvent = new KeyboardEvent("keydown", {
             key: "ArrowLeft",
             bubbles: true,
@@ -2051,12 +2164,17 @@ describe("BrowserHost", { concurrent: false }, () => {
           const selectionOf = (entries: ReadonlyArray<string>) =>
             entries.map((entry) => {
               const { selectionEnd, selectionStart } = JSON.parse(
-                entry.slice(4)
+                entry.slice(entry.indexOf(" ") + 1)
               )
               return [selectionStart, selectionEnd]
             })
           const selections = selectionOf(root.model()!)
-          expect(selections).toEqual([[1, 4], [null, null], [null, null]])
+          expect(selections).toEqual([
+            [1, 4],
+            [null, null],
+            [null, null],
+            [3, 5]
+          ])
           expect(selectionOf(shadowRoot.model()!)).toEqual([[0, 0]])
         }).pipe(Effect.scoped))
 
@@ -2202,6 +2320,136 @@ describe("BrowserHost", { concurrent: false }, () => {
           ])
         }).pipe(Effect.scoped))
 
+      it.effect("document listeners receive the DOM event timeStamp", () =>
+        Effect.gen(function*() {
+          const app = yield* container
+          const Stamps = Html.component({
+            name: "Stamps",
+            model: Schema.Array(Schema.Number),
+            message: Schema.Number
+          }).make({
+            init: (): ReadonlyArray<number> => [],
+            update: ($, stamp) => [...$.model, stamp],
+            view: (h) => h.div(),
+            subscriptions: () => [
+              HtmlSubscription.onDocument(
+                "keydown",
+                ({ timeStamp }) => timeStamp
+              )
+            ]
+          })
+          const root = yield* BrowserHost.mountEffect(Stamps, {}, app)
+          yield* tick
+          const event = new KeyboardEvent("keydown", {
+            key: "g",
+            bubbles: true
+          })
+          document.body.dispatchEvent(event)
+          yield* tick
+          expect(root.model()).toEqual([event.timeStamp])
+        }).pipe(Effect.scoped))
+
+      it.effect("a keyup reports composing when the keydown of the same key composed, until that keyup or the window losing focus, with only keyup handled", () =>
+        Effect.gen(function*() {
+          const Released = Html.component({
+            name: "Released",
+            props: Schema.Struct({ watch: Schema.Boolean }),
+            model: Schema.Array(Schema.String),
+            message: Schema.String
+          }).make({
+            init: (): ReadonlyArray<string> => [],
+            update: ($, entry) => [...$.model, entry],
+            view: (h) =>
+              h.div(
+                h.input.attr("aria-label", "Text").on(
+                  "keyup",
+                  ({ composing, key }) => `el:${key}:${composing}`
+                ),
+                h.button.children("Sibling")
+              ),
+            subscriptions: ({ props }) =>
+              props.watch
+                ? [
+                  HtmlSubscription.onDocument(
+                    "keyup",
+                    ({ composing, key }) => `doc:${key}:${composing}`
+                  )
+                ]
+                : []
+          })
+          const fire = (
+            target: Element,
+            type: string,
+            init: KeyboardEventInit
+          ) =>
+            target.dispatchEvent(
+              new KeyboardEvent(type, { bubbles: true, code: "Enter", ...init })
+            )
+          // Chrome on Windows reports the keydown that commits as "Process", and
+          // its keyup, after compositionend, as a plain Enter.
+          const commit = (text: Element) => {
+            fire(text, "keydown", {
+              key: "Process",
+              isComposing: true,
+              keyCode: 229
+            })
+            text.dispatchEvent(
+              new CompositionEvent("compositionend", { bubbles: true })
+            )
+          }
+          const released = Effect.fnUntraced(
+            function*(watch: boolean, keys: (text: HTMLElement) => void) {
+              const app = yield* container
+              const root = yield* BrowserHost.mountEffect(
+                Released,
+                { watch },
+                app
+              )
+              yield* tick
+              const text = HtmlLocator.getByRole(app, "textbox", {
+                name: "Text"
+              })
+              text.focus()
+              keys(text)
+              yield* tick
+              return root.model()
+            },
+            Effect.scoped
+          )
+          expect(
+            yield* released(true, (text) => {
+              // The commit key held while focus moves and another key is pressed.
+              commit(text)
+              const sibling = text.nextElementSibling as HTMLElement
+              sibling.focus()
+              fire(sibling, "keydown", { key: "Shift", code: "ShiftLeft" })
+              fire(sibling, "keyup", { key: "Shift", code: "ShiftLeft" })
+              fire(sibling, "keydown", { key: "Enter", repeat: true })
+              text.focus()
+              fire(text, "keyup", { key: "Enter" })
+            })
+          ).toEqual(["doc:Shift:false", "el:Enter:true", "doc:Enter:true"])
+          const outside = (yield* container).appendChild(
+            document.createElement("button")
+          )
+          expect(
+            yield* released(false, (text) => {
+              // The commit key released outside the host, then pressed again
+              // there before focus comes back.
+              commit(text)
+              outside.focus()
+              fire(outside, "keyup", { key: "Enter" })
+              fire(outside, "keydown", { key: "Enter" })
+              text.focus()
+              fire(text, "keyup", { key: "Enter" })
+              // The window losing focus while the commit key is held.
+              commit(text)
+              window.dispatchEvent(new FocusEvent("blur"))
+              fire(text, "keyup", { key: "Enter" })
+            })
+          ).toEqual(["el:Enter:false", "el:Enter:false"])
+        }).pipe(Effect.scoped))
+
       it.effect("a composing field's value isn't written until compositionend, including inside shadow DOM", () =>
         Effect.gen(function*() {
           const Typed = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
@@ -2319,11 +2567,11 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(root.model()).toEqual(["submit Hello [a,b]"])
       }).pipe(Effect.scoped))
 
-    it.effect("an unhandled form is prevented only for same-window GET and dialog; handled forms always are; forms outside the app aren't", () =>
+    it.effect("an unhandled form is prevented only for dialog; handled forms always are; forms outside the app aren't", () =>
       Effect.gen(function*() {
         const app = yield* container
         const outside = yield* container
-        outside.innerHTML = "<form></form>"
+        outside.innerHTML = `<form method="dialog"></form>`
         // `Events` handles submit on its own form, so the document listener is already there.
         yield* BrowserHost.mountEffect(Events, {}, app)
         const Forms = Html.component({
@@ -2335,17 +2583,17 @@ describe("BrowserHost", { concurrent: false }, () => {
           update: ($) => $.model,
           view: (h) =>
             h.div(
-              h.form.attr("aria-label", "Bare").children(
-                h.input.attr("name", "q"),
-                h.button.attrs({ type: "submit", formmethod: "post" })
-                  .children("Post"),
-                h.button.attrs({ type: "submit", formtarget: "_blank" })
-                  .children("New tab")
+              h.form.attrs({
+                "aria-label": "Get",
+                method: "get",
+                action: "/settings"
+              }).children(
+                h.input.attrs({ type: "hidden", name: "tools", value: "1" }),
+                h.button.attrs({ type: "submit", formmethod: "dialog" })
+                  .children("Close")
               ),
-              h.form.attrs({ "aria-label": "Invalid", method: "put" }),
-              h.form.attrs({ "aria-label": "Dialog", method: "dialog" }),
-              h.form.attrs({ "aria-label": "Post", method: "post" }),
-              h.form.attrs({ "aria-label": "Blank", target: "_blank" }),
+              // An upper-case tag is still a form.
+              h.el("FORM").attrs({ "aria-label": "Dialog", method: "dialog" }),
               h.form.attrs({ "aria-label": "Handled post", method: "post" })
                 .on("submit", "Submitted")
             )
@@ -2366,40 +2614,17 @@ describe("BrowserHost", { concurrent: false }, () => {
         }
         const form = (name: string) =>
           HtmlLocator.getByRole(mounted, "form", { name }) as HTMLFormElement
-        const bare = form("Bare")
-        expect(submitted(bare)).toBe(true)
+        const get = form("Get")
+        expect(submitted(get)).toBe(false)
         expect(
           submitted(
-            bare,
-            HtmlLocator.getByRole(bare, "button", { name: "Post" })
+            get,
+            HtmlLocator.getByRole(get, "button", { name: "Close" })
           )
-        ).toBe(false)
-        expect(
-          submitted(
-            bare,
-            HtmlLocator.getByRole(bare, "button", { name: "New tab" })
-          )
-        ).toBe(false)
-        expect(submitted(form("Invalid"))).toBe(true)
+        ).toBe(true)
         expect(submitted(form("Dialog"))).toBe(true)
-        expect(submitted(form("Post"))).toBe(false)
-        expect(submitted(form("Blank"))).toBe(false)
         expect(submitted(form("Handled post"))).toBe(true)
         expect(submitted(outside.querySelector("form")!)).toBe(false)
-        // The tag as the author wrote it isn't what makes it a form.
-        const Upper = Html.component({
-          name: "Upper",
-          model: Schema.Null,
-          message: Schema.Never
-        })
-          .make({
-            init: () => null,
-            update: ($) => $.model,
-            view: (h) => h.el("FORM", h.input.attr("name", "q"))
-          })
-        const upper = yield* container
-        yield* BrowserHost.mountEffect(Upper, {}, upper)
-        expect(submitted(upper.querySelector("form")!)).toBe(true)
       }).pipe(Effect.scoped))
 
     it.effect("preventDefault cancels the default only when the handler sends, before the message is sent", () =>
@@ -2776,7 +3001,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           ? (handler as (payload: unknown) => unknown)(payload)
           : handler
         if (message === undefined) return false
-        onMessage?.()
+        onMessage?.({})
         seen.push(message)
         return true
       }
@@ -2887,6 +3112,185 @@ describe("BrowserHost", { concurrent: false }, () => {
           "enter",
           "drop milk at 5,7 of 100x100",
           "leave"
+        ])
+      }).pipe(Effect.scoped))
+  })
+
+  describe("pointer gestures", () => {
+    /** Each `setPointerCapture`, with the element it was called on, and each `Handle` update, in order. */
+    const calls: Array<readonly [Element, number] | string> = []
+    const Handle = Html.component({
+      name: "Handle",
+      model: Schema.Null,
+      message: Schema.String
+    }).make({
+      init: () => null,
+      update: ($, message) => {
+        calls.push(message)
+        return $.model
+      },
+      parts: (p) => ({
+        root: p.part(
+          "div",
+          (b) => b.on("pointerdown", "grab", { capturePointer: true })
+        )
+      })
+    })
+    // Shared with an event capture doesn't apply to, which it type-checks for.
+    const grab = { preventDefault: true, capturePointer: true } as const
+    const Divider = Html.component({
+      name: "Divider",
+      model: Schema.Array(Schema.String),
+      message: Schema.String
+    }).make({
+      init: (): ReadonlyArray<string> => [],
+      update: ($, message) => [...$.model, message],
+      view: (h) =>
+        h.div(
+          Handle(h, {
+            key: "handle",
+            view: (handle) => handle.root(h.div).attr("aria-label", "Handle")
+          }),
+          h.div.attr("aria-label", "Divider")
+            .on("pointerdown", ({ button, pointerId }) =>
+              button === 0 ? `down ${pointerId}` : undefined, grab)
+            .on("contextmenu", "menu", grab)
+            .on("pointermove", ({ pointerId, x }) =>
+              `move ${pointerId} ${x}`)
+            .on("pointerup", ({ pointerId }) =>
+              `up ${pointerId}`)
+            .on("pointercancel", ({ pointerId }) =>
+              `cancel ${pointerId}`)
+            .children(h.span("Grip"))
+        )
+    })
+    const pointer = (
+      element: Element,
+      name: string,
+      init: {
+        readonly pointerId: number
+        readonly x?: number
+        readonly button?: number
+      }
+    ) =>
+      element.dispatchEvent(
+        new PointerEvent(name, {
+          bubbles: true,
+          pointerId: init.pointerId,
+          button: init.button ?? 0,
+          clientX: init.x ?? 0,
+          pointerType: "mouse"
+        })
+      )
+    const captures = Effect.acquireRelease(
+      Effect.sync(() => {
+        calls.length = 0
+        const spy = vi.spyOn(Element.prototype, "setPointerCapture")
+          .mockImplementation(function(this: Element, pointerId: number) {
+            calls.push([this, pointerId])
+          })
+        return spy
+      }),
+      (spy) => Effect.sync(() => spy.mockRestore())
+    )
+
+    // Html's own host, and `makeHost` driven through `Renderer.Host` alone, each with an author's handler and a part's.
+    it.effect.each(["mountEffect", "Renderer.Host"])(
+      "a press captures its pointer on the element with the handler before the update, unless the handler sends nothing: %s",
+      (via) =>
+        Effect.gen(function*() {
+          yield* captures
+          const app = yield* container
+          if (via === "mountEffect") {
+            yield* BrowserHost.mountEffect(Divider, {}, app)
+          } else {
+            const host = BrowserHost.makeHost(document)
+            yield* Effect.addFinalizer(() => Effect.sync(() => host.dispose()))
+            // A copy, which the renderer doesn't know for an Html host.
+            yield* Renderer.mount(Divider, {}, app).pipe(
+              Effect.provide(Renderer.layer({ ...host })),
+              Effect.provideService(Html.Host, BrowserHost.htmlHost)
+            )
+          }
+          const divider = app.querySelector("[aria-label=Divider]")!
+          const handle = app.querySelector("[aria-label=Handle]")!
+          pointer(app.querySelector("span")!, "pointerdown", { pointerId: 7 })
+          pointer(divider, "pointerdown", { pointerId: 8, button: 2 })
+          pointer(handle, "pointerdown", { pointerId: 9 })
+          pointer(divider, "contextmenu", { pointerId: 10, button: 2 })
+          assert.deepStrictEqual(calls, [[divider, 7], [handle, 9], "grab"])
+        }).pipe(Effect.scoped)
+    )
+
+    it.effect("moves are sent once per frame per pointer, with the latest position, and a queued one before its release but not after a cancel", () =>
+      Effect.gen(function*() {
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Divider, {}, app)
+        const divider = app.querySelector("[aria-label=Divider]")!
+        pointer(divider, "pointerdown", { pointerId: 1 })
+        for (const x of [1, 2, 3]) {
+          pointer(divider, "pointermove", { pointerId: 1, x })
+        }
+        pointer(divider, "pointermove", { pointerId: 2, x: 9 })
+        yield* tick
+        // Queued, then released in the same task.
+        pointer(divider, "pointermove", { pointerId: 1, x: 4 })
+        pointer(divider, "pointermove", { pointerId: 1, x: 5 })
+        pointer(divider, "pointerup", { pointerId: 1, x: 5 })
+        yield* tick
+        // Queued, then cancelled: the Model reverts without it.
+        pointer(divider, "pointerdown", { pointerId: 1 })
+        pointer(divider, "pointermove", { pointerId: 1, x: 6 })
+        pointer(divider, "pointercancel", { pointerId: 1 })
+        yield* tick
+        expect(root.model()).toEqual([
+          "down 1",
+          "move 1 3",
+          "move 2 9",
+          "move 1 5",
+          "up 1",
+          "down 1",
+          "cancel 1"
+        ])
+      }).pipe(Effect.scoped))
+
+    it.effect("a cancel or release a move's handler fires ends the other pointer's move still in the frame", () =>
+      Effect.gen(function*() {
+        const app = yield* container
+        const Pane = Html.component({
+          name: "Pane",
+          model: Schema.Array(Schema.String),
+          message: Schema.String
+        }).make({
+          init: (): ReadonlyArray<string> => [],
+          update: ($, message) => [...$.model, message],
+          view: (h) =>
+            h.div.attr("aria-label", "Pane")
+              .on("pointermove", ({ pointerId, x }) => {
+                if (pointerId === 1) {
+                  const pane = app.querySelector("[aria-label=Pane]")!
+                  pointer(pane, "pointercancel", { pointerId: 2 })
+                  // A newer move, then the release: the release sends only the newer one.
+                  pointer(pane, "pointermove", { pointerId: 3, x: 9 })
+                  pointer(pane, "pointerup", { pointerId: 3 })
+                }
+                return `move ${pointerId} ${x}`
+              })
+              .on("pointercancel", ({ pointerId }) => `cancel ${pointerId}`)
+              .on("pointerup", ({ pointerId }) => `up ${pointerId}`)
+        })
+        const root = yield* BrowserHost.mountEffect(Pane, {}, app)
+        const pane = app.querySelector("[aria-label=Pane]")!
+        pointer(pane, "pointermove", { pointerId: 1 })
+        pointer(pane, "pointermove", { pointerId: 2 })
+        pointer(pane, "pointermove", { pointerId: 3 })
+        yield* tick
+        yield* tick
+        expect(root.model()).toEqual([
+          "cancel 2",
+          "move 3 9",
+          "up 3",
+          "move 1 0"
         ])
       }).pipe(Effect.scoped))
   })
@@ -3053,6 +3457,74 @@ describe("BrowserHost", { concurrent: false }, () => {
           .toEqual([false, 0, true, ""])
       }).pipe(Effect.scoped))
 
+    it.effect("closing a mounted root closes its modal dialog", () =>
+      Effect.gen(function*() {
+        const Modal = Html.component({
+          name: "Modal",
+          model: Schema.Struct({}),
+          message: Schema.Never
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) => h.dialog.modal(true).children("Hi")
+        })
+        const app = yield* container
+        const dialog = yield* Effect.gen(function*() {
+          yield* BrowserHost.mountEffect(Modal, {}, app)
+          yield* tick
+          return app.querySelector("dialog")!
+        }).pipe(Effect.scoped)
+        expect(dialog.open).toBe(false)
+      }))
+
+    it.effect("document shortcuts don't fire while a modal dialog is open", () =>
+      Effect.gen(function*() {
+        const Message = UiSchema.TaggedEnum({ Help: {}, Closed: {} })
+        const Shell = Html.component({
+          name: "Shell",
+          model: Schema.Struct({
+            open: Schema.Boolean,
+            log: Schema.Array(Schema.String)
+          }),
+          message: Message
+        }).make({
+          init: () => ({ open: true, log: [] }),
+          update: {
+            Help: ($) => ({ ...$.model, log: [...$.model.log, "help"] }),
+            Closed: ($) => ({ ...$.model, open: false })
+          },
+          view: (h, model) =>
+            h.dialog.attr("aria-label", "Confirm").modal(model.open).children(
+              h.button.children("Inside")
+            ),
+          subscriptions: () => [
+            HtmlSubscription.onDocument(
+              "keydown",
+              HtmlKeyboard.shortcuts([{ key: "?", message: Message.Help() }])
+            )
+          ]
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Shell, {}, app)
+        yield* tick
+        const help = (target: EventTarget) =>
+          target.dispatchEvent(
+            new KeyboardEvent("keydown", {
+              key: "?",
+              bubbles: true,
+              cancelable: true
+            })
+          )
+        help(app.querySelector("button")!)
+        yield* tick
+        expect(root.model()!.log).toEqual([])
+        root.send(Message.Closed())
+        yield* tick
+        help(document.body)
+        yield* tick
+        expect(root.model()!.log).toEqual(["help"])
+      }).pipe(Effect.scoped))
+
     it.effect("a modal removed while open is forgotten, and switching mode closes without telling the app", () =>
       Effect.gen(function*() {
         const { calls } = yield* dialogCalls
@@ -3137,35 +3609,68 @@ describe("BrowserHost", { concurrent: false }, () => {
       }
     )
 
-    it("a close the browser makes is the app's, unless the host has shown the dialog again first", () => {
-      const host = BrowserHost.makeHost(document)
-      const dialog = document.body.appendChild(document.createElement("dialog"))
-      const seen: Array<unknown> = []
-      try {
-        host.setEvents(
-          dialog,
-          { close: "closed" },
-          (_, handler) => seen.push(handler) > 0,
-          {}
+    it.effect("a close the browser makes is the app's, unless the host has shown the dialog again first", () =>
+      Effect.gen(function*() {
+        const events = Context.get(
+          yield* Layer.build(BrowserHost.layer()),
+          HtmlSubscription.GlobalEvents
         )
-        host.setProp(dialog, "open", "modal")
-        host.commit?.()
-        // A forced close reported before the reconciliation shows it again.
-        dialog.open = false
-        dialog.dispatchEvent(new Event("close"))
-        expect(seen).toEqual(["closed"])
-        host.commit?.()
-        expect(dialog.open).toBe(true)
-        // A forced close the reconciliation got to first: its report is stale.
-        dialog.open = false
-        host.commit?.()
-        dialog.dispatchEvent(new Event("close"))
-        expect(seen).toEqual(["closed"])
-      } finally {
-        host.dispose()
-        dialog.remove()
-      }
-    })
+        const help = HtmlKeyboard.shortcuts([{ key: "?", message: "help" }])
+        const heard: Array<unknown> = []
+        yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            events.listen(
+              "document",
+              "keydown",
+              { capture: false },
+              (payload) => heard.push(help(payload as never))
+            )
+          ),
+          (off) => Effect.sync(off)
+        )
+        const host = BrowserHost.makeHost(document)
+        const dialog = document.body.appendChild(
+          document.createElement("dialog")
+        )
+        const seen: Array<unknown> = []
+        try {
+          host.setEvents(
+            dialog,
+            { close: "closed" },
+            (_, handler) => seen.push(handler) > 0,
+            {}
+          )
+          host.setProp(dialog, "open", "modal")
+          host.commit?.()
+          // A forced close reported before the reconciliation shows it again.
+          dialog.open = false
+          dialog.dispatchEvent(new Event("close"))
+          expect(seen).toEqual(["closed"])
+          host.commit?.()
+          expect(dialog.open).toBe(true)
+          // A forced close the reconciliation got to first: its report is stale.
+          dialog.open = false
+          host.commit?.()
+          dialog.dispatchEvent(new Event("close"))
+          expect(seen).toEqual(["closed"])
+          // Disposed with it reopened, the host holds the page's shortcuts
+          // past the stale `close`, until the dialog really closes.
+          dialog.open = false
+          host.commit?.()
+          host.dispose()
+          dialog.dispatchEvent(new Event("close"))
+          const press = () =>
+            document.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))
+          press()
+          dialog.close()
+          yield* tick
+          press()
+          expect(heard).toEqual([undefined, "help"])
+        } finally {
+          host.dispose()
+          dialog.remove()
+        }
+      }).pipe(Effect.scoped))
 
     it("reconciling a dialog that's already open records its showing once", () => {
       const host = BrowserHost.makeHost(document)
@@ -3754,6 +4259,67 @@ describe("BrowserHost", { concurrent: false }, () => {
         ])
       }).pipe(Effect.scoped))
 
+    it.effect("HtmlCommand.select places a range in the value the same update wrote, and finds a field without a selection", () =>
+      Effect.gen(function*() {
+        const Area = Html.ref("Area", "textarea")
+        const Attachment = Html.ref("Attachment", "input")
+        const CaretMessage = UiSchema.TaggedEnum({
+          Completed: {},
+          Selected: { found: Schema.Boolean }
+        })
+        const Editor = Html.component({
+          name: "Editor",
+          model: Schema.Struct({
+            text: Schema.String,
+            found: Schema.Array(Schema.Boolean)
+          }),
+          message: CaretMessage
+        }).make({
+          init: () => ({ text: "a ser b", found: [] }),
+          update: ($, message) =>
+            CaretMessage.match(message, {
+              Completed: () =>
+                $.evolve({ text: "a service.name b" }).run(
+                  HtmlCommand.select(
+                    Area,
+                    ({ found }) => CaretMessage.Selected({ found }),
+                    { start: 14 }
+                  ),
+                  HtmlCommand.select(
+                    Attachment,
+                    ({ found }) => CaretMessage.Selected({ found }),
+                    { start: 0 }
+                  )
+                ),
+              Selected: ({ found }) =>
+                $.evolve({ found: (all) => [...all, found] })
+            }),
+          view: (h, model) =>
+            h.div(
+              h.textarea.attr("aria-label", "Area").ref(Area).value(model.text),
+              h.input.attrs({ type: "file", "aria-label": "Attachment" }).ref(
+                Attachment
+              ).value("notes.txt")
+            )
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Editor, {}, app)
+        yield* tick
+        const area = HtmlLocator.getByRole(app, "textbox", {
+          name: "Area"
+        }) as HTMLTextAreaElement
+        area.focus()
+        area.setSelectionRange(5, 5)
+        root.send(CaretMessage.Completed())
+        yield* tick
+        expect([area.value, area.selectionStart, area.selectionEnd]).toEqual([
+          "a service.name b",
+          14,
+          14
+        ])
+        expect(root.model()!.found).toEqual([true, true])
+      }).pipe(Effect.scoped))
+
     it.effect("HtmlCommand.waitForPaint waits two animation frames", () =>
       Effect.gen(function*() {
         const PaintMessage = UiSchema.TaggedEnum({
@@ -3926,7 +4492,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           init: () => null,
           update: ($) => $.model,
           view: (h) =>
-            h.form(
+            h.form.attr("method", "dialog").children(
               h.el("div").attrs({ "Data-Kind": "box", "a b": "dropped" }),
               h.el("svg", h.el("rect").attr("viewBox", "0 0 1 1"))
             )
@@ -4536,5 +5102,43 @@ describe("BrowserHost", { concurrent: false }, () => {
       slot.dispatchEvent(new Event("slotchange", { bubbles: true }))
       yield* tick
       expect(root.model()).toBe(1)
+    }).pipe(Effect.scoped))
+})
+
+describe("BrowserCase", { concurrent: false }, () => {
+  it.effect("mounts from the case's model, or sends its messages with its layer", () =>
+    Effect.gen(function*() {
+      const Msg = UiSchema.TaggedEnum({ ClickedSave: {}, CompletedSave: {} })
+      class SaveTodo extends Command.Service<SaveTodo>()(
+        "BrowserCase/SaveTodo",
+        { args: {}, success: Msg }
+      ) {}
+      const TodoItem = Html.component({
+        name: "TodoItem",
+        model: Schema.Struct({ saved: Schema.Boolean }),
+        message: Msg
+      }).make({
+        init: () => ({ saved: false }),
+        update: ($, message) =>
+          Msg.match(message, {
+            ClickedSave: () => $.run(SaveTodo.make({})),
+            CompletedSave: () => ({ saved: true })
+          }),
+        view: (h, model) => h.p(model.saved ? "saved" : "save")
+      })
+      const layer = SaveTodo.toLayer(() => Effect.succeed(Msg.CompletedSave()))
+      const cases = Case.make(TodoItem, {
+        saved: { model: { saved: true }, layer },
+        replayed: { messages: [Msg.ClickedSave()], layer }
+      })
+
+      const app = yield* container
+      yield* BrowserCase.mount(cases.saved, app)
+      expect(app.textContent).toBe("saved")
+
+      const app2 = yield* container
+      yield* BrowserCase.mount(cases.replayed, app2)
+      yield* tick
+      expect(app2.textContent).toBe("saved")
     }).pipe(Effect.scoped))
 })

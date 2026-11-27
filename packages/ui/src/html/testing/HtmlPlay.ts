@@ -4,7 +4,7 @@
  *
  * `HtmlPlay.HtmlPlay` extends `Play.Play`, so every Play step works here.
  * Each step is the `HtmlScene` step of the same name, sent to the tree on
- * `TestHost`. `click` sends `pointerdown`, `mousedown`, `mouseup` and `click`,
+ * `TestHost`. `click` sends `pointerdown`, `mousedown`, `pointerup`, `mouseup` and `click`,
  * then runs the browser's defaults as `HtmlScene.click` does: it throws on a
  * disabled control, a submit button submits its form with the fields read from
  * the tree, a checkbox or radio button fires `input` and `change`, and a
@@ -17,7 +17,7 @@
  * field goes back to what the view set once the step settles, unless the
  * Model took the edit. A `popovertarget` click opens or closes the popover,
  * so the next click sees it. `click` settles between the press (`pointerdown`,
- * `mousedown`) and the release (`mouseup`, `click`, defaults), while the
+ * `mousedown`) and the release (`pointerup`, `mouseup`, `click`, defaults), while the
  * release events run with no render between them, so a submit reads the fields
  * as they were before the click's own message. And `focus`, `blur` and the
  * browser's other events that don't bubble go to the matched element only.
@@ -78,6 +78,7 @@ import * as internal from "../../internal/play.ts"
 import * as scene from "../../internal/scene.ts"
 import { atSite, callSite } from "../../internal/steps.ts"
 import * as Renderer from "../../Renderer.ts"
+import type * as Case from "../../testing/Case.ts"
 import * as Locator from "../../testing/Locator.ts"
 import type * as Play from "../../testing/Play.ts"
 import * as TestHost from "../../testing/TestHost.ts"
@@ -121,15 +122,17 @@ type DocumentKeyDetails = Partial<
  * @category models
  * @since 0.1.0
  */
-export interface HtmlPlay<Model, Msg, Events>
-  extends Play.Play<Model, Msg, Events>
+export interface HtmlPlay<Model, Msg, Events, Props = never>
+  extends Play.Play<Model, Msg, Events, Props>
 {
   /**
    * Clicks the one element `target` matches, as a browser does: `pointerdown`
-   * and `mousedown` run, the tree settles, then `mouseup`, `click` and the
-   * defaults run unless the press removed the element, disabled it or made
-   * it inert. Cancelling
-   * `pointerdown` skips `mousedown` and `mouseup` (not `click`); cancelling
+   * and `mousedown` run, the tree settles, then `pointerup`, `mouseup`,
+   * `click` and the defaults run unless the press removed the element,
+   * disabled it or made it inert. A `pointerdown` handler set with
+   * `capturePointer: true` that sends a message takes the release, the click
+   * and the defaults. Cancelling
+   * `pointerdown` skips `mousedown` and `mouseup` (not `pointerup` or `click`); cancelling
    * `mousedown` or `mouseup` skips nothing; only a cancelled `click` skips the
    * defaults. A string means `Locator.text(target)`. Throws on a disabled
    * control or an inert element, and when nothing handles any event of the
@@ -168,7 +171,8 @@ export interface HtmlPlay<Model, Msg, Events>
    * Dispatches `keydown` on the document and settles the resulting UI work
    * without advancing `TestClock`. With `TestGlobalEvents` provided, the key
    * reaches every root sharing that source. Missing payload fields default
-   * as for an element keydown, with `editable` and `defaultPrevented` false.
+   * as for an element keydown, with `editable` and `defaultPrevented` false
+   * and `timeStamp` `0`.
    * Fails if no document keydown listener is registered, but only the fake
    * created by `TestGlobalEvents.make` can report missing listeners.
    */
@@ -243,6 +247,7 @@ class HtmlPlayCursor extends internal.PlayCursor {
     return Effect.gen({ self: this }, function*() {
       let reached = false
       let handled = false
+      let captured: TestHost.TestElement | undefined
       const send = (
         node: TestHost.TestElement,
         event: string,
@@ -252,25 +257,25 @@ class HtmlPlayCursor extends internal.PlayCursor {
         if (fired === undefined) return false
         reached = true
         handled ||= fired.handled
+        captured ??= fired.captured
         return fired.prevented
       }
       yield* this.settle
       const [node, skipMouse] = yield* Effect.sync(() =>
         atSite(site, () => {
           this.checkReady(name)
-          const node = this.findOne(locator, "click")
-          if (defaults.isClickDisabled(internal.ancestors(node))) {
+          const found = this.findOne(locator, "click")
+          if (defaults.isClickDisabled(internal.ancestors(found))) {
             throw new Error(`${name}: ${locator.description} is disabled`)
           }
-          const skipMouse = send(node, "pointerdown")
-          if (!skipMouse) send(node, "mousedown")
-          return [node, skipMouse] as const
+          const skipMouse = send(found, "pointerdown")
+          if (!skipMouse) send(found, "mousedown", () => scene.mouse)
+          return [captured ?? found, skipMouse] as const
         })
       )
       if (handled) yield* this.settle
-      const edited = yield* Effect.sync(() =>
+      yield* Effect.sync(() =>
         atSite(site, () => {
-          const edited: Array<TestHost.TestElement> = []
           const container = this.root.container
           const path = internal.ancestors(node)
           if (
@@ -283,7 +288,8 @@ class HtmlPlayCursor extends internal.PlayCursor {
               path,
               locator.description
             )
-            if (!skipMouse) send(node, "mouseup")
+            send(node, "pointerup")
+            if (!skipMouse) send(node, "mouseup", () => scene.mouse)
             if (!send(node, "click")) {
               for (const { checks, event, node, payload } of plan) {
                 const element = node as TestHost.TestElement
@@ -292,12 +298,10 @@ class HtmlPlayCursor extends internal.PlayCursor {
                   for (const [other, checked] of checks()) {
                     const control = other as TestHost.TestElement
                     control.props.checked = checked
-                    edited.push(control)
                   }
                 } else if (event === "toggle") {
                   element.props.popoverOpen =
                     (sent() as Html.PopoverTogglePayload).open
-                  edited.push(element)
                 }
                 send(element, event, sent)
               }
@@ -309,11 +313,9 @@ class HtmlPlayCursor extends internal.PlayCursor {
             )
           }
           this.recordInteraction("click", handled)
-          return edited
         })
       )
       yield* this.settle
-      this.restoreControlled(edited)
     })
   }
   type(
@@ -525,30 +527,48 @@ export const make = <
   component: Component.Members<Name, Props, Model, Msg, Events, R, V, any>,
   props: Props | Effect.Effect<Props, never, RP>
 ): Effect.Effect<
-  HtmlPlay<Model, Msg, Events>,
+  HtmlPlay<Model, Msg, Events, Props>,
   Play.StepError,
   R | RP | TestHost.TestHost | Scope.Scope
-> => {
-  const started = internal.begin(
+> =>
+  start(
+    internal.begin(HtmlPlayCursor, "HtmlPlay", make, { component, props })
+  ) as any
+
+/**
+ * Mounts a `Case` on `TestHost`, sends its messages, settles, and returns
+ * an `HtmlPlay` cursor over it, as `Play.fromCase` does.
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const fromCase = <C extends Case.AnyComponent, R>(
+  c: Case.Case<C, R>
+): Effect.Effect<
+  HtmlPlay<Component.Model<C>, Component.Message<C>, Component.Events<C>>,
+  Play.StepError,
+  R | TestHost.TestHost | Scope.Scope
+> => start(internal.begin(HtmlPlayCursor, "HtmlPlay", fromCase, c)) as any
+
+const start = Effect.fnUntraced(function*(
+  started: Effect.Effect<
     HtmlPlayCursor,
-    "HtmlPlay",
-    make,
-    component,
-    props
+    Play.StepError,
+    TestHost.TestHost | Scope.Scope
+  >
+) {
+  const { host } = yield* TestHost.TestHost
+  const keys = documentKeys(
+    yield* HtmlSubscription.GlobalEvents,
+    Option.getOrUndefined(
+      yield* Effect.serviceOption(TestGlobalEvents.TestGlobalEvents)
+    )
   )
-  return Effect.gen(function*() {
-    const { host } = yield* TestHost.TestHost
-    const keys = documentKeys(
-      yield* HtmlSubscription.GlobalEvents,
-      Option.getOrUndefined(
-        yield* Effect.serviceOption(TestGlobalEvents.TestGlobalEvents)
-      )
-    )
-    const play = yield* started.pipe(
-      Effect.provideService(Renderer.Renderer, { host: htmlHost(host) }),
-      Effect.provideService(HtmlSubscription.GlobalEvents, keys.source)
-    )
-    play.documentKeys = keys
-    return play
-  }) as any
-}
+  const play = yield* started.pipe(
+    Effect.provideService(Renderer.Renderer, { host: htmlHost(host) }),
+    Effect.provideService(HtmlSubscription.GlobalEvents, keys.source)
+  )
+  play.documentKeys = keys
+  return play
+})

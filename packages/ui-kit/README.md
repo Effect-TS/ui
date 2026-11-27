@@ -19,9 +19,11 @@ Checkbox(h, {
 })
 ```
 
-Every popup renders in the browser's top layer by default. `Dialog`, `Drawer`, `Popover`, `Tooltip`, `PreviewCard`, `Menu` (and so `Menubar` and `ContextMenu`), `Select`, `Combobox`, `Autocomplete` and `ToastProvider` take `topLayer: false` to render in place instead, like Base UI's portal given a `container`: placed and clipped inside the element the view draws it in, and never modal.
+Every popup renders in the browser's top layer by default. `Dialog`, `Drawer`, `Popover`, `Tooltip`, `PreviewCard`, `Menu` (and so `Menubar` and `ContextMenu`), `NavigationMenu`, `Select`, `Combobox`, `Autocomplete` and `ToastProvider` take `topLayer: false` to render in place instead, like Base UI's portal given a `container`: placed and clipped inside the element the view draws it in, and never modal.
 
 A component that doesn't need an instance, such as `Switch`, is a plain view function instead: it takes no `key`, and an `on<Event>` option in place of `onEmit`. Keeping no state isn't enough on its own: `Progress` needs an instance for the id its bar points at, and `DirectionProvider` for sharing the direction with the components inside it.
+
+Test wrapper event mappings and the props they feed back with `HtmlPlay` on `TestHost`; leave the part's keyboard navigation to its own tests. For example, a `Select` wrapper handles `RequestedClose`: send `ArrowDown` to the combobox and `Escape` to the listbox, then expect `aria-expanded="false"` on the combobox. See [Testing `@effect/ui` components](../../ai-docs/src/10_ui/50_testing.ts) for an executable wrapper test.
 
 ## Components
 
@@ -30,7 +32,7 @@ A component that doesn't need an instance, such as `Switch`, is a plain view fun
 - [Autocomplete](src/Autocomplete.ts): an input that suggests completions from a list as the user types, whose open state and text live in your Model, with inline completion, grids, inline lists, and an input that submits with its form.
 - [Avatar](src/Avatar.ts): an image with a fallback.
 - [Button](src/Button.ts): a native button that can stay focusable while disabled.
-- [Calendar](src/Calendar.ts): a controlled single-month calendar grid using `DateTime`, with keyboard navigation, roving focus, min/max bounds, unavailable days and right-to-left support.
+- [Calendar](src/Calendar.ts): a controlled calendar of one or more consecutive months using `DateTime`, with keyboard navigation, roving focus, min/max bounds, unavailable days and right-to-left support.
 - [Checkbox](src/Checkbox.ts): a controlled checkbox with an indicator.
 - [CheckboxGroup](src/CheckboxGroup.ts): one list of ticked values shared by the checkboxes inside it, with a parent checkbox that ticks or unticks them all.
 - [Collapsible](src/Collapsible.ts): a panel (any element) that a button shows and hides, whose open state lives in your Model. It publishes the panel's size as CSS variables for height and width transitions, supports `keepMounted: "css"` for CSS-controlled visibility below a breakpoint, and with `hiddenUntilFound` the browser's find-in-page can open it.
@@ -50,7 +52,8 @@ A component that doesn't need an instance, such as `Switch`, is a plain view fun
 - [Menu](src/Menu.ts): a button that opens a list of actions, checkbox and radio items and submenus, whose open state lives in your Model, with typeahead, a filter input, several triggers and a viewport that resizes the popup as it moves between them.
 - [Menubar](src/Menubar.ts): a row of menus, as in a desktop application, with one Tab stop, arrow keys that move between the triggers and switch between open menus, and hover that switches while a menu is open.
 - [Meter](src/Meter.ts): a measurement within a known range, such as disk usage, whose value lives in your Model, with a label, a value text and an indicator sized to the value.
-- [NavigationMenu](src/NavigationMenu.ts): a navigation landmark with a list of links, where you say which link is the current page and the arrow keys move focus between the links.
+- [NavigationLinks](src/NavigationLinks.ts): a navigation landmark with a list of links, where you say which link is the current page and the arrow keys move focus between the links.
+- [NavigationMenu](src/NavigationMenu.ts): a navigation landmark whose triggers open panels of links in a shared popup, with the open item in your Model.
 - [NumberField](src/NumberField.ts): a controlled input for a number, formatted and parsed for a locale, with stepper buttons that repeat while held, an area to drag across, and a hidden input for a form.
 - [OTPField](src/OTPField.ts): a one-time code field, a row of one-character inputs whose code lives in your Model as a `Redacted<string>`. It moves focus as the user types, takes a pasted or autofilled code whole, and submits it as one form value.
 - [Popover](src/Popover.ts): a `Dialog` anchored to its trigger, opened by a press or by hover. It has several triggers, with `PopoverTrigger` for one drawn elsewhere, and a `viewport` part that animates the content and the popup's size as it moves between them.
@@ -62,6 +65,7 @@ A component that doesn't need an instance, such as `Switch`, is a plain view fun
 - [Select](src/Select.ts): a button that opens a list of options, whose open state and value live in your Model, with typeahead, the popup laid over the trigger with the selected option on its text, and inputs for a form.
 - [Separator](src/Separator.ts): a horizontal or vertical divider between sections of content.
 - [Slider](src/Slider.ts): a controlled slider with one thumb or a range, each thumb a native range input you supply.
+- [SortableList](src/SortableList.ts): a headless list with pointer dragging, handle-based reordering and live-region announcements. Handle drops focus the moved row’s handle; pointer drops leave focus unchanged.
 - [Switch](src/Switch.ts): a controlled on/off setting.
 - [Tabs](src/Tabs.ts): a list of tabs that each show a panel, whose active tab lives in your Model, with roving focus, link tabs, panel enter and exit transitions, and an indicator placed under the active tab with CSS variables.
 - [Toast](src/Toast.ts): `ToastProvider`, a stack of notifications that components inside it post to, which close after a timeout.
@@ -73,6 +77,7 @@ A component that doesn't need an instance, such as `Switch`, is a plain view fun
 
 ## Other modules
 
+- [Dismissal](src/Dismissal.ts): puts a widget of your own, such as an inline editor, in the stack of layers the kit's dialogs keep, so Escape, a press outside, focus leaving it and Android's back gesture reach only the topmost layer. The `Dismissal.TrackDismissal` mount reports each request with its reason, and your Model decides whether to close.
 - [ListNavigation](src/ListNavigation.ts): resolves arrow keys, `Home` and `End` to list indexes, respecting orientation, text direction and looping. The caller moves focus or updates a highlight.
 - [Positioning](src/Positioning.ts): places a popup of your own against an anchor, as `Tooltip` places its popup. `Positioning.place` computes a position from rectangles, and the `Positioning.TrackPosition` mount keeps a positioner next to its anchor.
 - [Typeahead](src/Typeahead.ts): matches typed prefixes against enabled items and cycles on repeated letters. Store `Typeahead.State` in your Model, advance it with `Typeahead.step`, and use `Typeahead.waitReset` to schedule a reset message.

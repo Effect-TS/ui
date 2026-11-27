@@ -1,6 +1,69 @@
 export const isElement = (node: unknown): node is Element =>
   (node as Node | null)?.nodeType === 1
 
+export const rootOf = (node: Element): Document | ShadowRoot =>
+  node.isConnected
+    ? node.getRootNode() as Document | ShadowRoot
+    : node.ownerDocument
+
+// In a shadow root, focus outside it leaves its `activeElement` null.
+export const focusedOf = (node: Element): Element | null =>
+  rootOf(node).activeElement ?? node.ownerDocument.activeElement
+
+// Listens in `node`'s tree and every tree above it, since outside a shadow
+// root its events target the host. Each dispatch reaches `handler` once,
+// with the target seen by the innermost tree.
+export const listenTrees = <K extends keyof DocumentEventMap>(
+  node: Element,
+  type: K,
+  handler: (event: DocumentEventMap[K]) => void,
+  options: AddEventListenerOptions
+): void => {
+  const first = rootOf(node)
+  if (first.nodeType === 9) {
+    first.addEventListener(type, handler as EventListener, options)
+    return
+  }
+  const roots: Array<Document | ShadowRoot> = []
+  for (let root = first;; root = rootOf((root as ShadowRoot).host)) {
+    roots.push(root)
+    if (root.nodeType === 9) break
+  }
+  const capture = options.capture === true
+  // Bubbling runs inside out, so the first tree to handle an event marks it
+  // for the trees above to skip. Document capture starts each dispatch and
+  // clears only that event's mark: a redispatch is handled again, while a
+  // nested dispatch keeps the outer event's mark.
+  const handled = new WeakSet<Event>()
+  if (!capture) {
+    roots[roots.length - 1]!.addEventListener(type, (event) => {
+      handled.delete(event)
+    }, { ...options, capture: true })
+  }
+  roots.forEach((root, i) => {
+    const below = roots[i - 1] as ShadowRoot | undefined
+    const above = new Set<Node>(roots.slice(i + 1))
+    root.addEventListener(type, (event) => {
+      const target = event.target as Node
+      const targetRoot = target.getRootNode()
+      // A slotted target is handled by the outer tree it belongs to.
+      if (above.has(targetRoot)) return
+      if (
+        capture
+          // Capture runs outside in, so leave events to the tree below. A
+          // closed root is missing from the path, so its host stands in.
+          ? below !== undefined && (target === below.host
+            ? below.mode === "closed" || event.composedPath().includes(below)
+            // happy-dom doesn't retarget.
+            : targetRoot !== root && event.composedPath().includes(below))
+          : handled.has(event)
+      ) return
+      if (event.composed) handled.add(event)
+      handler(event as DocumentEventMap[K])
+    }, options)
+  })
+}
+
 export const isHTMLElement = (node: unknown): node is HTMLElement => {
   const ctor = (node as Node | null)?.ownerDocument?.defaultView?.HTMLElement ??
     globalThis.HTMLElement
@@ -11,11 +74,13 @@ export const isHTMLElement = (node: unknown): node is HTMLElement => {
 export const elementOf = (target: EventTarget | null): Element | null =>
   isElement(target) ? target : (target as Node | null)?.parentElement ?? null
 
-export const perDocument = <A>(make: () => A): (document: Document) => A => {
+export const perDocument = <A>(
+  make: (document: Document) => A
+): (document: Document) => A => {
   const made = new WeakMap<Document, A>()
   return (document) => {
     let value = made.get(document)
-    if (value === undefined) made.set(document, value = make())
+    if (value === undefined) made.set(document, value = make(document))
     return value
   }
 }
@@ -117,16 +182,21 @@ export const tabbablesIn = (root: Element): Array<HTMLElement> =>
   Array.from(root.querySelectorAll<HTMLElement>(tabbableSelector))
     .filter(tabbable)
 
-// Moves focus itself, as the browser's next stop after a positive
-// `tabindex` can be outside `root`.
-export const trapTab = (event: KeyboardEvent, root: HTMLElement): void => {
-  event.preventDefault()
+// The Tab stops in `root`, in Tab order: positive `tabindex` first.
+export const tabStopsIn = (root: Element): Array<HTMLElement> => {
   const found = tabbablesIn(root)
-  const items = [
+  return [
     ...found.filter((element) => tabOrder(element) > 0)
       .sort((a, b) => tabOrder(a) - tabOrder(b)),
     ...found.filter((element) => tabOrder(element) === 0)
   ]
+}
+
+// Moves focus itself, as the browser's next stop after a positive
+// `tabindex` can be outside `root`.
+export const trapTab = (event: KeyboardEvent, root: HTMLElement): void => {
+  event.preventDefault()
+  const items = tabStopsIn(root)
   if (items.length === 0) return
   const focused = activeOf(root.ownerDocument)
   const at = items.findIndex((element) => element === focused)
@@ -151,22 +221,22 @@ export const trapTab = (event: KeyboardEvent, root: HTMLElement): void => {
 }
 
 export const byAttribute = (
-  document: Document,
+  root: Document | ShadowRoot,
   name: string,
   value: string
 ): HTMLElement | null =>
-  document.querySelector<HTMLElement>(
+  root.querySelector<HTMLElement>(
     "[" + name + "=\"" + CSS.escape(value) + "\"]"
   )
 
 export const focusFinal = (
-  document: Document,
+  root: Document | ShadowRoot,
   popupId: string,
   fallback: HTMLElement | null,
   lost: boolean,
   keyboard: boolean
 ): void => {
-  const marked = byAttribute(document, "data-final-focus", popupId)
+  const marked = byAttribute(root, "data-final-focus", popupId)
   const back = marked ?? fallback
   if (back !== null && (marked !== null || lost)) {
     back.focus({

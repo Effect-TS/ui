@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect"
 import * as Fiber from "effect/Fiber"
 import * as Layer from "effect/Layer"
 import * as PubSub from "effect/PubSub"
+import * as Queue from "effect/Queue"
 import * as Semaphore from "effect/Semaphore"
 import * as Socket from "effect/socket/Socket"
 import * as Stream from "effect/Stream"
@@ -12,7 +13,7 @@ import * as Control from "./control.ts"
 import * as History from "./history.ts"
 import * as InspectorInternal from "./inspector.ts"
 import { type Feed, mountOverlay, Pages, type Position } from "./overlay.ts"
-import { isFailure, tagOf } from "./read.ts"
+import { fieldNames, isFailure, tagOf } from "./read.ts"
 import * as Remote from "./remote.ts"
 import { styles } from "./styles.ts"
 import * as Tools from "./tools.ts"
@@ -51,6 +52,9 @@ export interface Options {
   readonly exclude?: ReadonlyArray<string> | undefined
   readonly server?: string | undefined
   readonly webMcp?: boolean | WebMcpOptions | undefined
+  readonly fields?: ReadonlyArray<string> | undefined
+  /** `false` mounts no overlay iframe. The log, roots, WebMCP and server stay. */
+  readonly panel?: boolean | undefined
 }
 
 const corners: { readonly [P in Position]: string } = {
@@ -63,8 +67,8 @@ const corners: { readonly [P in Position]: string } = {
 // A painted copy's dialogs and popovers sit in the top layer, above any z-index. While paused the frame
 // joins the top layer after them, so the copy never covers the panel. Leaving the top layer takes the frame
 // out of the page for a moment, so it only re-joins when something opened since it last joined.
-const raise = (frame: HTMLIFrameElement, covered: boolean) => {
-  if (typeof frame.showPopover !== "function") return
+const raise = (frame: HTMLElement | undefined, covered: boolean) => {
+  if (typeof frame?.showPopover !== "function") return
   if (frame.matches(":popover-open")) {
     if (!covered) return
     frame.hidePopover()
@@ -73,11 +77,74 @@ const raise = (frame: HTMLIFrameElement, covered: boolean) => {
   frame.showPopover()
 }
 
-const lower = (frame: HTMLIFrameElement) => {
-  if (!frame.hasAttribute("popover")) return
+const lower = (frame: HTMLIFrameElement | undefined) => {
+  if (frame?.hasAttribute("popover") !== true) return
   if (frame.matches(":popover-open")) frame.hidePopover()
   frame.removeAttribute("popover")
 }
+
+const boxStyle =
+  "position:fixed;z-index:2147483001;pointer-events:none;box-sizing:border-box;margin:0;padding:0;" +
+  "overflow:visible;border:2px solid #3b82f6;border-radius:2px;background:rgb(59 130 246 / .15);"
+const labelStyle =
+  "position:absolute;left:-2px;white-space:nowrap;padding:1px 6px;border-radius:2px;" +
+  "font:12px/18px ui-monospace,SFMono-Regular,Menlo,monospace;background:#3b82f6;color:#fff;"
+
+const rectOf = (node: Node): DOMRect | undefined => {
+  if (node.nodeType === Node.ELEMENT_NODE) {
+    return (node as Element).getBoundingClientRect()
+  }
+  const range = node.ownerDocument?.createRange()
+  range?.selectNode(node)
+  return range?.getBoundingClientRect?.()
+}
+
+// One box over the page, in the top layer when it can be, so it shows above modal dialogs.
+const makeHighlight = (document: Document) => {
+  const box = document.createElement("div")
+  box.setAttribute("data-effect-ui-devtools-highlight", "")
+  box.setAttribute("aria-hidden", "true")
+  const label = box.appendChild(document.createElement("span"))
+  const clear = () => box.remove()
+  const show = (nodes: ReadonlyArray<Node>, text: string) => {
+    let top = Infinity, left = Infinity, bottom = -Infinity, right = -Infinity
+    for (const node of nodes) {
+      const rect = rectOf(node)
+      if (rect === undefined || (rect.width === 0 && rect.height === 0)) {
+        continue
+      }
+      top = Math.min(top, rect.top)
+      left = Math.min(left, rect.left)
+      bottom = Math.max(bottom, rect.bottom)
+      right = Math.max(right, rect.right)
+    }
+    if (top === Infinity) return clear()
+    box.setAttribute(
+      "style",
+      boxStyle + "top:" + top + "px;left:" + left + "px;width:" +
+        (right - left) + "px;height:" + (bottom - top) + "px"
+    )
+    label.setAttribute(
+      "style",
+      labelStyle + (top < 20 ? "top:100%" : "bottom:100%")
+    )
+    label.textContent = text
+    if (box.isConnected) return
+    document.body.appendChild(box)
+    raise(box, false)
+  }
+  return { box, show, clear }
+}
+
+// Input the page must not see while picking: the press and release before the click too.
+const pickBlocked = [
+  "pointerdown",
+  "pointerup",
+  "mousedown",
+  "mouseup",
+  "dblclick",
+  "contextmenu"
+]
 
 let explicit = 0
 
@@ -105,6 +172,7 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         1,
         options.size ?? (typeof page.size === "number" ? page.size : 1_000)
       )
+      const fields = fieldNames(options.fields ?? page.fields)
       const modelContext = options.webMcp === false
         ? undefined
         : WebMcp.modelContext()
@@ -116,6 +184,7 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         readonly root: BrowserHost.Controllable
         readonly at: Control.Paused
       } | undefined
+      const picks = new Map<string, Control.Picked>()
       const lock = Semaphore.makeUnsafe(1)
       const origins = new Map<string, number>()
       const latest = new Map<string, number>()
@@ -167,30 +236,6 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         save(recordingKey, Object.fromEntries(choices), "sessionStorage")
         changed()
       }
-      const savedPosition = load(positionKey)
-      let position: Position = isPosition(savedPosition)
-        ? savedPosition
-        : (options.position ?? "BottomRight")
-      const feed: Feed = {
-        inspector,
-        origin: (session) => origins.get(session),
-        changes: Stream.fromPubSub(changes),
-        paintable: (session, seq) =>
-          roots.has(session) && history.holds(session, seq),
-        paused: () => paused?.at,
-        failures: () => failures,
-        open: load(openKey) === true,
-        position: () => position,
-        notRecording,
-        // The raw message's tag: an encoded one may be under another key.
-        stoppable: (session, seq) => {
-          const entry = history.entry(session, seq)
-          const tag = entry?._tag === "Update"
-            ? tagOf(entry.message)
-            : undefined
-          return tag === undefined || stopped.has(tag) ? undefined : tag
-        }
-      }
       const unpause: Effect.Effect<void> = Effect.suspend(() => {
         const was = paused
         if (was === undefined) return Effect.void
@@ -199,7 +244,7 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
           Effect.sync(() => {
             if (paused !== was) return
             paused = undefined
-            lower(frame)
+            lower(shown)
             changed()
           })
         )
@@ -228,31 +273,13 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
                     skipped: painted.skipped
                   }
                 }
-                raise(frame, covered)
+                raise(shown, covered)
                 covered = false
                 changed()
                 return painted
               })
             )
         })))
-      const pages = Pages.of({
-        paint,
-        resume,
-        clear: (sessionId) =>
-          Effect.sync(() => {
-            const upTo = latest.get(sessionId)
-            if (paused !== undefined || upTo === undefined) return
-            inspector.sessions().find((session) => session.id === sessionId)
-              ?.clear()
-            history.clear(sessionId, upTo)
-            wireHistory?.clear(sessionId, upTo)
-            notify()
-          }),
-        setOpen: (open) => Effect.sync(() => save(openKey, open)),
-        setRecording: (tag, recording) =>
-          Effect.sync(() => setRecording(tag, recording)),
-        setPosition: (next) => Effect.sync(() => setPosition(next))
-      })
       const controllables: BrowserHost.Controllables = {
         register: (root) => {
           roots.set(root.session, root)
@@ -261,217 +288,354 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
             if (roots.get(root.session) === root) roots.delete(root.session)
             if (paused?.root === root) {
               paused = undefined
-              lower(frame)
+              lower(shown)
             }
             changed()
           }
         }
       }
 
-      const frame = document.createElement("iframe")
-      frame.setAttribute("data-effect-ui-devtools", "")
-      frame.title = "Effect UI inspector"
-      frame.setAttribute(
-        "style",
-        "position:fixed;inset:auto;" + corners[position] +
-          ";z-index:2147483000;border:0;margin:0;padding:0;width:0;height:0;overflow:hidden;" +
-          "background:transparent;color-scheme:light dark;max-width:none;max-height:none;" +
-          "box-shadow:0 8px 28px light-dark(rgb(0 0 0 / .14), rgb(0 0 0 / .5))"
-      )
-      frame.srcdoc =
-        "<!doctype html><html><head><meta charset=\"utf-8\"><style>" + styles +
-        "</style></head><body><div id=\"root\"></div></body></html>"
-      yield* Effect.addFinalizer(() => Effect.sync(() => frame.remove()))
-      yield* Effect.callback<void>((resume) => {
-        frame.addEventListener("load", () => resume(Effect.void), {
-          once: true
-        })
-        document.body.appendChild(frame)
-      })
+      let shown: HTMLIFrameElement | undefined
       let covered = true
-      const opened = (event: Event) => {
-        if (
-          event.target !== frame && (event as ToggleEvent).newState === "open"
-        ) {
-          covered = true
-        }
-      }
-      document.addEventListener("beforetoggle", opened, true)
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() =>
-          document.removeEventListener("beforetoggle", opened, true)
-        )
-      )
-      const inner = frame.contentDocument!
-      const container = inner.getElementById("root")!
-
-      const root = inner.documentElement
-      const place = (next: Position) => {
-        position = next
-        frame.style.top = next.startsWith("Top") ? "12px" : "auto"
-        frame.style.bottom = next.startsWith("Bottom") ? "12px" : "auto"
-        frame.style.left = next.endsWith("Left") ? "12px" : "auto"
-        frame.style.right = next.endsWith("Right") ? "12px" : "auto"
-        root.setAttribute("data-position", next)
-      }
-      const setPosition = (next: Position) => {
-        place(next)
-        save(positionKey, next)
-        changed()
-      }
-      place(position)
-      const resize = (width: number, height: number) => {
-        root.style.setProperty(
-          "--panel-w",
-          Math.max(480, Math.round(width)) + "px"
-        )
-        root.style.setProperty(
-          "--panel-h",
-          Math.max(300, Math.round(height)) + "px"
-        )
-      }
-      const saved = load(sizeKey)
-      if (
-        Array.isArray(saved) && typeof saved[0] === "number" &&
-        typeof saved[1] === "number"
-      ) {
-        resize(saved[0], saved[1])
-      }
-      let suppressClick = false
-      inner.addEventListener("click", (event) => {
-        if (!suppressClick) return
-        suppressClick = false
-        event.preventDefault()
-        event.stopImmediatePropagation()
-      }, true)
-      const clamp = (value: number, min: number, max: number) =>
-        Math.min(Math.max(value, min), Math.max(min, max))
-      container.addEventListener("pointerdown", (event) => {
-        const target = event.target as Element
-        const grip = target.closest<HTMLElement>(".grip")
-        if (grip != null && event.button === 0) {
-          const panel = grip.parentElement
-          if (panel == null) return
-          event.preventDefault()
-          const grow = {
-            x: position.endsWith("Right") ? -1 : 1,
-            y: position.startsWith("Bottom") ? -1 : 1
+      if (options.panel !== false) {
+        const savedPosition = load(positionKey)
+        let position: Position = isPosition(savedPosition)
+          ? savedPosition
+          : (options.position ?? "BottomRight")
+        const highlight = makeHighlight(document)
+        yield* Effect.addFinalizer(() => Effect.sync(highlight.clear))
+        const owning = (target: EventTarget | null) => {
+          if (!(target instanceof Node)) return undefined
+          for (const root of roots.values()) {
+            const found = BrowserHost.instanceAt(root, target)
+            if (found !== undefined) return { root, found }
           }
+          return undefined
+        }
+        const feed: Feed = {
+          inspector,
+          origin: (session) => origins.get(session),
+          changes: Stream.fromPubSub(changes),
+          paintable: (session, seq) =>
+            roots.has(session) && history.holds(session, seq),
+          paused: () => paused?.at,
+          failures: () => failures,
+          open: load(openKey) === true,
+          position: () => position,
+          fields,
+          notRecording,
+          // The raw message's tag: an encoded one may be under another key.
+          stoppable: (session, seq) => {
+            const entry = history.entry(session, seq)
+            const tag = entry?._tag === "Update"
+              ? tagOf(entry.message)
+              : undefined
+            return tag === undefined || stopped.has(tag) ? undefined : tag
+          },
+          mounted: (session) => roots.has(session),
+          pick: Stream.callback<Control.Picked | undefined>((queue) =>
+            Effect.acquireRelease(
+              Effect.sync(() => {
+                const controller = new AbortController()
+                const options = { capture: true, signal: controller.signal }
+                const stop = (event: Event) => {
+                  event.preventDefault()
+                  event.stopImmediatePropagation()
+                }
+                let over: EventTarget | null = null
+                let owner: ReturnType<typeof owning>
+                let x: number | undefined, y = 0
+                const outline = (target: EventTarget | null) => {
+                  if (target !== over) owner = owning(over = target)
+                  if (owner === undefined) highlight.clear()
+                  else highlight.show([target as Node], owner.found.path)
+                }
+                view?.addEventListener("pointermove", (event) => {
+                  x = event.clientX
+                  y = event.clientY
+                  outline(event.target)
+                }, options)
+                // Scrolling moves the page under a still pointer, so outline what a click there would pick.
+                view?.addEventListener(
+                  "scroll",
+                  () => {
+                    if (x !== undefined) {
+                      outline(document.elementFromPoint?.(x, y) ?? null)
+                    }
+                  },
+                  options
+                )
+                for (const name of pickBlocked) {
+                  view?.addEventListener(name, stop, options)
+                }
+                view?.addEventListener("click", (event) => {
+                  stop(event)
+                  const owner = owning(event.target)
+                  if (owner === undefined) return
+                  const picked = {
+                    session: owner.root.session,
+                    ...Remote.matchOf(event.target as Element, owner.found)
+                  }
+                  picks.set(picked.session, picked)
+                  PubSub.publishUnsafe(states, undefined)
+                  Queue.offerUnsafe(queue, picked)
+                }, options)
+                const escape = (event: KeyboardEvent) => {
+                  if (event.key !== "Escape") return
+                  stop(event)
+                  Queue.offerUnsafe(queue, undefined)
+                }
+                // Focus is in the frame after clicking Pick, so Escape is heard there too.
+                for (const target of [view, inner.defaultView]) {
+                  target?.addEventListener("keydown", escape, options)
+                }
+                return controller
+              }),
+              (controller) =>
+                Effect.sync(() => {
+                  controller.abort()
+                  highlight.clear()
+                })
+            )
+          )
+        }
+        const pages = Pages.of({
+          paint,
+          resume,
+          clear: (sessionId) =>
+            Effect.sync(() => {
+              const upTo = latest.get(sessionId)
+              if (paused !== undefined || upTo === undefined) return
+              inspector.sessions().find((session) => session.id === sessionId)
+                ?.clear()
+              history.clear(sessionId, upTo)
+              wireHistory?.clear(sessionId, upTo)
+              notify()
+            }),
+          setOpen: (open) => Effect.sync(() => save(openKey, open)),
+          setRecording: (tag, recording) =>
+            Effect.sync(() => setRecording(tag, recording)),
+          setPosition: (next) => Effect.sync(() => setPosition(next)),
+          highlight: (session, instance) =>
+            Effect.sync(() => {
+              const root = paused === undefined ? roots.get(session) : undefined
+              const found = instance === null
+                ? undefined
+                : root?.instance(instance)
+              if (root === undefined || found === undefined) highlight.clear()
+              else {highlight.show(
+                  BrowserHost.nodesOf(root, found.instance),
+                  found.path
+                )}
+            })
+        })
+        const frame = document.createElement("iframe")
+        frame.setAttribute("data-effect-ui-devtools", "")
+        frame.title = "Effect UI inspector"
+        frame.setAttribute(
+          "style",
+          "position:fixed;inset:auto;" + corners[position] +
+            ";z-index:2147483000;border:0;margin:0;padding:0;width:0;height:0;overflow:hidden;" +
+            "background:transparent;color-scheme:light dark;max-width:none;max-height:none;" +
+            "box-shadow:0 8px 28px light-dark(rgb(0 0 0 / .14), rgb(0 0 0 / .5))"
+        )
+        frame.srcdoc =
+          "<!doctype html><html><head><meta charset=\"utf-8\"><style>" +
+          styles +
+          "</style></head><body><div id=\"root\"></div></body></html>"
+        shown = frame
+        yield* Effect.addFinalizer(() => Effect.sync(() => frame.remove()))
+        yield* Effect.callback<void>((resume) => {
+          frame.addEventListener("load", () => resume(Effect.void), {
+            once: true
+          })
+          document.body.appendChild(frame)
+        })
+        const opened = (event: Event) => {
+          if (
+            event.target !== frame && event.target !== highlight.box &&
+            (event as ToggleEvent).newState === "open"
+          ) {
+            covered = true
+          }
+        }
+        document.addEventListener("beforetoggle", opened, true)
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() =>
+            document.removeEventListener("beforetoggle", opened, true)
+          )
+        )
+        const inner = frame.contentDocument!
+        const container = inner.getElementById("root")!
+
+        const root = inner.documentElement
+        const place = (next: Position) => {
+          position = next
+          frame.style.top = next.startsWith("Top") ? "12px" : "auto"
+          frame.style.bottom = next.startsWith("Bottom") ? "12px" : "auto"
+          frame.style.left = next.endsWith("Left") ? "12px" : "auto"
+          frame.style.right = next.endsWith("Right") ? "12px" : "auto"
+          root.setAttribute("data-position", next)
+        }
+        const setPosition = (next: Position) => {
+          place(next)
+          save(positionKey, next)
+          changed()
+        }
+        place(position)
+        const resize = (width: number, height: number) => {
+          root.style.setProperty(
+            "--panel-w",
+            Math.max(480, Math.round(width)) + "px"
+          )
+          root.style.setProperty(
+            "--panel-h",
+            Math.max(300, Math.round(height)) + "px"
+          )
+        }
+        const saved = load(sizeKey)
+        if (
+          Array.isArray(saved) && typeof saved[0] === "number" &&
+          typeof saved[1] === "number"
+        ) {
+          resize(saved[0], saved[1])
+        }
+        let suppressClick = false
+        inner.addEventListener("click", (event) => {
+          if (!suppressClick) return
+          suppressClick = false
+          event.preventDefault()
+          event.stopImmediatePropagation()
+        }, true)
+        const clamp = (value: number, min: number, max: number) =>
+          Math.min(Math.max(value, min), Math.max(min, max))
+        container.addEventListener("pointerdown", (event) => {
+          const target = event.target as Element
+          const grip = target.closest<HTMLElement>(".grip")
+          if (grip != null && event.button === 0) {
+            const panel = grip.parentElement
+            if (panel == null) return
+            event.preventDefault()
+            const grow = {
+              x: position.endsWith("Right") ? -1 : 1,
+              y: position.startsWith("Bottom") ? -1 : 1
+            }
+            const start = {
+              x: event.screenX,
+              y: event.screenY,
+              rect: panel.getBoundingClientRect()
+            }
+            const move = (moved: PointerEvent) =>
+              resize(
+                start.rect.width + grow.x * (moved.screenX - start.x),
+                start.rect.height + grow.y * (moved.screenY - start.y)
+              )
+            const end = () => {
+              grip.removeEventListener("pointermove", move)
+              const rect = panel.getBoundingClientRect()
+              save(sizeKey, [rect.width, rect.height])
+            }
+            grip.setPointerCapture(event.pointerId)
+            grip.addEventListener("pointermove", move)
+            grip.addEventListener("lostpointercapture", end, { once: true })
+            return
+          }
+          const launcher = target.closest<HTMLElement>(".launcher")
+          if (launcher == null || event.button !== 0) return
+          suppressClick = false
           const start = {
             x: event.screenX,
             y: event.screenY,
-            rect: panel.getBoundingClientRect()
+            rect: frame.getBoundingClientRect()
           }
-          const move = (moved: PointerEvent) =>
-            resize(
-              start.rect.width + grow.x * (moved.screenX - start.x),
-              start.rect.height + grow.y * (moved.screenY - start.y)
-            )
-          const end = () => {
-            grip.removeEventListener("pointermove", move)
-            const rect = panel.getBoundingClientRect()
-            save(sizeKey, [rect.width, rect.height])
+          let dragging = false
+          let left = start.rect.left
+          let top = start.rect.top
+          const move = (moved: PointerEvent) => {
+            const dx = moved.screenX - start.x
+            const dy = moved.screenY - start.y
+            if (!dragging) {
+              if (Math.hypot(dx, dy) < 6) return
+              dragging = true
+              root.setAttribute("data-dragging", "true")
+            }
+            const vw = view?.innerWidth ?? 0
+            const vh = view?.innerHeight ?? 0
+            left = clamp(start.rect.left + dx, 12, vw - start.rect.width - 12)
+            top = clamp(start.rect.top + dy, 12, vh - start.rect.height - 12)
+            frame.style.left = Math.round(left) + "px"
+            frame.style.top = Math.round(top) + "px"
+            frame.style.right = "auto"
+            frame.style.bottom = "auto"
           }
-          grip.setPointerCapture(event.pointerId)
-          grip.addEventListener("pointermove", move)
-          grip.addEventListener("lostpointercapture", end, { once: true })
-          return
-        }
-        const launcher = target.closest<HTMLElement>(".launcher")
-        if (launcher == null || event.button !== 0) return
-        suppressClick = false
-        const start = {
-          x: event.screenX,
-          y: event.screenY,
-          rect: frame.getBoundingClientRect()
-        }
-        let dragging = false
-        let left = start.rect.left
-        let top = start.rect.top
-        const move = (moved: PointerEvent) => {
-          const dx = moved.screenX - start.x
-          const dy = moved.screenY - start.y
-          if (!dragging) {
-            if (Math.hypot(dx, dy) < 6) return
-            dragging = true
-            root.setAttribute("data-dragging", "true")
+          let done = false
+          const finish = (cancelled: boolean) => {
+            if (done) return
+            done = true
+            launcher.removeEventListener("pointermove", move)
+            launcher.removeEventListener("pointerup", onUp)
+            launcher.removeEventListener("pointercancel", onCancel)
+            launcher.removeEventListener("lostpointercapture", onLost)
+            if (!dragging) return
+            root.removeAttribute("data-dragging")
+            suppressClick = true
+            setTimeout(() => {
+              suppressClick = false
+            }, 0)
+            if (cancelled) {
+              place(position)
+              return
+            }
+            const vw = view?.innerWidth ?? 0
+            const vh = view?.innerHeight ?? 0
+            const vertical = top + start.rect.height / 2 < vh / 2
+              ? "Top"
+              : "Bottom"
+            const horizontal = left + start.rect.width / 2 < vw / 2
+              ? "Left"
+              : "Right"
+            setPosition((vertical + horizontal) as Position)
           }
-          const vw = view?.innerWidth ?? 0
-          const vh = view?.innerHeight ?? 0
-          left = clamp(start.rect.left + dx, 12, vw - start.rect.width - 12)
-          top = clamp(start.rect.top + dy, 12, vh - start.rect.height - 12)
-          frame.style.left = Math.round(left) + "px"
-          frame.style.top = Math.round(top) + "px"
-          frame.style.right = "auto"
-          frame.style.bottom = "auto"
-        }
-        let done = false
-        const finish = (cancelled: boolean) => {
-          if (done) return
-          done = true
-          launcher.removeEventListener("pointermove", move)
-          launcher.removeEventListener("pointerup", onUp)
-          launcher.removeEventListener("pointercancel", onCancel)
-          launcher.removeEventListener("lostpointercapture", onLost)
-          if (!dragging) return
-          root.removeAttribute("data-dragging")
-          suppressClick = true
-          setTimeout(() => {
-            suppressClick = false
-          }, 0)
-          if (cancelled) {
-            place(position)
-            return
-          }
-          const vw = view?.innerWidth ?? 0
-          const vh = view?.innerHeight ?? 0
-          const vertical = top + start.rect.height / 2 < vh / 2
-            ? "Top"
-            : "Bottom"
-          const horizontal = left + start.rect.width / 2 < vw / 2
-            ? "Left"
-            : "Right"
-          setPosition((vertical + horizontal) as Position)
-        }
-        const onUp = () => finish(false)
-        const onCancel = () => finish(true)
-        const onLost = () => finish(false)
-        launcher.setPointerCapture?.(event.pointerId)
-        launcher.addEventListener("pointermove", move)
-        launcher.addEventListener("pointerup", onUp)
-        launcher.addEventListener("pointercancel", onCancel)
-        launcher.addEventListener("lostpointercapture", onLost)
-      })
-
-      const viewport = () => {
-        if (view === null) return
-        root.style.setProperty("--vw", view.innerWidth + "px")
-        root.style.setProperty("--vh", view.innerHeight + "px")
-      }
-      viewport()
-      view?.addEventListener("resize", viewport)
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => view?.removeEventListener("resize", viewport))
-      )
-      const Observer =
-        (frame.contentWindow as (Window & typeof globalThis) | null)
-          ?.ResizeObserver
-      if (Observer !== undefined) {
-        const observer = new Observer(() => {
-          const shape = container.firstElementChild?.firstElementChild
-          frame.style.width = container.offsetWidth + "px"
-          frame.style.height = container.offsetHeight + "px"
-          frame.style.borderRadius = shape == null
-            ? "0"
-            : inner.defaultView!.getComputedStyle(shape).borderRadius
+          const onUp = () => finish(false)
+          const onCancel = () => finish(true)
+          const onLost = () => finish(false)
+          launcher.setPointerCapture?.(event.pointerId)
+          launcher.addEventListener("pointermove", move)
+          launcher.addEventListener("pointerup", onUp)
+          launcher.addEventListener("pointercancel", onCancel)
+          launcher.addEventListener("lostpointercapture", onLost)
         })
-        observer.observe(container)
-        yield* Effect.addFinalizer(() =>
-          Effect.sync(() => observer.disconnect())
-        )
-      }
 
-      yield* mountOverlay(container, feed, pages)
+        const viewport = () => {
+          if (view === null) return
+          root.style.setProperty("--vw", view.innerWidth + "px")
+          root.style.setProperty("--vh", view.innerHeight + "px")
+        }
+        viewport()
+        view?.addEventListener("resize", viewport)
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => view?.removeEventListener("resize", viewport))
+        )
+        const Observer =
+          (frame.contentWindow as (Window & typeof globalThis) | null)
+            ?.ResizeObserver
+        if (Observer !== undefined) {
+          const observer = new Observer(() => {
+            const shape = container.firstElementChild?.firstElementChild
+            frame.style.width = container.offsetWidth + "px"
+            frame.style.height = container.offsetHeight + "px"
+            frame.style.borderRadius = shape == null
+              ? "0"
+              : inner.defaultView!.getComputedStyle(shape).borderRadius
+          })
+          observer.observe(container)
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => observer.disconnect())
+          )
+        }
+
+        yield* mountOverlay(container, feed, pages)
+      }
 
       const encoded = yield* MessageLog.makeEncoded((batch) =>
         Effect.suspend(() => {
@@ -499,7 +663,8 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         paint,
         resume,
         notRecording,
-        setRecording
+        setRecording,
+        picks: () => Array.from(picks.values())
       }
       if (server !== undefined) {
         const sent = yield* Layer.build(
@@ -521,6 +686,7 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         yield* WebMcp.register(modelContext, {
           options: {
             size,
+            fields,
             dispatch: typeof options.webMcp === "object" &&
               options.webMcp.dispatch === true
           },
@@ -530,6 +696,7 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
             host: "browser",
             connected: roots.has(session)
           }),
+          picked: (session) => picks.get(session),
           pageOf: (session) =>
             roots.has(session)
               ? {

@@ -1,7 +1,7 @@
 /**
  * @internal
  */
-import * as Cause from "effect/Cause"
+import type * as Cause from "effect/Cause"
 import * as Clock from "effect/Clock"
 import * as Context from "effect/Context"
 import * as Duration from "effect/Duration"
@@ -63,7 +63,9 @@ export interface Root {
   readonly instance: Instance
   readonly model: () => unknown
   readonly send: (message: unknown) => void
+  readonly setProps: (props: unknown) => void
   readonly find: (born: number) => Instance | undefined
+  readonly numberOf: (inst: Instance) => number | undefined
   readonly dispatch: (
     inst: Instance,
     message: unknown
@@ -159,17 +161,12 @@ const bridge = (
               onMessage
             )
           }
-          let message: unknown = handler
-          if (typeof handler === "function") {
-            try {
-              message = handler(payload)
-            } catch (error) {
-              Kernel.fail(inst, "event", Cause.die(error))
-              return false
-            }
-          }
+          const message = inst.message(handler, () => payload)
           if (message === undefined) return false
-          onMessage?.()
+          onMessage?.(
+            (rec.v as View.Element<any, any>).eventOptions[event] ??
+              View.noFields
+          )
           Kernel.send(inst, message, event)
           return true
         }),
@@ -407,67 +404,66 @@ const fromDom = (
 
 const mountCore = (
   component: Component.Any,
-  rootProps: unknown,
+  props: unknown,
   container: unknown,
   hostOf: (ctx: Context.Context<any>) => HostInput,
   options?: Options
 ): Effect.Effect<
-  Root & Renderer.Root<any, any>,
+  Root & Renderer.Root<any, any, any>,
   never,
   Scope.Scope
-> =>
-  withProps(rootProps, (props) => {
-    const path = rootPath(component, options?.key)
-    const go = (decoded?: Exit.Exit<Decoded, unknown>) =>
-      Effect.uninterruptible(
-        Effect.contextWith((ctx: Context.Context<Scope.Scope>) => {
-          const owner = Context.get(ctx, Scope.Scope)
-          if (isClosed(owner)) return Effect.interrupt
-          let made: ReturnType<typeof start> | undefined
-          let ready = false
-          let waiters: Array<() => void> | undefined
-          scopeAddFinalizerUnsafe(owner, {}, () => {
-            const close = Effect.suspend(() => made?.close ?? Effect.void)
-            return Effect.suspend(() =>
-              ready
-                ? close
-                : Effect.flatMap(
-                  Effect.callback<void>((resume) => {
-                    if (ready) resume(Effect.void)
-                    else (waiters ??= []).push(() => resume(Effect.void))
-                  }),
-                  () => close
-                )
-            )
-          })
-          try {
-            made = start(
-              component,
-              path,
-              props,
-              container,
-              ctx,
-              options,
-              hostOf(ctx),
-              undefined,
-              decoded && [path, decoded]
-            )
-          } finally {
-            ready = true
-            if (waiters !== undefined) {
-              for (const wake of waiters) wake()
-            }
-          }
-          return isClosed(owner)
-            ? Effect.interrupt
-            : Effect.succeed(made.root)
+> => {
+  const path = rootPath(component, options?.key)
+  const go = (decoded?: Exit.Exit<Decoded, unknown>) =>
+    Effect.uninterruptible(
+      Effect.contextWith((ctx: Context.Context<Scope.Scope>) => {
+        const owner = Context.get(ctx, Scope.Scope)
+        if (isClosed(owner)) return Effect.interrupt
+        let made: ReturnType<typeof start> | undefined
+        let ready = false
+        let waiters: Array<() => void> | undefined
+        scopeAddFinalizerUnsafe(owner, {}, () => {
+          const close = Effect.suspend(() => made?.close ?? Effect.void)
+          return Effect.suspend(() =>
+            ready
+              ? close
+              : Effect.flatMap(
+                Effect.callback<void>((resume) => {
+                  if (ready) resume(Effect.void)
+                  else (waiters ??= []).push(() => resume(Effect.void))
+                }),
+                () => close
+              )
+          )
         })
-      )
-    const hydrate = options?.hydrate
-    return hydrate === undefined
-      ? go(undefined)
-      : hydrate.decode(component as unknown as Kernel.Runnable, path, go)
-  })
+        try {
+          made = start(
+            component,
+            path,
+            props,
+            container,
+            ctx,
+            options,
+            hostOf(ctx),
+            undefined,
+            decoded && [path, decoded]
+          )
+        } finally {
+          ready = true
+          if (waiters !== undefined) {
+            for (const wake of waiters) wake()
+          }
+        }
+        return isClosed(owner)
+          ? Effect.interrupt
+          : Effect.succeed(made.root)
+      })
+    )
+  const hydrate = options?.hydrate
+  return hydrate === undefined
+    ? go(undefined)
+    : hydrate.decode(component as unknown as Kernel.Runnable, path, go)
+}
 
 /** @internal */
 export const mount = (
@@ -476,23 +472,32 @@ export const mount = (
   container: unknown,
   options?: Options
 ): Effect.Effect<
-  Root & Renderer.Root<any, any>,
+  Root & Renderer.Root<any, any, any>,
   never,
   Scope.Scope | Renderer.Renderer
-> => mountCore(component, rootProps, container, fromRenderer, options)
+> =>
+  withProps(
+    rootProps,
+    (props) => mountCore(component, props, container, fromRenderer, options)
+  )
 
-/** @internal */
+/**
+ * Takes resolved props: `BrowserHost.mountRoot` runs a props Effect before
+ * a hot snapshot clears the container.
+ *
+ * @internal
+ */
 export const mountDom = (
   component: Component.Any,
-  rootProps: unknown,
+  props: unknown,
   container: unknown,
   makeDom: MakeDom,
   elements: ReadonlyArray<string> | "any",
   options?: Options
-): Effect.Effect<Root & Renderer.Root<any, any>, never, Scope.Scope> =>
+): Effect.Effect<Root & Renderer.Root<any, any, any>, never, Scope.Scope> =>
   mountCore(
     component,
-    rootProps,
+    props,
     container,
     () => fromDom(makeDom, elements),
     options
@@ -696,6 +701,7 @@ const start = (
           return routing === undefined ? first : routing.init(inst, first)
         },
         log: record,
+        slow: Context.get(ctx, services.SlowPhases)?.(ctx),
         onEmit: options?.onEmit,
         schedule: (task) => {
           const run = recording.follow()
@@ -747,8 +753,10 @@ const start = (
     instance: instance as unknown as Instance,
     model: () => instance.failure === undefined ? instance.model : undefined,
     send: (message: unknown) => recording.step(() => mounted.send(message)),
+    setProps: (props: unknown) => recording.step(() => mounted.setProps(props)),
     find: (born: number) =>
       findIn(instance, born, recording.numberOf) as Instance | undefined,
+    numberOf: recording.numberOf as unknown as Root["numberOf"],
     dispatch: (inst: Instance, message: unknown) =>
       Effect.callback<Dispatched>((resume) => {
         const target = inst as unknown as Kernel.Instance
@@ -782,7 +790,7 @@ const start = (
       }
       return queries.made()
     }
-  } satisfies Root & Renderer.Root<any, any>
+  } satisfies Root & Renderer.Root<any, any, any>
   hydrating?.finish(root.head)
   const awaitOwned: Effect.Effect<void> = Effect.suspend(() =>
     tree.owned === undefined || tree.owned.size === 0
@@ -875,43 +883,47 @@ const pendingIn = (rec: Kernel.Rec, out: Array<Pending>): void => {
   else if (rec.v._tag === "Child" && !rec.inst.closed) pendingOf(rec.inst, out)
 }
 
-const loadsOf = (
-  inst: Kernel.Instance,
-  out: Array<Load> = []
-): Array<Load> => {
-  if (inst.rendered !== undefined) loadsIn(inst.path, inst.rendered, out)
-  if (inst.kept !== undefined) {
-    for (const rec of inst.kept.parked()) loadsIn(inst.path, rec, out)
+const loadsOf = (root: Kernel.Instance): Array<Load> => {
+  const out: Array<Load> = []
+  // Stack entries are (mount path, Rec) pairs.
+  const todo: Array<any> = []
+  const enter = (inst: Kernel.Instance) => {
+    if (inst.kept !== undefined) {
+      const parked = inst.kept.parked()
+      for (let index = parked.length - 1; index >= 0; index--) {
+        todo.push(inst.path, parked[index])
+      }
+    }
+    if (inst.rendered !== undefined) todo.push(inst.path, inst.rendered)
+  }
+  enter(root)
+  while (todo.length > 0) {
+    const rec: Kernel.Rec = todo.pop()
+    let under: string = todo.pop()
+    const view = rec.v
+    const kids = rec.kids
+    if (kids === undefined) {
+      if (view._tag === "Child" && !rec.inst.closed) enter(rec.inst)
+      continue
+    }
+    if (view._tag === "Outlet") {
+      under = rec.inst.path + "/" + slotSegment(view.name)
+    } else if (
+      view._tag === "Child" && lazy.isLazy(view.component) &&
+      lazy.stateOf(view.component)._tag === "Loading"
+    ) {
+      // A kept child mounts under its holder.
+      if (view.alive !== undefined) under = rec.inst.path
+      out.push({
+        path: under + "/" + segment(view),
+        name: childName(view.component)
+      })
+    }
+    for (let index = kids.length - 1; index >= 0; index--) {
+      todo.push(under, kids[index])
+    }
   }
   return out
-}
-
-// `under` is the path a child drawn at `rec` mounts under.
-const loadsIn = (
-  under: string,
-  rec: Kernel.Rec,
-  out: Array<Load>
-): void => {
-  const view = rec.v
-  const kids = rec.kids
-  if (kids === undefined) {
-    if (view._tag === "Child" && !rec.inst.closed) loadsOf(rec.inst, out)
-    return
-  }
-  if (view._tag === "Outlet") {
-    under = rec.inst.path + "/" + slotSegment(view.name)
-  } else if (
-    view._tag === "Child" && lazy.isLazy(view.component) &&
-    lazy.stateOf(view.component)._tag === "Loading"
-  ) {
-    // A kept child mounts under its holder.
-    if (view.alive !== undefined) under = rec.inst.path
-    out.push({
-      path: under + "/" + segment(view),
-      name: childName(view.component)
-    })
-  }
-  for (const kid of kids) loadsIn(under, kid, out)
 }
 
 const onScheduler = (
@@ -948,6 +960,7 @@ export const prerender = (
     readonly elements: ReadonlyArray<string> | "any"
     readonly key?: string | undefined
     readonly static?: boolean | undefined
+    readonly includeProps?: boolean | undefined
     readonly sink?: services.ServerSink | undefined
     readonly onFinish?: ((cache: queryCore.Cache) => void) | undefined
   }
@@ -989,11 +1002,8 @@ export const prerender = (
         const cache = root.freeze()
         if (cache !== undefined) options.onFinish?.(cache)
         const query = cache === undefined ? {} : cache.dehydrate()
-        const snap = serialize.snapshot(
-          root.instance as unknown as Kernel.Instance,
-          made.deferred,
-          cache?.shipped
-        )
+        const instance = root.instance as unknown as Kernel.Instance
+        const snap = serialize.snapshot(instance, made.deferred, cache?.shipped)
         const nodes: Array<Renderer.ServerNode> = []
         const state = yield* serialize.write(
           snap,
@@ -1001,7 +1011,10 @@ export const prerender = (
           ctx,
           options.static === true,
           options.sink ?? serialize.nodeSink(nodes),
-          options.key
+          options.key,
+          options.includeProps === true
+            ? yield* serialize.encodeProps(instance, props, ctx)
+            : undefined
         )
         return { nodes, state, model: root.model(), head: headOf(root) }
       }),

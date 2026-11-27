@@ -1,6 +1,7 @@
 import {
   Command,
   Component,
+  Query,
   Route,
   Router,
   Subscription,
@@ -1244,5 +1245,469 @@ describe("Story", () => {
         const waiting = yield* Story.make(Note, {})
         waiting.send(author).given((model) => model).keepPending("author")
       }))
+  })
+
+  describe("check", () => {
+    const EditorMessage = UiSchema.TaggedEnum({
+      Typed: { text: Schema.String },
+      ClickedSave: {},
+      CompletedSave: {}
+    })
+
+    class SaveEditor extends Command.Service<SaveEditor>()("todos/Save", {
+      args: { text: Schema.String },
+      success: EditorMessage
+    }) {}
+
+    const Editor = Component.define({
+      name: "Editor",
+      model: Schema.Struct({ text: Schema.String, saving: Schema.Boolean }),
+      message: EditorMessage
+    }).make({
+      init: () => ({ text: "", saving: false }),
+      update: ($, message) =>
+        EditorMessage.match(message, {
+          Typed: ({ text }) => ({ ...$.model, text }),
+          ClickedSave: () =>
+            $.set({ ...$.model, saving: true }).run(
+              SaveEditor.make({ text: $.model.text })
+            ),
+          CompletedSave: () => ({ ...$.model, saving: false })
+        }),
+      view: (h, model) => h.el("div", model.text)
+    })
+
+    it.effect("runs generated messages across pending Commands and settles them from their Service schema", () =>
+      Story.check(Editor, {}, { seed: 1 }))
+
+    it.effect("finds an interleaved invariant failure and reports shrunk replayable Story steps", () =>
+      Effect.gen(function*() {
+        const message = yield* defect(
+          Story.check(Editor, {}, {
+            seed: 1,
+            messages: Schema.Union([
+              EditorMessage.cases.ClickedSave,
+              EditorMessage.cases.Typed
+            ]),
+            commands: [[SaveEditor, {
+              success: EditorMessage.cases.CompletedSave
+            }]],
+            invariant: (story) =>
+              story.model.saving === (story.pending.length > 0)
+          })
+        )
+        assert.include(message, "Story.start(Editor, {})")
+        assert.match(
+          message,
+          /\.send\(\{"_tag":"ClickedSave"\}\)[\s\S]*\.keepPending\(todos\/Save\)[\s\S]*\.send\(\{"_tag":"ClickedSave"\}\)[\s\S]*\.resolve\(todos\/Save,\s*\{"_tag":"CompletedSave"\}\)/
+        )
+        assert.notInclude(message, `"_tag":"Typed"`)
+        assert.include(message, `"saving":false`)
+      }))
+
+    it.effect("fails naming a Command.make Command without a commands override, and passes with one", () =>
+      Effect.gen(function*() {
+        const message = yield* defect(
+          Story.check(Note, {}, {
+            seed: 1,
+            messages: NoteMessage.cases.Save
+          })
+        )
+        assert.include(message, "notes/SaveNote")
+        yield* Story.check(Note, {}, {
+          seed: 1,
+          messages: NoteMessage.cases.Save,
+          commands: [[SaveNoteCommand, { success: NoteMessage.cases.Saved }]]
+        })
+      }))
+
+    it.effect("only settles with outcomes the result Schemas have, and leaves work with none pending", () => {
+      const Message = UiSchema.TaggedEnum({ Go: {}, Failed: {} })
+      class Lookup extends Query.Service<Lookup>()("check/Lookup", {
+        args: {},
+        success: Schema.Never,
+        error: Schema.String,
+        staleTime: "1 minute"
+      }) {}
+      class Reject extends Command.Service<Reject>()("check/Reject", {
+        success: Schema.Never,
+        error: Schema.String
+      }) {}
+      class Hang extends Command.Service<Hang>()("check/Hang", {
+        success: Schema.Never
+      }) {}
+      const Failing = Component.define({
+        name: "Failing",
+        model: Schema.Struct({}),
+        message: Message,
+        queries: { q: { query: Lookup, args: () => ({}) } }
+      }).make({
+        init: () => ({}),
+        update: ($, message) =>
+          Message.match(message, {
+            Go: () =>
+              $.run(
+                Reject.make().pipe(Command.match({
+                  onSuccess: () => Message.Failed(),
+                  onFailure: () => Message.Failed()
+                }))
+              ).run(Hang.make()),
+            Failed: () => $.model
+          }),
+        view: (h) => h.el("div", "")
+      })
+      return Story.check(Failing, {}, {
+        seed: 1,
+        messages: Message.cases.Go,
+        invariant: (story) => !AsyncResult.isSuccess(story.queries().q)
+      })
+    })
+
+    it.effect("loads an infinite query as the runtime walks it", () => {
+      class List extends Query.InfiniteService<List>()("check/List", {
+        page: Schema.Literal(1),
+        items: (page) => [page],
+        key: String,
+        cursor: Schema.Number,
+        next: (_, pages) => Option.some(pages.length),
+        staleTime: "1 minute"
+      }) {}
+      class Touch extends Command.Service<Touch>()("check/Touch", {
+        invalidates: () => [List]
+      }) {}
+      const Message = UiSchema.TaggedEnum({ More: {}, Touch: {} })
+      const Feed = Component.define({
+        name: "Feed",
+        model: Schema.Struct({}),
+        message: Message,
+        queries: { list: { query: List, args: () => ({}) } }
+      }).make({
+        init: () => ({}),
+        update: ($, message) =>
+          Message.match(message, {
+            More: () => $.loadMore("list"),
+            Touch: () => $.run(Command.afterRefetch(Touch.make(), "Infinity"))
+          }),
+        view: (h) => h.el("div", "")
+      })
+      // A cold load fetches one page, More adds one, and a refetch keeps every held page.
+      let held = 0
+      return Story.check(Feed, {}, {
+        seed: 1,
+        runs: 1000,
+        invariant: (story) => {
+          const list = story.queries().list
+          if (!AsyncResult.isSuccess(list)) {
+            held = 0
+            return
+          }
+          const pages = list.value.pages.length
+          const walked = pages >= held && pages <= held + 1
+          held = pages
+          return walked
+        }
+      })
+    })
+
+    it.effect("fails on an event outside the events Schema", () =>
+      Effect.gen(function*() {
+        const Emitter = Component.define({
+          name: "Emitter",
+          model: Schema.Struct({}),
+          message: UiSchema.TaggedEnum({ Go: {} }),
+          events: Schema.String
+        }).make({
+          init: () => ({}),
+          update: ($) => $.emit(undefined as any),
+          view: (h) => h.el("div", "")
+        })
+        const message = yield* defect(Story.check(Emitter, {}, { seed: 1 }))
+        assert.include(message, "the events Schema")
+      }))
+
+    it.effect("runs settle-only stories when messages is Schema.Never", () =>
+      Story.check(Editor, {}, { seed: 1, messages: Schema.Never }))
+  })
+
+  describe("explore", () => {
+    const SearchMsg = UiSchema.TaggedEnum({
+      Typed: { text: Schema.String },
+      GotResults: { query: Schema.String }
+    })
+
+    const makeSearch = (mode: Command.Mode) => {
+      const Search = Command.make(
+        "search/Search",
+        { args: { text: Schema.String }, mode },
+        ({ text }) => Effect.succeed(SearchMsg.GotResults({ query: text }))
+      )
+      const SearchComponent = Component.define({
+        name: "ExploreSearch",
+        model: Schema.Struct({
+          query: Schema.String,
+          results: Schema.NullOr(Schema.String)
+        }),
+        message: SearchMsg
+      }).make({
+        init: () => ({ query: "", results: null }),
+        update: ($, message) =>
+          SearchMsg.match(message, {
+            Typed: ({ text }) =>
+              $.set({ ...$.model, query: text }).run(Search.make({ text })),
+            GotResults: ({ query }) => ({ ...$.model, results: query })
+          }),
+        view: (h, model) => h.el("div", model.query)
+      })
+      return { Search, Component: SearchComponent }
+    }
+
+    const searchMessages = [
+      SearchMsg.Typed({ text: "a" }),
+      SearchMsg.Typed({ text: "ab" })
+    ]
+
+    const resultsMatchQuery = (story: {
+      readonly pending: ReadonlyArray<unknown>
+      readonly model: {
+        readonly query: string
+        readonly results: string | null
+      }
+    }) =>
+      story.pending.length > 0 || story.model.results === null ||
+      story.model.results === story.model.query
+
+    const exploreFailure = (f: () => void): string => {
+      try {
+        f()
+      } catch (error) {
+        if (error instanceof TypeError) throw error
+        return error instanceof Error ? error.message : String(error)
+      }
+      assert.fail("expected Story.explore to throw")
+    }
+
+    it("finds the shortest stale-result interleaving under concurrent mode", () => {
+      const concurrent = makeSearch("concurrent")
+      const message = exploreFailure(() => {
+        Story.explore(concurrent.Component, {}, {
+          messages: searchMessages,
+          commands: [[concurrent.Search, {
+            success: ({ text }) => [SearchMsg.GotResults({ query: text })]
+          }]],
+          invariant: resultsMatchQuery,
+          depth: 6
+        })
+      })
+      assert.strictEqual(
+        message,
+        `Story.explore: the invariant returned false:
+
+Story.start(ExploreSearch, {})
+  .send({"_tag":"Typed","text":"a"})
+  .keepPending(search/Search)
+  .send({"_tag":"Typed","text":"ab"})
+  .resolve(search/Search({"text":"ab"}), {"query":"ab","_tag":"GotResults"})
+  .resolve(search/Search, {"query":"a","_tag":"GotResults"})
+
+  model: {"query":"ab","results":"a"}
+  pending: nothing`
+      )
+    })
+
+    it("passes unclosed within depth, and throws when the state budget runs out or a bound isn't a count", () => {
+      const queued = makeSearch("queue")
+      const explore = (
+        bounds: { readonly depth?: number; readonly states?: number }
+      ) =>
+        Story.explore(queued.Component, {}, {
+          messages: searchMessages,
+          commands: [[queued.Search, {
+            success: ({ text }) => [SearchMsg.GotResults({ query: text })]
+          }]],
+          invariant: resultsMatchQuery,
+          depth: 6,
+          ...bounds
+        })
+      assert.isFalse(explore({}).closed)
+      assert.throws(
+        () => explore({ states: 10 }),
+        /^Story\.explore: the budget of 10 states ran out/
+      )
+      for (
+        const bounds of [{ depth: Number.NaN }, { depth: -1 }, { states: 0 }]
+      ) {
+        assert.throws(
+          () => explore(bounds),
+          /^Story\.explore: `(depth|states)` must be an integer/
+        )
+      }
+    })
+
+    it("merges plain data only in the same key order, ends on a cycle and keys a throwing mapper by its run", () => {
+      const OrderMsg = UiSchema.TaggedEnum({
+        Reverse: {},
+        Check: {},
+        Loop: {},
+        Start: {}
+      })
+      const looped = () => {
+        const node: { next?: unknown } = {}
+        node.next = node
+        return node
+      }
+      const Work = Command.make(
+        "order/Work",
+        { args: {} },
+        () => Effect.succeed(1)
+      )
+      const Order = Component.define({
+        name: "Order",
+        model: Schema.Struct({
+          a: Schema.Number,
+          b: Schema.Number,
+          node: Schema.Unknown
+        }),
+        message: OrderMsg
+      }).make({
+        init: () => ({ a: 1, b: 1, node: looped() }),
+        update: ($, message) =>
+          OrderMsg.match(message, {
+            Reverse: () => ({ b: $.model.b, a: $.model.a, node: $.model.node }),
+            Check: () =>
+              Object.keys($.model)[0] === "b" ? { ...$.model, a: 0 } : $.model,
+            Loop: () => ({ ...$.model, node: looped() }),
+            Start: () =>
+              $.run(
+                Work.make({}).pipe(Command.map((): typeof OrderMsg.Type => {
+                  throw new Error("bad mapper")
+                }))
+              )
+          }),
+        view: (h) => h.el("p")
+      })
+      const reversed = exploreFailure(() => {
+        Story.explore(Order, {}, {
+          messages: [OrderMsg.Reverse(), OrderMsg.Check()],
+          invariant: (story) => story.model.a === 1,
+          depth: 2
+        })
+      })
+      assert.include(
+        reversed,
+        `.send({"_tag":"Reverse"})\n  .send({"_tag":"Check"})`
+      )
+      assert.deepStrictEqual(
+        Story.explore(Order, {}, { messages: [OrderMsg.Loop()], depth: 1 }),
+        { states: 1, closed: true }
+      )
+
+      const mapped = exploreFailure(() => {
+        Story.explore(Order, {}, {
+          messages: [OrderMsg.Start()],
+          commands: [[Work, { success: [1] }]],
+          depth: 2
+        })
+      })
+      assert.match(
+        mapped,
+        /the step threw: bad mapper[\s\S]*\.resolve\(order\/Work, 1\)/
+      )
+    })
+
+    it("doesn't merge copies past an opaque value, yet an unchanged record takes no new state", () => {
+      const OpaqueMsg = UiSchema.TaggedEnum({
+        Change: {},
+        Copy: {},
+        Check: {},
+        Loop: {}
+      })
+      class Box {
+        readonly key: object
+        constructor(key: object) {
+          this.key = key
+        }
+      }
+      const Opaque = Component.define({
+        name: "Opaque",
+        model: Schema.Struct({
+          query: Schema.URLSearchParams,
+          key: Schema.Unknown,
+          box: Schema.Unknown,
+          hidden: Schema.Unknown,
+          bad: Schema.Boolean
+        }),
+        message: OpaqueMsg
+      }).make({
+        init: () => {
+          const key = { id: 1 }
+          return {
+            query: new URLSearchParams({ tab: "a" }),
+            key,
+            box: new Box(key),
+            hidden: {
+              get value(): never {
+                throw new Error("unexpected read")
+              }
+            },
+            bad: false
+          }
+        },
+        update: ($, message) =>
+          OpaqueMsg.match(message, {
+            Change: () => ({
+              ...$.model,
+              query: new URLSearchParams({ tab: "b" })
+            }),
+            Copy: () => ({ ...$.model, key: { ...$.model.key as object } }),
+            Check: () => ({
+              ...$.model,
+              bad: $.model.query.get("tab") === "b" ||
+                $.model.key !== ($.model.box as Box).key
+            }),
+            Loop: () => $.model
+          }),
+        view: (h) => h.el("p")
+      })
+      for (const tag of ["Change", "Copy"] as const) {
+        const failure = exploreFailure(() => {
+          Story.explore(Opaque, {}, {
+            messages: [OpaqueMsg[tag](), OpaqueMsg.Check()],
+            invariant: (story) => !story.model.bad,
+            depth: 2
+          })
+        })
+        assert.include(
+          failure,
+          `.send({"_tag":"${tag}"})\n  .send({"_tag":"Check"})`
+        )
+      }
+      assert.deepStrictEqual(
+        Story.explore(Opaque, {}, {
+          messages: [OpaqueMsg.Loop()],
+          depth: 3,
+          states: 1
+        }),
+        { states: 1, closed: true }
+      )
+    })
+
+    it("fails naming an unlisted Command, and passes across emitted events and unloaded queries", () => {
+      const message = exploreFailure(() => {
+        Story.explore(Note, {}, {
+          messages: [NoteMessage.Save()],
+          commands: [],
+          invariant: () => true,
+          depth: 2
+        })
+      })
+      assert.include(message, "notes/SaveNote")
+
+      Story.explore(Note, { author: "1" }, {
+        messages: [NoteMessage.Save()],
+        commands: [[SaveNoteCommand, { success: [NoteMessage.Saved()] }]],
+        invariant: () => true,
+        depth: 2
+      })
+    })
   })
 })

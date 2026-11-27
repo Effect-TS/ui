@@ -17,6 +17,7 @@ import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import {
   Cause,
+  Clock,
   Console,
   Context,
   Deferred,
@@ -2738,6 +2739,52 @@ describe("Runtime", () => {
         yield* TestHost.settle
         assert.strictEqual(changes(), 4)
       })))
+
+    it.effect("root.setProps updates a mounted root without remounting", () =>
+      provideHost(Effect.gen(function*() {
+        let inits = 0
+        const Clock = Component.define({
+          name: "Clock",
+          props: Schema.Date,
+          model: Schema.Number,
+          message: CounterMessage
+        }).make({
+          init: () => {
+            inits++
+            return 0
+          },
+          update: ($) => $.model + 1,
+          view: (h, count) => h.el("span", `${h.props.getTime()}:${count}`),
+          subscriptions: ({ props }) => [
+            Subscription.make("sub", props.getTime(), () => Stream.never)
+          ]
+        })
+
+        const root = yield* TestHost.mount(Clock, new Date(0))
+        root.send(CounterMessage.Increment())
+        yield* TestHost.settle
+
+        const before = root.log().length
+        root.setProps(new Date(1))
+        yield* TestHost.settle
+        assert.strictEqual(inits, 1)
+        assert.strictEqual(root.text(), "1:1")
+        const added = root.log().slice(before)
+        const seq = added[0].seq
+        assert.strictEqual(
+          TestHost.formatTimeline(added),
+          [
+            `#${seq} /Clock PropsChanged`,
+            `    #${seq + 1} /Clock SubscriptionStopped sub:0`,
+            `    #${seq + 2} /Clock SubscriptionStarted sub:1`
+          ].join("\n")
+        )
+
+        // A new Date of the same time is equal and logs nothing.
+        root.setProps(new Date(1))
+        yield* TestHost.settle
+        assert.strictEqual(root.log().length, before + added.length)
+      })))
   })
 
   describe("provided Layers", () => {
@@ -4708,6 +4755,37 @@ describe("Runtime", () => {
         yield* TestHost.settle
         assert.strictEqual(field.props.value, "B")
       })))
+
+    it.effect("controlled properties are restored after a refused edit", () =>
+      Effect.gen(function*() {
+        const Msg = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
+        const Form = Component.define({
+          name: "Form",
+          model: Schema.String,
+          message: Msg,
+          elements: Tiny
+        }).make({
+          init: () => "ab",
+          update: ($, message) =>
+            message.value.length <= 2 ? message.value : $.model,
+          view: (h, value) =>
+            h.field.value(value).on(
+              "input",
+              ({ value }) => Msg.Typed({ value })
+            )
+        })
+        const root = yield* TestHost.mount(Form, {})
+        const field = root.get(Locator.tag("field")) as TestHost.TestElement
+        field.props.value = "abc"
+        Locator.fire(field, "input", { value: "abc" })
+        yield* TestHost.settle
+        assert.strictEqual(root.model(), "ab")
+        assert.strictEqual(field.props.value, "ab")
+      }).pipe(
+        // A renderer on a host of its own, which `settle` still restores.
+        Effect.provide(Renderer.layer(TestHost.makeHost())),
+        provideHost
+      ))
 
     it.effect("onMount runs with the element's node on hosts that run mounts", () =>
       Effect.gen(function*() {
@@ -6789,6 +6867,73 @@ describe("Runtime", () => {
           entry._tag === "Failed"
         ) as MessageLog.Failed
         assert.strictEqual(failed.in, "onEmit")
+      })))
+  })
+
+  describe("slow phases", () => {
+    it.effect("Renderer.slowPhases reports an update, view or flush over its budget, with its time, and nothing within it", () =>
+      provideHost(Effect.gen(function*() {
+        // Each update and view moves the clock by the millis it is given.
+        let spent = 0
+        const outer = yield* Clock.Clock
+        const clock: Clock.Clock = Object.assign(Object.create(outer), {
+          monotonicTimeNanosUnsafe: () =>
+            outer.monotonicTimeNanosUnsafe() + BigInt(spent * 1_000_000)
+        })
+        const Message = Schema.TaggedUnion({
+          Work: { update: Schema.Number, view: Schema.Number }
+        })
+        const work = Message.make({ _tag: "Work", update: 5, view: 10 })
+        const Page = Component.define({
+          name: "Page",
+          model: Schema.Number,
+          message: Message
+        }).make({
+          init: () => 20,
+          update: (_, message) => {
+            spent += message.update
+            return message.view
+          },
+          view: (h, millis) => {
+            spent += millis
+            return h.el("button").on("click", work).children("work")
+          }
+        })
+        const reports: Array<Renderer.SlowPhase> = []
+        const root = yield* TestHost.mount(Page, {}).pipe(
+          Effect.provide(Renderer.slowPhases({
+            update: "4 millis",
+            view: "16 millis",
+            flush: "16 millis",
+            onSlow: (slow) => {
+              reports.push(slow)
+            }
+          })),
+          Effect.provideService(Clock.Clock, clock)
+        )
+        // The first mount counts as a flush.
+        assert.deepStrictEqual(reports.splice(0), [
+          {
+            phase: "view",
+            path: "/Page",
+            component: "Page",
+            duration: 20,
+            budget: 16
+          },
+          { phase: "flush", duration: 20, budget: 16 }
+        ])
+        click(root, "work")
+        yield* TestHost.settle
+        assert.deepStrictEqual(reports, [
+          {
+            phase: "update",
+            path: "/Page",
+            component: "Page",
+            message: work,
+            duration: 5,
+            budget: 4
+          }
+        ])
       })))
   })
 })

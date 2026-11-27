@@ -702,7 +702,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       )
     }))
 
-  it.effect("escapes text, keeps a leading newline, and selects the option whose text is the select's value", () =>
+  it.effect("escapes text and a textarea's value, keeps a leading newline, and selects the option whose text is the select's value", () =>
     Effect.gen(function*() {
       const Page = Html.component({
         name: "Text",
@@ -715,6 +715,7 @@ describe("HtmlServer", { concurrent: false }, () => {
           h.div.children(
             h.p.children("a<b>&c"),
             h.pre.children("\nx"),
+            h.textarea.value("a<b"),
             h.select.value("b").children(
               h.option.children("a"),
               h.option.children("b")
@@ -723,7 +724,42 @@ describe("HtmlServer", { concurrent: false }, () => {
       })
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
       expect(rendered.html).toBe(
-        "<!--[/Text--><div><p>a&lt;b&gt;&amp;c</p><pre>\n\nx</pre><select><option>a</option><option selected>b</option></select></div><!--]/Text-->"
+        "<!--[/Text--><div><p>a&lt;b&gt;&amp;c</p><pre>\n\nx</pre><textarea>a&lt;b</textarea><select><option>a</option><option selected>b</option></select></div><!--]/Text-->"
+      )
+    }))
+
+  it.effect("selects only the first matching option in a controlled select", () =>
+    Effect.gen(function*() {
+      const Page = Html.component({
+        name: "DuplicateOptions",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          h.div.children(
+            h.select.value("b").children(
+              h.option.attr("value", "a").children("A"),
+              h.option.attr("value", "b").children("B one"),
+              h.option.attr("value", "b").children("B two")
+            ),
+            h.select.value("a b").children(
+              h.option.children(
+                " \ta\n",
+                new Html.Element<never>("script").children("0"),
+                "  b\r "
+              ),
+              h.option.children("a b")
+            )
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toBe(
+        "<!--[/DuplicateOptions--><div>" +
+          "<select><option value=\"a\">A</option><option value=\"b\" selected>B one</option><option value=\"b\">B two</option></select>" +
+          "<select><option selected> \ta\n<script>0</script>  b\r </option><option>a b</option></select>" +
+          "</div><!--]/DuplicateOptions-->"
       )
     }))
 
@@ -740,7 +776,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         update: ($) => $.model,
         view: (h) =>
           h.div.children(
-            h.textarea.children(
+            h.el("textarea").children(
               h.el("span").prop("value", unreadable).children("only text")
             ),
             h.el("br").children(
@@ -2106,6 +2142,53 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(rendered.state["~query"]).toEqual({})
     }))
 
+  it.effect(
+    "defers an instance whose view is too deep to render, instead of dying",
+    () =>
+      Effect.gen(function*() {
+        let depth = 1000
+        const Deep = Html.component({
+          name: "Deep",
+          model: Schema.Struct({}),
+          message: Schema.Never
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) => {
+            let node: View.Content<never> = h.span("leaf")
+            for (let i = 0; i < depth; i++) node = h.div(node)
+            return node
+          }
+        })
+        const Page = Html.component({
+          name: "Page",
+          model: Schema.Struct({}),
+          message: Schema.Never
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) =>
+            h.main(
+              Deep(h, { key: "d", props: {}, fallback: () => h.p("too deep") })
+            )
+        })
+
+        // Probe the runtime’s stack limit rather than assuming a fixed failure depth.
+        let rendered = yield* HtmlServer.renderToHtml(Page, {})
+        while (rendered.html.includes("leaf") && depth < 20_000) {
+          depth = Math.ceil(depth * 1.1)
+          rendered = yield* HtmlServer.renderToHtml(Page, {})
+        }
+        if (!rendered.html.includes("leaf")) {
+          expect(rendered.html).toContain(
+            "<!--[/Page/Deep[d]--><p>too deep</p><!--]/Page/Deep[d]-->"
+          )
+          expect(rendered.state["~deferred"]).toEqual(["/Page/Deep[d]"])
+        }
+      }),
+    60_000
+  )
+
   it.effect("shows the fallback of an instance whose Layer fails on the client, and adopts what follows it", () =>
     Effect.gen(function*() {
       let serving = true
@@ -2360,7 +2443,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => ({}),
         update: ($) => $.model,
         view: (h) =>
-          h.div(h.textarea(Word(h, { key: "a", props: {} })), h.p("after"))
+          h.div(
+            h.el("textarea", Word(h, { key: "a", props: {} })),
+            h.p("after")
+          )
       })
       const result = yield* ssr(Form, {})
       expect(result.html).toBe(

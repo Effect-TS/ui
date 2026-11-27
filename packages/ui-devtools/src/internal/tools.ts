@@ -23,13 +23,18 @@ export interface Page {
 }
 
 export interface Backend {
-  readonly options: { readonly size: number; readonly dispatch: boolean }
+  readonly options: {
+    readonly size: number
+    readonly dispatch: boolean
+    readonly fields?: ReadonlyArray<string> | undefined
+  }
   readonly inspector: Inspector.Inspector
   readonly history: History.History
   readonly meta: (session: string) => {
     readonly host: MessageLog.WireHost | undefined
     readonly connected: boolean
   } | undefined
+  readonly picked: (session: string) => Control.Picked | undefined
   readonly pageOf: (session: string) => Page | undefined
   readonly until: <A>(check: () => A | undefined) => Effect.Effect<A>
   readonly within: number
@@ -116,6 +121,8 @@ const ListEntries = read(Tool.make("list_entries", {
   description:
     "Lists log entries as rows without payloads, oldest first. Without after, returns the newest limit " +
     "rows. filter \"messages\" keeps updates, mounts and failures, \"commands\" adds Command runs. " +
+    "Rows include available declared fields and the field used for filtering in a fields object. " +
+    "Only top-level string, number and boolean values from messages or Command args are included. " +
     "Read one entry with get_entry, its causal chain with get_chain.",
   parameters: Schema.Struct({
     session: SessionParam,
@@ -128,6 +135,11 @@ const ListEntries = read(Tool.make("list_entries", {
     }),
     after: Schema.optionalKey(Schema.Number).annotate({
       description: "Only entries with a seq above this."
+    }),
+    field: Schema.optionalKey(Read.Field).annotate({
+      description:
+        "Only entries whose message or Command args has this top-level field with this value. " +
+        "The type counts: 42 and \"42\" differ."
     }),
     limit: Schema.optionalKey(
       Schema.Number.check(Schema.isBetween({ minimum: 1, maximum: 500 }))
@@ -236,7 +248,11 @@ const SetRecording = control(Tool.make("set_recording", {
 
 const GetMessageSchema = read(Tool.make("get_message_schema", {
   description:
-    "Returns the JSON Schema of the messages an instance accepts, as dispatch takes them.",
+    "Returns dispatch JSON Schema and per-tag examples, filtered by _tag when given. " +
+    "Entries with only message pass the dispatch decoder and are ready to send. " +
+    "Templates need edits: replace { \"~redacted\": true } placeholders when redacted is true, " +
+    "and fix decode errors reported by invalid. Entries without message have no safe example; " +
+    "invalid explains why.",
   parameters: Schema.Struct({
     session: SessionParam,
     instance: Schema.Number,
@@ -244,6 +260,29 @@ const GetMessageSchema = read(Tool.make("get_message_schema", {
       description: "Narrows the schema to one message _tag."
     })
   }),
+  success: Result,
+  failure: ToolError
+}))
+
+const FindInstances = read(Tool.make("find_instances", {
+  description:
+    "Finds the instances that rendered the page's elements matching a CSS selector, in document order: " +
+    "each match's tag, instance, path, component and index in document.querySelectorAll(selector). " +
+    "Elements outside the session's root are left out. Returns the first 20 matches and the total. " +
+    "Returns no element text.",
+  parameters: Schema.Struct({
+    session: SessionParam,
+    selector: Schema.String.annotate({ description: "A CSS selector." })
+  }),
+  success: Result,
+  failure: ToolError
+}))
+
+const GetPicked = read(Tool.make("get_picked", {
+  description:
+    "Returns the element last picked with the DevTools Pick button in the session: its tag and the instance, " +
+    "path and component that rendered it, or null before any pick. Returns no element text.",
+  parameters: Schema.Struct({ session: SessionParam }),
   success: Result,
   failure: ToolError
 }))
@@ -307,6 +346,8 @@ export const Tools = Toolkit.make(
   Resume,
   SetRecording,
   GetMessageSchema,
+  FindInstances,
+  GetPicked,
   Dispatch,
   Wait
 )
@@ -315,7 +356,8 @@ export const instructions =
   "Inspects a running Effect UI app in development. Start with list_sessions and list_instances. " +
   "list_entries and get_chain explain what happened and why; get_state and diff_state show state at any entry. " +
   "show_entry paints the page at an entry, resume returns to the live page. set_recording stops or resumes " +
-  "recording a message _tag. dispatch sends messages when " +
+  "recording a message _tag. find_instances and get_picked find the instance that rendered an element. " +
+  "dispatch sends messages when " +
   "enabled, and wait lets the Commands they start finish."
 
 const select = (
@@ -388,6 +430,7 @@ const isState = (entry: MessageLog.WireEntry | Inspector.Outside) =>
 
 export const handlers = (server: Backend) => {
   const { history, inspector, options } = server
+  const declared = Read.fieldNames(options.fields)
 
   const sessionOf = (id: string | undefined) =>
     Effect.suspend(() => {
@@ -441,8 +484,13 @@ export const handlers = (server: Backend) => {
       : Effect.succeed(entry)
   }
 
-  const row = (session: Inspector.Session, entry: MessageLog.WireEntry) => {
+  const row = (
+    session: Inspector.Session,
+    entry: MessageLog.WireEntry,
+    names: ReadonlyArray<string>
+  ) => {
     const label = Read.rowOf(session, entry)
+    const fields = Read.fieldsOf(session, entry, names)
     return omitNull({
       seq: entry.seq,
       tag: entry._tag,
@@ -450,7 +498,10 @@ export const handlers = (server: Backend) => {
       path: "path" in entry ? entry.path : undefined,
       label: [label.text, label.detail].filter(Boolean).join(" "),
       changed: session.previous(entry.seq)?.changed,
-      causedBy: entry.causedBy
+      causedBy: entry.causedBy,
+      fields: fields.length === 0
+        ? undefined
+        : Object.fromEntries(fields.map(({ name, value }) => [name, value]))
     })
   }
 
@@ -562,22 +613,26 @@ export const handlers = (server: Backend) => {
             })
           )
         )),
-    list_entries: ({ after, filter, instance, limit, session, tag }) =>
+    list_entries: ({ after, field, filter, instance, limit, session, tag }) =>
       Effect.map(sessionOf(session), (s) => {
         const rows = s.entries().filter((entry) =>
           Read.matches(entry, filter ?? "all") &&
           (instance === undefined || Read.instanceOf(entry) === instance) &&
           (after === undefined || entry.seq > after) &&
           (tag === undefined || entry._tag === tag ||
-            (entry._tag === "Update" && Read.tagOf(entry.message) === tag))
+            (entry._tag === "Update" && Read.tagOf(entry.message) === tag)) &&
+          (field === undefined || Read.hasField(s, entry, field))
         )
+        const names = field === undefined
+          ? declared
+          : [...declared, field.name]
         const max = limit ?? 50
         const shown = after === undefined
           ? rows.slice(-max)
           : rows.slice(0, max)
         return ok({
           total: rows.length,
-          rows: shown.map((entry) => row(s, entry))
+          rows: shown.map((entry) => row(s, entry, names))
         })
       }),
     count_entries: ({ instance, session }) =>
@@ -708,6 +763,15 @@ export const handlers = (server: Backend) => {
         )
       }
     ),
+    find_instances: Effect.fnUntraced(function*({ selector, session }) {
+      const s = yield* sessionOf(session)
+      return ok(yield* ask(s, { _tag: "Find", session: s.id, selector }))
+    }),
+    get_picked: ({ session }) =>
+      Effect.map(
+        sessionOf(session),
+        (s) => ok(server.picked(s.id) ?? null)
+      ),
     dispatch: Effect.fnUntraced(function*({ instance, messages, session }) {
       if (!options.dispatch) {
         return yield* fail(

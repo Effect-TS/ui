@@ -8,12 +8,13 @@ import * as frames from "./frames.ts"
 import * as globalEvents from "./globalEvents.ts"
 import * as images from "./images.ts"
 import * as mediaQueries from "./mediaQueries.ts"
-import { payloadOf } from "./payload.ts"
+import * as modals from "./modals.ts"
+import { noteKey, payloadOf } from "./payload.ts"
 
 const signals = (document: Document) => {
-  const visibility = queryCore.makeSignal(document.visibilityState !== "hidden")
-  const connectivity = queryCore.makeSignal(true)
   const view = document.defaultView
+  const visibility = queryCore.makeSignal(document.visibilityState !== "hidden")
+  const connectivity = queryCore.makeSignal(view?.navigator?.onLine !== false)
   const onVisibility = () =>
     visibility.set(document.visibilityState !== "hidden")
   const onOnline = () => connectivity.set(true)
@@ -57,12 +58,28 @@ const globalEventsOf = (
               document.documentElement,
               undefined
             ) as object),
-          defaultPrevented: event.defaultPrevented
+          defaultPrevented: event.defaultPrevented,
+          timeStamp: event.timeStamp,
+          modal: modals.open(document)
         },
         () => event.preventDefault()
       )
+    // Each subscription needs its own listener; browsers deduplicate shared callbacks.
+    const note = !custom && name === "keyup"
+      ? (event: Event) => noteKey(event)
+      : undefined
+    if (note !== undefined) {
+      on.addEventListener("keydown", note, true)
+      on.addEventListener("keyup", note, true)
+    }
     on.addEventListener(name, f, { capture })
-    return () => on.removeEventListener(name, f, { capture })
+    return () => {
+      on.removeEventListener(name, f, { capture })
+      if (note !== undefined) {
+        on.removeEventListener("keydown", note, true)
+        on.removeEventListener("keyup", note, true)
+      }
+    }
   }
 })
 
@@ -121,7 +138,8 @@ export const make = (
           load: (source) => images.loader!(document, source)
         }),
         Context.add(files.Files, {
-          pick: (options) => files.picker!(document, htmlHost, options)
+          pick: (options) => files.browser!.pick(document, htmlHost, options),
+          download: (file) => files.browser!.download(document, file)
         })
       )
     return Effect.as(

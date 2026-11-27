@@ -18,7 +18,9 @@ describe("HtmlKeyboard.shortcuts", () => {
     editable: false,
     selectionStart: null,
     selectionEnd: null,
+    timeStamp: 0,
     defaultPrevented: false,
+    modal: false,
     ...overrides
   })
 
@@ -59,6 +61,15 @@ describe("HtmlKeyboard.shortcuts", () => {
     )
     assert.strictEqual(handle(key({ key: "o" })), undefined)
     assert.strictEqual(handle(key({ key: "x" })), undefined)
+  })
+
+  it("skips rows while a modal is open, unless they opt in with whileModal", () => {
+    const handle = HtmlKeyboard.shortcuts([
+      { key: "?", message: "help" },
+      { key: "Escape", message: "close", whileModal: true }
+    ])
+    assert.strictEqual(handle(key({ key: "?", modal: true })), undefined)
+    assert.strictEqual(handle(key({ key: "Escape", modal: true })), "close")
   })
 
   it.effect("works with both an element's keydown handler and HtmlSubscription.onDocument", () =>

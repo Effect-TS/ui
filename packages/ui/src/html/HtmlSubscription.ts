@@ -1,32 +1,44 @@
 /**
  * The Subscriptions to the page, as opposed to one element's events:
  * `onDocument` for a game's arrow keys or a press outside a popup,
- * `shortcuts` for a table of keyboard shortcuts, `onCustomEvent` for a
+ * `shortcuts` for a table of keyboard shortcuts, `keySequences` for one with
+ * multi-key rows such as `g` then `l`, `onCustomEvent` for a
  * `CustomEvent` dispatched on the document, `onWindow` for the window's
- * focus, `onAnimationFrame` for animation, and `onMediaQuery` for CSS media
- * queries.
+ * focus, `onAnimationFrame` for animation, `onMediaQuery` for CSS media
+ * queries, `onVisibility` for tab visibility, and `onConnectivity` for
+ * network connectivity.
  *
- * Their sources are the `GlobalEvents`, `AnimationFrames` and `MediaQueries`
- * services, which `BrowserHost.layer` provides. Nothing listens on the server,
- * and a test drives them with `HtmlScene`, or with `TestGlobalEvents`,
- * `TestAnimationFrames` and `TestMediaQueries` from `@effect/ui/html/testing`.
+ * Their sources are `GlobalEvents`, `AnimationFrames`, `MediaQueries`,
+ * `Query.Visibility`, and `Query.Connectivity`, which `BrowserHost.layer`
+ * provides. Nothing listens on the server. A test drives them with
+ * `HtmlScene`, with `TestGlobalEvents`, `TestAnimationFrames` and
+ * `TestMediaQueries` from `@effect/ui/html/testing`, or with
+ * `TestHost.setVisible` and `TestHost.setOnline` (which `TestHost.layer()`
+ * always provides, starting `true`).
  *
  * @stability experimental
  * @since 0.1.0
  */
+import { dev } from "#dev"
 import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
+import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Stream from "effect/Stream"
 import { handle } from "../internal/handler.ts"
+import * as queryCore from "../internal/queryCore.ts"
 import * as services from "../internal/services.ts"
+import type * as Query from "../Query.ts"
 import * as Subscription from "../Subscription.ts"
 import type * as View from "../View.ts"
 import type * as Html from "./Html.ts"
 import * as HtmlKeyboard from "./HtmlKeyboard.ts"
 import * as frames from "./internal/frames.ts"
 import * as globalEvents from "./internal/globalEvents.ts"
+import * as keys from "./internal/keys.ts"
 import * as mediaQueries from "./internal/mediaQueries.ts"
+import * as modals from "./internal/modals.ts"
+import * as signals from "./internal/signals.ts"
 
 /**
  * The events `onDocument` listens for, with their payloads: the same ones
@@ -71,8 +83,9 @@ export interface WindowEvents {
 }
 
 /**
- * The payload of a document or window listener: the event's payload, and
- * whether something already cancelled the event's default.
+ * The payload of a document or window listener: the event's payload,
+ * whether something already cancelled the event's default, the event's
+ * `timeStamp` in ms, and whether a modal is open in the document.
  *
  * **Details**
  *
@@ -81,11 +94,22 @@ export interface WindowEvents {
  * document in the capture phase. In the capture phase it depends on the
  * order the listeners were added in, so don't read it there.
  *
+ * The test tools default `timeStamp` to `0`, so a test sets it to move
+ * time between presses for {@link keySequences}.
+ *
+ * `modal` is true while a dialog the host opened with `showModal()`, or an
+ * element given to {@link holdModal}, is in the document, wherever the event
+ * started. `HtmlKeyboard.shortcuts` skips rows without `whileModal` then.
+ *
  * @stability experimental
  * @category events
  * @since 0.1.0
  */
-export type GlobalPayload<P> = P & { readonly defaultPrevented: boolean }
+export type GlobalPayload<P> = P & {
+  readonly defaultPrevented: boolean
+  readonly timeStamp: number
+  readonly modal: boolean
+}
 
 /**
  * The payload of `onCustomEvent`: the event's `detail`, which is `null`
@@ -121,7 +145,7 @@ export interface GlobalEventOptions extends View.EventOptions {
  *
  * `listen` adds a listener to the host's `document` or its window and
  * returns the function that removes it. The listener gets the plain payload,
- * `defaultPrevented` included, and a function that cancels the event's
+ * `defaultPrevented` and `timeStamp` included, and a function that cancels the event's
  * default. With `custom: true` the payload is a `CustomEventPayload`,
  * whatever the event's type.
  *
@@ -164,7 +188,8 @@ const listenFor = (
   event: string,
   handler: View.Handler<unknown, any>,
   options: GlobalEventOptions | undefined,
-  custom = false
+  custom = false,
+  held?: true
 ): Subscription.Subscription<any> => {
   const capture = options?.capture === true
   const declared: globalEvents.Listener = {
@@ -172,7 +197,8 @@ const listenFor = (
     event,
     capture,
     handler,
-    preventDefault: options?.preventDefault
+    preventDefault: options?.preventDefault,
+    held
   }
   // The runtime attaches the listener here and runs no Stream, as for `Router.prefetch`. `enter`
   // renders the pending ancestors first, so an event goes to the latest declaration, or nowhere if
@@ -184,8 +210,13 @@ const listenFor = (
     enter
   ) => {
     const source = Context.get(context, GlobalEvents)
+    // Keep sequence progress across declarations until this key switches to a non-sequence listener.
+    let state: globalEvents.Held = {}
     return {
       initial: Effect.void,
+      update: (latest) => {
+        if (!globalEvents.listenerOf(latest)?.held) state = {}
+      },
       close: source.listen(
         target,
         event,
@@ -197,7 +228,8 @@ const listenFor = (
                 globalEvents.listenerOf(latest) ?? declared,
                 payload,
                 preventDefault,
-                emit
+                emit,
+                state
               )
             } catch (error) {
               fail(Cause.die(error))
@@ -304,7 +336,8 @@ export const onDocument = <K extends keyof DocumentEvents, Msg>(
  * Use when an instance's document shortcuts fit in a table. An instance has
  * one `keydown` listener per phase, so to combine a table with other keydown
  * logic, or to listen on `"keyup"`, call `HtmlKeyboard.shortcuts` inside
- * {@link onDocument} instead.
+ * {@link onDocument} instead. For rows of several keys, such as `g` then
+ * `l`, use {@link keySequences}.
  *
  * **Details**
  *
@@ -362,6 +395,164 @@ export const shortcuts = <
     ...options,
     preventDefault: options?.preventDefault ?? true
   })
+
+/**
+ * The options of {@link keySequences}: those of {@link onDocument}, and
+ * `timeout`, the longest gap allowed between two presses of a row.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface KeySequenceOptions extends GlobalEventOptions {
+  readonly timeout?: Duration.Input | undefined
+}
+
+/**
+ * Listens on the host's document for single-key shortcuts and timed key
+ * sequences, such as `g` then `l`, and sends the matching row's message.
+ *
+ * **When to use**
+ *
+ * Use for Vim- or GitHub-style key sequences. For single-key rows only, use
+ * {@link shortcuts}, which is smaller.
+ *
+ * **Details**
+ *
+ * A row is a `HtmlKeyboard.Shortcut` with one `key`, or a
+ * `HtmlKeyboard.Sequence` with `keys`. Each press is matched with the
+ * pending presses against the latest table. The first matching row wins:
+ * a complete match sends its message; a prefix waits for the next press.
+ * In development, `keySequences` throws if earlier rows make a later row
+ * unreachable, naming the blocked row and a blocking row.
+ *
+ * A press more than `timeout` (`1 second` by default) after the last matched
+ * press starts over. Timing uses the events' `timeStamp`; no timer runs.
+ * A press that does not continue a row is retried as a first press.
+ * While a modal is open, only rows with `whileModal` match, prefixes included.
+ * Unmatched modifier-key presses and auto-repeats preserve an unexpired
+ * prefix without extending its timeout. A `composing` or `defaultPrevented`
+ * press clears the prefix, as does gating the subscription off.
+ *
+ * `preventDefault` defaults to `true`, cancelling matched prefixes as well
+ * as completions. Both count as handled in tests.
+ * The key is that of {@link onDocument}: `@effect/ui/html/document:"keydown"`.
+ *
+ * **Example** (Go-to shortcuts)
+ *
+ * ```ts import.meta.vitest
+ * import { UiSchema } from "@effect/ui"
+ * import { Html, HtmlSubscription } from "@effect/ui/html"
+ * import { HtmlScene } from "@effect/ui/html/testing"
+ * import { Locator } from "@effect/ui/testing"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Message = UiSchema.TaggedEnum({ WentToList: {}, WentToBoard: {} })
+ *
+ * const Nav = Html.component({
+ *   name: "Nav",
+ *   model: Schema.String,
+ *   message: Message
+ * }).make({
+ *   init: () => "home",
+ *   update: { WentToList: () => "list", WentToBoard: () => "board" },
+ *   view: (h, page) => h.p(page),
+ *   subscriptions: () => [
+ *     HtmlSubscription.keySequences([
+ *       { keys: ["g", "l"], message: Message.WentToList() },
+ *       { keys: ["g", "b"], message: Message.WentToBoard() }
+ *     ])
+ *   ]
+ * })
+ *
+ * Effect.gen(function*() {
+ *   const s = yield* HtmlScene.make(Nav, {})
+ *   s.fireDocument("keydown", { key: "g", timeStamp: 0 })
+ *     .fireDocument("keydown", { key: "l", timeStamp: 400 })
+ *     .expect(Locator.text("list")).toExist()
+ *     // Too late: `b` starts over, and begins no row.
+ *     .fireDocument("keydown", { key: "g", timeStamp: 1000 })
+ *     .fireDocument("keydown", { key: "b", timeStamp: 2500 }).expectIgnored()
+ * }).pipe(Effect.scoped, Effect.runSync)
+ * ```
+ *
+ * @stability experimental
+ * @category subscriptions
+ * @since 0.1.0
+ */
+export const keySequences = <
+  const Rows extends ReadonlyArray<
+    HtmlKeyboard.Shortcut<unknown> | HtmlKeyboard.Sequence<unknown>
+  >
+>(
+  table: Rows,
+  options?: KeySequenceOptions | undefined
+): Subscription.Subscription<Rows[number]["message"]> => {
+  if (dev) keys.checkSequences(table)
+  const step: globalEvents.Step = (
+    payload: GlobalPayload<Html.KeyPayload>,
+    held
+  ) => {
+    const pending = held.value as
+      | ReadonlyArray<GlobalPayload<Html.KeyPayload>>
+      | undefined
+    held.value = undefined
+    if (payload.composing || payload.defaultPrevented) return
+    // A press without a `timeStamp`, which a custom `GlobalEvents` source may not supply, is at `0`.
+    const gap = pending
+      ? (payload.timeStamp ?? 0) - (pending.at(-1)!.timeStamp ?? 0)
+      : -1
+    // A clock that went back counts as expired too.
+    const live = gap >= 0 &&
+      gap <= Duration.toMillis(options?.timeout ?? 1000)
+    for (
+      const presses of live ? [[...pending!, payload], [payload]] : [[payload]]
+    ) {
+      const row = keys.first(table, presses)
+      if (row !== undefined) {
+        if (presses.length === keys.keysOf(row).length) return row.message
+        held.value = presses
+        return globalEvents.consumed
+      }
+    }
+    if (live && (payload.repeat || modifiers.includes(payload.key))) {
+      held.value = pending
+    }
+  }
+  return listenFor(
+    "document",
+    "keydown",
+    step,
+    { ...options, preventDefault: options?.preventDefault ?? true },
+    false,
+    true
+  )
+}
+
+const modifiers = ["Shift", "Control", "Alt", "Meta", "AltGraph"]
+
+/**
+ * Marks `element` as a modal shown in its document, so document and window
+ * listeners there get `modal: true` until the returned function releases it.
+ *
+ * **When to use**
+ *
+ * Use when the host doesn't open a modal itself, as with a popover drawn as a
+ * modal layer, so the page's `shortcuts` stop matching behind it. A dialog
+ * written with `h.dialog.modal(true)` is held already.
+ *
+ * **Details**
+ *
+ * The hold counts only while `element` is in the document it was held in, so
+ * one left behind by a removed element doesn't keep the page's shortcuts off.
+ * A modal moved to another document needs a new hold there, and the old one
+ * released. Release it as the modal starts closing.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export const holdModal: (element: Element) => () => void = modals.hold
 
 /**
  * A Subscription that listens for an event on the host's window.
@@ -629,6 +820,35 @@ export interface MediaQueries {
 export const MediaQueries: Context.Reference<MediaQueries> =
   mediaQueries.MediaQueries
 
+const attachValue = (
+  initial: boolean | undefined,
+  listen: (listener: (value: boolean) => void) => () => void,
+  send: (value: boolean) => void
+) => {
+  // Deliver the captured value before changes, even if they arrive before
+  // the `initial` effect runs. Queue changes triggered by handlers to
+  // preserve delivery order.
+  const queue: Array<boolean> = initial === undefined ? [] : [initial]
+  let draining = false
+  const drain = () => {
+    if (draining) return
+    draining = true
+    try {
+      for (const value of queue) send(value)
+    } finally {
+      queue.length = 0
+      draining = false
+    }
+  }
+  return {
+    initial: Effect.sync(drain),
+    close: listen((value) => {
+      queue.push(value)
+      drain()
+    })
+  }
+}
+
 /**
  * A Subscription that tracks a CSS media query: it sends the current `matches`
  * value when it starts, then each `change`.
@@ -694,38 +914,179 @@ export const onMediaQuery = <Msg>(
   const declared: mediaQueries.Listener = { query, handler }
   const direct: Direct = (context, emit, fail, enter) => {
     const source = Context.get(context, MediaQueries)
-    const send = sendLatest(
-      emit,
-      fail,
-      enter,
-      (latest) => (mediaQueries.listenerOf(latest) ?? declared).handler
-    )
-    // A change that fires while a handler runs is queued, so messages
-    // dispatch in the order the values arrived.
-    let queue: Array<boolean> | undefined
-    const deliver = (values: Array<boolean>) => {
-      if (queue !== undefined) return void queue.push(...values)
-      queue = values
-      for (let i = 0; i < queue.length; i++) send(queue[i])
-      queue = undefined
-    }
-    // Deliver the captured match before changes, even if they precede `initial`.
-    let first = source.matches(query)
-    const takeFirst = (): Array<boolean> => {
-      const initial = first
-      first = undefined
-      return initial === undefined ? [] : [initial]
-    }
-    return {
-      initial: Effect.sync(() => deliver(takeFirst())),
-      close: source.listen(
-        query,
-        (matches) => deliver([...takeFirst(), matches])
+    return attachValue(
+      source.matches(query),
+      (listener) => source.listen(query, listener),
+      sendLatest(
+        emit,
+        fail,
+        enter,
+        (latest) => (mediaQueries.listenerOf(latest) ?? declared).handler
       )
-    }
+    )
   }
   return Object.assign(
     Subscription.make("@effect/ui/html/mediaQuery", query, () => Stream.never),
     { [mediaQueries.mediaQuery]: declared, [services.direct]: direct }
   )
 }
+
+const makeAttachSignal = (
+  reference: Context.Reference<Query.Signal>,
+  handlerOf: (
+    subscription: object
+  ) => View.Handler<unknown, boolean> | undefined
+): Direct =>
+(context, emit, fail, enter) => {
+  const source = Context.get(context, reference)
+  return attachValue(
+    source.get(),
+    (listener) => source.subscribe(listener),
+    sendLatest(emit, fail, enter, handlerOf)
+  )
+}
+
+const attachVisibility = makeAttachSignal(
+  queryCore.Visibility,
+  signals.visibilityHandlerOf
+)
+
+const attachConnectivity = makeAttachSignal(
+  queryCore.Connectivity,
+  signals.connectivityHandlerOf
+)
+
+/**
+ * A Subscription that tracks whether the tab is visible: it sends the current
+ * `visible` value when it starts, then each change.
+ *
+ * **When to use**
+ *
+ * Use to pause timers, media playback, or animations while the tab is hidden,
+ * or to react when the user returns to the tab.
+ *
+ * **Details**
+ *
+ * `handler` is a message or a function of `visible: boolean`. The source is
+ * `Query.Visibility`, which `BrowserHost.layer` provides from
+ * `document.visibilityState` and `visibilitychange`. The server never runs
+ * Subscriptions, so `init` chooses the initial state and the first browser
+ * emission updates it after hydration. Without a host, `Query.Visibility`
+ * defaults to always `true`, so it emits `true` once.
+ *
+ * In tests, `HtmlScene.visibility` drives the handler directly, and
+ * `TestHost.setVisible` drives the shared signal on `TestHost` and `Play`
+ * (starting `true`).
+ *
+ * The key is `@effect/ui/html/visibility`, and an instance has one.
+ *
+ * **Example** (Pausing while the tab is hidden)
+ *
+ * ```ts import.meta.vitest
+ * import { UiSchema } from "@effect/ui"
+ * import { Html, HtmlSubscription } from "@effect/ui/html"
+ * import { HtmlScene } from "@effect/ui/html/testing"
+ * import { Locator } from "@effect/ui/testing"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Message = UiSchema.TaggedEnum({ ChangedVisibility: { visible: Schema.Boolean } })
+ *
+ * const Player = Html.component({
+ *   name: "Player",
+ *   model: Schema.Boolean,
+ *   message: Message
+ * }).make({
+ *   init: () => true,
+ *   update: { ChangedVisibility: (_, { visible }) => visible },
+ *   view: (h, visible) => h.p(visible ? "playing" : "paused"),
+ *   subscriptions: () => [
+ *     HtmlSubscription.onVisibility((visible) => Message.ChangedVisibility({ visible }))
+ *   ]
+ * })
+ *
+ * Effect.gen(function*() {
+ *   const s = yield* HtmlScene.make(Player, {})
+ *   s.visibility(false)
+ *     .expect(Locator.text("paused")).toExist()
+ * }).pipe(Effect.scoped, Effect.runSync)
+ * ```
+ *
+ * @stability experimental
+ * @category subscriptions
+ * @since 0.1.0
+ */
+export const onVisibility = <Msg>(
+  handler: View.Handler<Msg, boolean>
+): Subscription.Subscription<Msg> =>
+  Object.assign(
+    Subscription.make("@effect/ui/html/visibility", Stream.never),
+    { [signals.visibility]: handler, [services.direct]: attachVisibility }
+  )
+
+/**
+ * A Subscription that tracks whether the browser is online: it sends the
+ * current `online` value when it starts, then each change.
+ *
+ * **When to use**
+ *
+ * Use to show an offline banner, disable actions that require a network
+ * connection, or trigger UI state changes when connectivity returns.
+ *
+ * **Details**
+ *
+ * `handler` is a message or a function of `online: boolean`. The source is
+ * `Query.Connectivity`, which `BrowserHost.layer` provides from
+ * `defaultView.navigator.onLine` and the window's `online` and `offline`
+ * events. The server never runs Subscriptions, so `init` chooses the initial
+ * state and the first browser emission updates it after hydration. Without a
+ * host, `Query.Connectivity` defaults to always `true`, so it emits `true`
+ * once.
+ *
+ * In tests, `HtmlScene.connectivity` drives the handler directly, and
+ * `TestHost.setOnline` drives the shared signal on `TestHost` and `Play`
+ * (starting `true`).
+ *
+ * The key is `@effect/ui/html/connectivity`, and an instance has one.
+ *
+ * **Example** (Showing an offline banner)
+ *
+ * ```ts import.meta.vitest
+ * import { UiSchema } from "@effect/ui"
+ * import { Html, HtmlSubscription } from "@effect/ui/html"
+ * import { HtmlScene } from "@effect/ui/html/testing"
+ * import { Locator } from "@effect/ui/testing"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Message = UiSchema.TaggedEnum({ ChangedConnectivity: { online: Schema.Boolean } })
+ *
+ * const Banner = Html.component({
+ *   name: "Banner",
+ *   model: Schema.Boolean,
+ *   message: Message
+ * }).make({
+ *   init: () => true,
+ *   update: { ChangedConnectivity: (_, { online }) => online },
+ *   view: (h, online) => h.p(online ? "online" : "offline"),
+ *   subscriptions: () => [
+ *     HtmlSubscription.onConnectivity((online) => Message.ChangedConnectivity({ online }))
+ *   ]
+ * })
+ *
+ * Effect.gen(function*() {
+ *   const s = yield* HtmlScene.make(Banner, {})
+ *   s.connectivity(false)
+ *     .expect(Locator.text("offline")).toExist()
+ * }).pipe(Effect.scoped, Effect.runSync)
+ * ```
+ *
+ * @stability experimental
+ * @category subscriptions
+ * @since 0.1.0
+ */
+export const onConnectivity = <Msg>(
+  handler: View.Handler<Msg, boolean>
+): Subscription.Subscription<Msg> =>
+  Object.assign(
+    Subscription.make("@effect/ui/html/connectivity", Stream.never),
+    { [signals.connectivity]: handler, [services.direct]: attachConnectivity }
+  )

@@ -180,6 +180,8 @@ export type Fields<Props, Model, Msg, Events> =
       | undefined
     readonly shared?: ReadonlyMap<Component.Definition.Any, unknown> | undefined
     readonly collected?: Collected | undefined
+    /** Listener state keyed by Subscription key, preserved across scene updates. */
+    readonly held?: ReadonlyMap<string, unknown> | undefined
   }
 
 // What a failed slot without a `fallback` shows.
@@ -529,6 +531,9 @@ interface Collected {
   readonly message: unknown
 }
 const collectedLast = new WeakMap<object, Collected>()
+
+/** @internal */
+export const heldBy = new WeakMap<object, ReadonlyMap<string, unknown>>()
 
 /**
  * Runs the story's component's `collects.onChange` for `reports`, and sends its message when it differs
@@ -922,6 +927,7 @@ export const record = <Props, Model, Msg, Events>(
   }
   if (fields.shared !== undefined) sharedGiven.set(story, fields.shared)
   if (fields.collected !== undefined) collectedLast.set(story, fields.collected)
+  if (fields.held !== undefined) heldBy.set(story, fields.held)
   return story
 }
 
@@ -948,6 +954,7 @@ export const update = <Props, Model, Msg, Events>(
     childStatus: childStatuses.get(story),
     shared: sharedGiven.get(story),
     collected: collectedLast.get(story),
+    held: heldBy.get(story),
     ...patch
   }
   // A defect in `view` fails the step that changed the Model, the query results, the props or what's pending.
@@ -1852,6 +1859,22 @@ const registeredPatches = (
 }
 
 /**
+ * The running or queued Command whose optimistic patch is live on the entry of query `name` at
+ * `argsKey`, if any.
+ */
+const patcherOf = (
+  story: State<any, any, any, any>,
+  name: string,
+  argsKey: string
+): Pending<any> | undefined =>
+  story.pending.find((entry) =>
+    entry.status !== "awaiting" &&
+    livePatches.get(entry)?.some((patch) =>
+        patch.name === name && patch.argsKey === argsKey
+      ) === true
+  )
+
+/**
  * Throws when a running or queued Command's optimistic patch is live on the entry of query `name`
  * at `argsKey`: the runtime settles no fetch there, so only a patched value can be written.
  */
@@ -1861,12 +1884,7 @@ const checkUnpatched = (
   name: string,
   argsKey: string
 ): void => {
-  const patcher = story.pending.find((entry) =>
-    entry.status !== "awaiting" &&
-    livePatches.get(entry)?.some((patch) =>
-        patch.name === name && patch.argsKey === argsKey
-      ) === true
-  )
+  const patcher = patcherOf(story, name, argsKey)
   if (patcher !== undefined) {
     throw new Error(
       `${step}: "${name}" is under the optimistic patch of ${
@@ -1887,14 +1905,18 @@ export const describe = (
   })`
 
 /** @internal */
+export const isWaiting = (entry: Pending<any>): boolean =>
+  entry.awaiting !== undefined && entry.awaiting.length > 0
+
+/** @internal */
 export const describePending = (pending: ReadonlyArray<Pending<any>>): string =>
   pending.length === 0 ?
     "nothing" :
     pending.map((entry) =>
       `${describe(entry.command)} [${entry.status}${
-        entry.awaiting === undefined || entry.awaiting.length === 0
-          ? ""
-          : ` on ${entry.awaiting.map((awaited) => awaited.name).join(", ")}`
+        isWaiting(entry)
+          ? ` on ${entry.awaiting!.map((awaited) => awaited.name).join(", ")}`
+          : ""
       }]`
     ).join(", ")
 
@@ -2134,6 +2156,8 @@ export interface Fired<Props, Model, Msg, Events> {
   readonly story: State<Props, Model, Msg, Events>
   readonly prevented: boolean
   readonly handled: boolean
+  /** The element a `pointerdown` captured on. */
+  readonly captured: Locator.Node | undefined
 }
 
 /** @internal */
@@ -2151,6 +2175,7 @@ export const tryFireNode = <Props, Model, Msg, Events>(
       layer.eventOptions[event]?.preventDefault === "always"
     )
   let handled = false
+  let captured: Locator.Node | undefined
   let out = story
   // The instances the event reached: a layer's message is for its owner as it was then.
   const reached = ranChildren.get(story.view())
@@ -2161,7 +2186,13 @@ export const tryFireNode = <Props, Model, Msg, Events>(
     const message = handle(layer.handlers[event]!, payload)
     if (message === undefined) continue
     handled = true
-    if (layer.eventOptions[event]?.preventDefault === true) prevented = true
+    const options = layer.eventOptions[event] as
+      | { readonly preventDefault?: unknown; readonly capturePointer?: unknown }
+      | undefined
+    if (options?.preventDefault === true) prevented = true
+    if (options?.capturePointer === true && event === "pointerdown") {
+      captured = handler as Locator.Node
+    }
     const path = layer === handler
       ? undefined
       : (layer as View.Owned).owner.path
@@ -2172,7 +2203,7 @@ export const tryFireNode = <Props, Model, Msg, Events>(
       path === undefined ? undefined : reached?.get(path)?.instance
     )
   }
-  return { story: out, prevented, handled }
+  return { story: out, prevented, handled, captured }
 }
 
 /**
@@ -2205,8 +2236,10 @@ export const fireNode = <Props, Model, Msg, Events>(
  * A value as a failure message shows it, encoded as the log encodes it: by `schema` with every
  * `Schema.Redacted` redacted, and a part that fails to encode a placeholder, so a secret never reaches
  * the message.
+ *
+ * @internal
  */
-const show = (schema: Schema.Top | undefined, value: unknown): string =>
+export const show = (schema: Schema.Top | undefined, value: unknown): string =>
   JSON.stringify(
     schema === undefined
       ? MessageLog.structural(value)
@@ -2271,6 +2304,49 @@ export const unloaded = (
 }
 
 /**
+ * The query entries a step can settle now: `load` for one with no result or that a wait is on, and
+ * `more` for a pending load more that holds pages, with the pages `held` on an infinite query. None
+ * under a live patch, where no fetch settles.
+ *
+ * @internal
+ */
+export function* settleable(
+  story: State<any, any, any, any>
+): Generator<
+  {
+    readonly query: componentQueries.Entry
+    readonly args: unknown
+    readonly load: boolean
+    readonly more: boolean
+    readonly held: number
+  }
+> {
+  const missing = unloaded(story)
+  const awaited = story.pending.flatMap((entry) => entry.awaiting ?? [])
+  for (const { entries, query } of currentEntries(story)) {
+    const name = query.name
+    const def = Query.defOf(query.query)
+    for (const { args, argsKey } of entries) {
+      if (patcherOf(story, name, argsKey) !== undefined) continue
+      const load = missing.some((entry) =>
+        entry.name === name && entry.argsKey === argsKey
+      ) ||
+        awaited.some((entry) =>
+          entry.name === name && def.argsKey(entry.args) === argsKey
+        )
+      const stored = storedAt(story, name, argsKey)
+      const more = story.loadingMore.includes(name) && Option.isSome(stored)
+      if (load || more) {
+        const held = def.list === undefined || Option.isNone(stored)
+          ? 0
+          : (stored.value.value as ReadonlyArray<unknown>).length
+        yield { query, args, load, more, held }
+      }
+    }
+  }
+}
+
+/**
  * A mount as a failure message shows it: its name, and its args encoded by their Schema, as the log
  * would, a redacted value included.
  *
@@ -2304,37 +2380,47 @@ const isKept = (
     kept.name === entry.name && kept.argsKey === entry.argsKey
   )
 
-/** Enabled queries with no result that no `keepPending` marked. */
-const missingQueries = (story: State<any, any, any, any>): Array<string> =>
-  unloaded(story).flatMap((entry) =>
-    isKept(story, entry)
-      ? []
-      : [
-        `the query "${entry.name}" has no result${entry.label}: load it with loaded or loadFailed, or keep it with keepPending("${entry.name}")`
-      ]
+/** The entries of enabled queries with no result that no `keepPending` marked. */
+const unkept = (story: State<any, any, any, any>) =>
+  unloaded(story).filter((entry) => !isKept(story, entry))
+
+const missingQueries = (
+  entries: ReturnType<typeof unkept>
+): Array<string> =>
+  entries.map((entry) =>
+    `the query "${entry.name}" has no result${entry.label}: load it with loaded or loadFailed, or keep it with keepPending("${entry.name}")`
   )
 
+/**
+ * What blocks a message step until it settles or `keepPending` marks it: Commands, load mores by
+ * name, and query entries with no result.
+ *
+ * @internal
+ */
+export const blocking = (story: State<any, any, any, any>) => ({
+  commands: story.pending.filter((entry) =>
+    !exempt(entry) && !story.ack.kept.includes(entry)
+  ),
+  more: story.loadingMore.filter((name) => !story.ack.keptMore.includes(name)),
+  queries: unkept(story)
+})
+
 /** Work in flight that blocks a message step: what nothing settled, kept or exempts. */
-const inFlight = (story: State<any, any, any, any>): Array<string> => [
-  ...story.pending.flatMap((entry) =>
-    exempt(entry) || story.ack.kept.includes(entry)
-      ? []
-      : [
-        `${describe(entry.command)} [${entry.status}] is pending: ${
-          settleHint(entry)
-        }, or keep it with keepPending`
-      ]
-  ),
-  ...story.loadingMore.flatMap((name) =>
-    story.ack.keptMore.includes(name)
-      ? []
-      : [
-        `a load more of "${name}" is pending: settle it with loadedMore or loadMoreFailed, or keep it with keepPending("${name}")`
-      ]
-  ),
-  ...missingQueries(story),
-  ...unacknowledgedMounts(story)
-]
+const inFlight = (story: State<any, any, any, any>): Array<string> => {
+  const { commands, more, queries } = blocking(story)
+  return [
+    ...commands.map((entry) =>
+      `${describe(entry.command)} [${entry.status}] is pending: ${
+        settleHint(entry)
+      }, or keep it with keepPending`
+    ),
+    ...more.map((name) =>
+      `a load more of "${name}" is pending: settle it with loadedMore or loadMoreFailed, or keep it with keepPending("${name}")`
+    ),
+    ...missingQueries(queries),
+    ...unacknowledgedMounts(story)
+  ]
+}
 
 /** Every pending Command and load more, kept or exempt included: what the end of a test and `given` can't leave. */
 const allPending = (story: State<any, any, any, any>): Array<string> => [
@@ -2405,7 +2491,7 @@ export const checkEnd = (
 ): void =>
   report(step, "the test ends with work not settled or acknowledged", [
     ...allPending(story),
-    ...missingQueries(story),
+    ...missingQueries(unkept(story)),
     ...unacknowledgedMounts(story),
     ...outputs(story)
   ])

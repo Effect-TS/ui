@@ -55,10 +55,17 @@ const Page = Html.component({
     })
 })
 
+const search = new URLSearchParams(location.search)
+const root = document.getElementById("root")!
+
 BrowserHost.mount(
   Page,
-  { decline: new URLSearchParams(location.search).has("decline") },
-  document.getElementById("root")!
+  { decline: search.has("decline") },
+  search.has("shadow")
+    ? root.attachShadow({ mode: "open" }).appendChild(
+      document.createElement("div")
+    )
+    : root
 ).pipe(
   // An unbundled dev build can outrun the default 5ms budget and defer the
   // open past the press. A long budget opens it within the mousedown, as a

@@ -107,6 +107,12 @@ export * from "./DirectionProvider.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as Dismissal from "./Dismissal.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Drawer.ts"
 
 /**
@@ -162,6 +168,12 @@ export * from "./Menubar.ts"
  * @since 0.1.0
  */
 export * from "./Meter.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * from "./NavigationLinks.ts"
 
 /**
  * @stability experimental
@@ -240,6 +252,7 @@ export * from "./Separator.ts"
  * @since 0.1.0
  */
 export * from "./Slider.ts"
+export * from "./SortableList.ts"
 
 /**
  * @stability experimental

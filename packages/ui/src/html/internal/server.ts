@@ -129,6 +129,10 @@ const written = (attributes: Map<string, string>): string => {
   return out
 }
 
+/** An option's implicit value is its text with ASCII whitespace stripped and collapsed. */
+const optionValue = (text: string): string =>
+  text.replace(/[\t\n\f\r ]+/g, " ").replace(/^ | $/g, "")
+
 /**
  * The text of a text-only element. A textarea with no children shows its
  * value. Raw text that could end the element early is left out; the client
@@ -247,7 +251,7 @@ const write = (tape: ReadonlyArray<any>): string => {
    * is kept. Nothing of an element is read there.
    */
   let skips = false
-  /** The value of the select the options being written belong to. */
+  /** The value of the select the options being written belong to, cleared once an option matches it. */
   let selectValue: string | undefined
   for (let at = 0; at < tape.length;) {
     switch (tape[at++]) {
@@ -297,7 +301,10 @@ const write = (tape: ReadonlyArray<any>): string => {
           ) {
             const value = attributes.get("value")
             if (value === undefined) option = attributes
-            else if (value === selectValue) attributes.set("selected", "")
+            else if (value === selectValue) {
+              attributes.set("selected", "")
+              selectValue = undefined
+            }
           }
           if (option === undefined) out += `${written(attributes)}>`
         }
@@ -350,7 +357,10 @@ const write = (tape: ReadonlyArray<any>): string => {
         else {
           let before = open.before
           if (open.option !== undefined) {
-            if (text === open.selectValue) open.option.set("selected", "")
+            if (optionValue(text!) === selectValue) {
+              open.option.set("selected", "")
+              selectValue = undefined
+            }
             before += `${written(open.option)}>`
           }
           let inner = open.kind === "text"
@@ -367,12 +377,13 @@ const write = (tape: ReadonlyArray<any>): string => {
           out = `${before}${inner}</${tag}>`
         }
         frame = open.parent
+        // A script's text is no part of an enclosing option's value.
         if (open.gathers) {
-          text = open.text === undefined
-            ? undefined
+          text = open.text === undefined || tag === "script"
+            ? open.text
             : open.text + text
         }
-        selectValue = open.selectValue
+        if (open.option === undefined) selectValue = open.selectValue
         bare = false
         break
       }

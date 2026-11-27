@@ -16,6 +16,9 @@
  * of what the component did. A defect in `init` or `update` makes the step
  * throw, on the line that called it.
  *
+ * `check` generates messages and settlements, checks Schemas and an optional
+ * invariant, and shrinks a failing story for replay.
+ *
  * **Example** (A todo row: send, resolve its Command, check the Model)
  *
  * ```ts import.meta.vitest
@@ -57,12 +60,17 @@
  * @stability experimental
  * @since 0.1.0
  */
+import type * as Arbitrary from "effect/Arbitrary"
 import type * as Effect from "effect/Effect"
+import type * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
+import type * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
+import * as search from "../internal/explore.ts"
 import * as replay from "../internal/replay.ts"
 import * as cursor from "../internal/steps.ts"
 import * as engine from "../internal/story.ts"
+import * as runner from "../internal/storyCheck.ts"
 import type * as MessageLog from "../MessageLog.ts"
 import type * as View from "../View.ts"
 import type * as Shared from "./Steps.ts"
@@ -324,6 +332,398 @@ export const start = <C extends AnyComponent>(
     "Story",
     cursor.initial(component as unknown as Component.Any, props)
   ) as unknown as Steps<C>
+
+// ---------------------------------------------------------------------------
+// Checking
+// ---------------------------------------------------------------------------
+
+/**
+ * A source of generated values for `check`. Use a function when values depend
+ * on the current Model or Command args.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type Generated<Input, A> =
+  | Schema.Schema<A>
+  | Arbitrary.Arbitrary<A>
+  | ((input: Input) => Arbitrary.Arbitrary<A>)
+
+/**
+ * Overrides for a Command's result generators. Omitted outcomes use the
+ * `Service`'s Schemas; generator functions receive the Command's args.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface CheckResults<D> {
+  readonly success?:
+    | Generated<Command.Definition.Args<D>, Command.Result<D>>
+    | undefined
+  readonly error?:
+    | Generated<Command.Definition.Args<D>, Command.Failure<D>>
+    | undefined
+}
+
+/**
+ * Generators and an invariant for `check`, plus the run, shrink and replay
+ * options accepted by `Arbitrary.checkEffect`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface CheckOptions<
+  C extends AnyComponent,
+  O extends ReadonlyArray<Command.Definition.Any> = []
+> extends Arbitrary.CheckOptions {
+  /**
+   * The messages to send. A function takes the Model. Defaults to the
+   * component's `message` Schema.
+   */
+  readonly messages?:
+    | Generated<Component.Model<C>, Component.Message<C>>
+    | undefined
+  /** Results by Command: `[[SaveTodo, { success: Message.cases.SavedTodo }]]`. */
+  readonly commands?:
+    | {
+      readonly [K in keyof O]: readonly [
+        command: O[K],
+        results: CheckResults<O[K]>
+      ]
+    }
+    | undefined
+  /**
+   * Runs after `init` and each applied step, with the same record as
+   * `Steps.check`. Return `false` or throw to fail the run.
+   */
+  readonly invariant?:
+    | ((current: Steps<C>["current"]) => boolean | void)
+    | undefined
+}
+
+/**
+ * Returns an Effect that runs generated stories for a component and props.
+ * A failing story is shrunk and reported as a defect with a replay token.
+ *
+ * **Generated steps**
+ *
+ * Each story starts with `start`. Steps either send a message or settle one
+ * piece of pending work: a Command, an `afterRefetch` wait, a query load or a
+ * load more. Settlements with no eligible work are skipped. Before sending,
+ * the runner uses `keepPending` so messages can arrive while work is pending.
+ * Query entries under a live optimistic patch cannot settle.
+ *
+ * Command results default to the `Service`'s `success` and `error` Schemas;
+ * query results use the query's Schemas. A `Command.make` Command needs a
+ * `commands` entry with a success generator or the run fails when selecting
+ * its outcomes. `Schema.Never` outcomes are not generated. Work with no
+ * available outcome stays pending. Use `messages: Schema.Never` to generate
+ * only settlements.
+ *
+ * An infinite query loads one page on a cold load. A refetch loads as many
+ * pages as it holds, unless `next` ends the list first.
+ *
+ * **Checks and failures**
+ *
+ * After `init` and each applied step, the runner checks the Model's Schema,
+ * runs `invariant`, then validates and acknowledges events and sends using
+ * the `events` and `receives` Schemas. A step that throws also fails the run.
+ *
+ * The failure report includes Story steps, the Model, pending Commands and a
+ * `replay` token. Shrinking removes steps and shrinks messages generated from
+ * a Schema or Arbitrary. Command and query results, and messages generated
+ * by a function, are sampled by seed; their values do not shrink.
+ *
+ * **Choosing generators**
+ *
+ * Defaults allow any value in the Schemas. If a Command's `success` is the
+ * whole message Schema, it can resolve with any message. The default message
+ * generator can also send a completion message without a pending Command.
+ * Narrow `messages` and `commands` to the interactions you want to test.
+ *
+ * Reports identify Commands by name, not by their variable names.
+ * `effect/Arbitrary` is unstable; replay tokens may not survive a release.
+ *
+ * **Example** (Check that the saving flag matches pending saves)
+ *
+ * ```ts import.meta.vitest
+ * import { Command, Component, UiSchema } from "@effect/ui"
+ * import { Story } from "@effect/ui/testing"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Message = UiSchema.TaggedEnum({ ClickedSave: {}, CompletedSave: {} })
+ *
+ * class Save extends Command.Service<Save>()("todos/Save", {
+ *   success: Message
+ * }) {}
+ *
+ * const Editor = Component.define({
+ *   name: "Editor",
+ *   model: Schema.Struct({ saving: Schema.Boolean }),
+ *   message: Message
+ * }).make({
+ *   init: () => ({ saving: false }),
+ *   update: ($, message) =>
+ *     Message.match(message, {
+ *       ClickedSave: () =>
+ *         $.model.saving ? $.model : $.set({ saving: true }).run(Save.make()),
+ *       CompletedSave: () => ({ saving: false })
+ *     }),
+ *   view: (h) => h.el("button").on("click", Message.ClickedSave()).children("save")
+ * })
+ *
+ * Story.check(Editor, {}, {
+ *   messages: Message.cases.ClickedSave,
+ *   commands: [[Save, { success: Message.cases.CompletedSave }]],
+ *   invariant: (story) => story.model.saving === (story.pending.length > 0)
+ * }).pipe(Effect.runPromise)
+ * ```
+ *
+ * @stability experimental
+ * @category checking
+ * @since 0.1.0
+ */
+export const check = <
+  C extends AnyComponent,
+  const O extends ReadonlyArray<Command.Definition.Any> = []
+>(
+  component: C,
+  props: Component.Props<C>,
+  options?: CheckOptions<C, O>
+): Effect.Effect<void> =>
+  runner.check(
+    check,
+    component as unknown as Component.Any,
+    () => start(component, props) as any,
+    options as runner.Options | undefined
+  )
+
+// ---------------------------------------------------------------------------
+// Exploring
+// ---------------------------------------------------------------------------
+
+/**
+ * The results `explore` settles a running Command with. A function takes
+ * the Command's args. Empty or missing lists never settle it.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface ExploreResults<D> {
+  readonly success?:
+    | ReadonlyArray<Command.Result<D>>
+    | ((args: Command.Definition.Args<D>) => ReadonlyArray<Command.Result<D>>)
+    | undefined
+  readonly error?:
+    | ReadonlyArray<Command.Failure<D>>
+    | ((args: Command.Definition.Args<D>) => ReadonlyArray<Command.Failure<D>>)
+    | undefined
+}
+
+/**
+ * A pending Command as `explore`'s invariant sees it: its name and args,
+ * not the work it runs.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface ExploredPending<Msg>
+  extends Omit<Shared.Pending<Msg>, "command">
+{
+  readonly command: Pick<Shared.Pending<Msg>["command"], "name" | "args">
+}
+
+/**
+ * A Story record without interruption history or pending Command internals,
+ * which the search omits when comparing records. Each pending Command
+ * exposes only its name and args.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type ExploredRecord<C extends AnyComponent> =
+  & Omit<Steps<C>["current"], "interrupted" | "pending">
+  & { readonly pending: ReadonlyArray<ExploredPending<Component.Message<C>>> }
+
+/**
+ * A non-stream Command that `explore` can settle.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type ExploredCommand = Command.Definition<any, any, false, any, any>
+
+/**
+ * The options of `explore`: the moves it tries, what it checks, and its
+ * bounds.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface ExploreOptions<
+  C extends AnyComponent,
+  O extends ReadonlyArray<ExploredCommand> = []
+> {
+  /** The messages to send at each record. A function takes the Model. */
+  readonly messages:
+    | ReadonlyArray<Component.Message<C>>
+    | ((model: Component.Model<C>) => ReadonlyArray<Component.Message<C>>)
+  /** Results by Command: `[[Search, { success: ({ text }) => [...] }]]`. */
+  readonly commands?:
+    | {
+      readonly [K in keyof O]: readonly [
+        command: O[K],
+        results: ExploreResults<O[K]>
+      ]
+    }
+    | undefined
+  /**
+   * Checked after `init` and every move, before events and sends are
+   * acknowledged. Receives an `ExploredRecord` and fails by returning
+   * `false` or throwing.
+   */
+  readonly invariant?:
+    | ((current: ExploredRecord<C>) => boolean | void)
+    | undefined
+  /** Maximum moves per story. Must be a nonnegative safe integer. */
+  readonly depth: number
+  /** Maximum distinct records before throwing. Must be a positive safe integer. Defaults to 10,000. */
+  readonly states?: number | undefined
+}
+
+/**
+ * What a passing `explore` searched: the distinct records it reached, and
+ * whether they are every record reachable at any depth.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Explored {
+  readonly states: number
+  /** No move from a record reached leads to a new one, so no story of any length fails. */
+  readonly closed: boolean
+}
+
+/**
+ * Explores stories up to `depth` moves using the supplied component, props,
+ * messages and Command results. Returns `{ states, closed }` on success,
+ * or throws with a shortest failing path as Story steps.
+ *
+ * **Details**
+ *
+ * A move sends one of `messages`, or settles a running Command with one of
+ * its listed results: `resolve` for each `success`, `fail` for each
+ * `error`. An `afterRefetch` wait ends with `waitExpired`. Before sending
+ * a message, the search calls `keepPending` for blocking Commands and
+ * unloaded queries, allowing messages to arrive while Commands run. As in
+ * a written Story, only the oldest run with the same name and args settles.
+ *
+ * After `init` and every move, the Model is checked against its Schema,
+ * then `invariant` runs, then events and sends are checked against their
+ * Schemas and acknowledged. A move that throws fails too.
+ *
+ * Moves run breadth first, messages as listed, then pending Commands oldest
+ * first. With deterministic inputs and component logic, the first failure
+ * is a shortest one and is the same on every run.
+ * Two records that agree on the Model, the query results and the pending
+ * Commands, each with the messages its results deliver, share the rest of
+ * the search. Plain objects and arrays match their copies, with the same own
+ * properties in the same order and the same sharing of references. This
+ * merging applies only to records without opaque objects, functions or
+ * accessors. A record containing a `Date`, an `Option` or a class instance
+ * merges only with one containing the same objects, which may use more of
+ * the state budget. Comparing plain data with an external constant by
+ * reference can hide a failing path; avoid such comparisons in components
+ * tested with `explore`.
+ *
+ * Running out of the `states` budget throws, so a pass covers the whole
+ * depth bound. `closed: true` means no further moves reach new records;
+ * `closed: false` means the search reached its depth limit without closure.
+ *
+ * **Gotchas**
+ *
+ * A Command with no `commands` entry fails the search naming it, unless it
+ * is a silent `Command.Service`, which settles with `Component.noop`.
+ * A stream Command fails the search when it is issued. Queries stay
+ * unloaded, and props, subscriptions and `shared` don't change.
+ *
+ * **Example** (Results match the query)
+ *
+ * ```ts import.meta.vitest
+ * import { Command, Component, UiSchema } from "@effect/ui"
+ * import { Story } from "@effect/ui/testing"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Message = UiSchema.TaggedEnum({
+ *   Typed: { text: Schema.String },
+ *   GotResults: { query: Schema.String }
+ * })
+ *
+ * const Search = Command.make(
+ *   "search/Search",
+ *   { args: { text: Schema.String }, mode: "switch" },
+ *   ({ text }) => Effect.succeed(Message.GotResults({ query: text }))
+ * )
+ *
+ * const SearchBox = Component.define({
+ *   name: "SearchBox",
+ *   model: Schema.Struct({
+ *     query: Schema.String,
+ *     results: Schema.NullOr(Schema.String)
+ *   }),
+ *   message: Message
+ * }).make({
+ *   init: () => ({ query: "", results: null }),
+ *   update: ($, message) =>
+ *     Message.match(message, {
+ *       Typed: ({ text }) =>
+ *         $.set({ ...$.model, query: text }).run(Search.make({ text })),
+ *       GotResults: ({ query }) => ({ ...$.model, results: query })
+ *     }),
+ *   view: (h, model) => h.el("p").children(model.query)
+ * })
+ *
+ * const explored = Story.explore(SearchBox, {}, {
+ *   messages: [Message.Typed({ text: "a" }), Message.Typed({ text: "ab" })],
+ *   commands: [[Search, {
+ *     success: ({ text }) => [Message.GotResults({ query: text })]
+ *   }]],
+ *   invariant: (story) =>
+ *     story.pending.length > 0 || story.model.results === null ||
+ *     story.model.results === story.model.query,
+ *   depth: 6
+ * })
+ * console.log(explored.closed) // true
+ * ```
+ *
+ * @stability experimental
+ * @category exploring
+ * @since 0.1.0
+ */
+export const explore = <
+  C extends AnyComponent,
+  const O extends ReadonlyArray<ExploredCommand> = []
+>(
+  component: C,
+  props: Component.Props<C>,
+  options: ExploreOptions<C, O>
+): Explored =>
+  search.explore(
+    explore,
+    (state) => new StepsImpl("Story", state),
+    component as unknown as Component.Any,
+    props,
+    options
+  )
 
 /**
  * The parts of a headless component for a Model and props: the plain values

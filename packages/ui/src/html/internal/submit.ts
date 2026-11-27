@@ -5,13 +5,6 @@
  */
 
 /**
- * Same-window GETs cancelled by the host but left for the Router.
- *
- * @internal
- */
-export const ownedUnhandled = new WeakSet<Event>()
-
-/**
  * Read an attribute through the form's own-window prototype, bypassing controls
  * named `getAttribute` that shadow the method on the form.
  *
@@ -21,24 +14,11 @@ export const attribute = (form: Element, name: string): string | null =>
   (Object.getPrototypeOf(form) as Element).getAttribute.call(form, name)
 
 /**
- * Where an unhandled submission goes: `"dialog"` for the `dialog` method, `"get"`
- * for a same-window GET the Router can follow, and `"native"` for POST or GET
- * targeting another window. An invalid method counts as `get`, as in the
- * browser.
+ * Read the submitter's `formmethod` or the form's `method` in lowercase.
+ * Callers treat values other than `post` and `dialog` as GET.
  *
  * @internal
  */
-export const kindOf = (
-  form: Element,
-  submitter: Element | null
-): "dialog" | "get" | "native" => {
-  const method = (submitter?.getAttribute("formmethod") ??
-    attribute(form, "method") ?? "").toLowerCase()
-  if (method === "dialog") return method
-  if (method === "post") return "native"
-  const target = submitter?.getAttribute("formtarget") ??
-    attribute(form, "target")
-  return target === null || target === "" || target.toLowerCase() === "_self"
-    ? "get"
-    : "native"
-}
+export const methodOf = (form: Element, submitter: Element | null): string =>
+  (submitter?.getAttribute("formmethod") ?? attribute(form, "method") ?? "")
+    .toLowerCase()

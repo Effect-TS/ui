@@ -1,15 +1,18 @@
 // @vitest-environment happy-dom
-import { Component, Feature, UiSchema } from "@effect/ui"
+import { Component, Feature, MessageLog, UiSchema } from "@effect/ui"
 import { Html, HtmlServer } from "@effect/ui/html"
 import * as BrowserHost from "@effect/ui/html/BrowserHost"
 import * as HtmlHydrate from "@effect/ui/html/HtmlHydrate"
+import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import {
   Deferred,
   Effect,
   Fiber,
   Layer,
+  Logger,
   Option,
+  Redacted,
   Schema,
   SchemaGetter
 } from "effect"
@@ -148,7 +151,8 @@ const Search = Html.component({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.form(h.input.attr("name", "q"))
+  view: (h) =>
+    h.form.attr("method", "dialog").children(h.input.attr("name", "q"))
 })
 
 const LateForm = Html.component({
@@ -158,7 +162,8 @@ const LateForm = Html.component({
 }).make({
   init: () => "late",
   update: ($) => $.model,
-  view: (h) => h.form(h.input.attr("name", "q"))
+  view: (h) =>
+    h.form.attr("method", "dialog").children(h.input.attr("name", "q"))
 })
 
 const LateFormHolder = Html.component({
@@ -180,7 +185,8 @@ const Gated = Component.provide(
   }).make({
     init: () => null,
     update: ($) => $.model,
-    view: (h) => h.form(h.input.attr("name", "q"))
+    view: (h) =>
+      h.form.attr("method", "dialog").children(h.input.attr("name", "q"))
   }),
   Layer.effectDiscard(Effect.suspend(() => layerGate))
 )
@@ -619,5 +625,137 @@ describe("HtmlHydrate", () => {
         assert.strictEqual(app.querySelector("form"), served)
         assert.isFalse(submitted(served))
       }).pipe(Effect.scoped))
+  })
+
+  describe("setProps", () => {
+    it.effect("keeps props updated while a hydrated root waits for its Layer", () =>
+      Effect.gen(function*() {
+        const GatedRow = Component.provide(
+          Row,
+          Layer.effectDiscard(Effect.suspend(() => layerGate))
+        )
+        const rendered = yield* HtmlServer.renderToHtml(GatedRow, {
+          label: "one"
+        })
+        const latch = yield* Deferred.make<void>()
+        layerGate = Deferred.await(latch)
+        const app = yield* container(rendered.html)
+        const log = MessageLog.makeMemory()
+        const root = yield* HtmlHydrate.hydrateEffect(
+          GatedRow,
+          { label: "one" },
+          app,
+          rendered.state
+        ).pipe(Effect.provideService(MessageLog.MessageLog, log))
+
+        root.setProps({ label: "two" })
+        yield* tick
+        yield* Deferred.succeed(latch, undefined)
+        yield* root.adopted
+        yield* tick
+
+        assert.strictEqual(app.textContent, "two0 clickedrow two")
+        const replay = Story.fromLog(GatedRow, log.entries())
+        assert.deepStrictEqual(replay.props, { label: "two" })
+      }).pipe(
+        Effect.ensuring(Effect.sync(() => layerGate = Effect.void)),
+        Effect.scoped
+      ))
+  })
+
+  describe("root props", () => {
+    const News = Html.component({
+      name: "News",
+      props: Schema.Struct({
+        items: Schema.Array(Schema.String),
+        publishedAt: Schema.Date
+      }),
+      model: Schema.Null,
+      message: Schema.Never
+    }).make({
+      init: () => null,
+      update: ($) => $.model,
+      view: (h) =>
+        h.ol.attr("data-at", String(h.props.publishedAt.getTime())).children(
+          ...h.props.items.map((title) => h.li.key(title).children(title))
+        )
+    })
+    const props = {
+      items: ["first story", "second story"],
+      publishedAt: new Date(1000)
+    }
+
+    it.effect("adopts server nodes using root props included in the state", () =>
+      Effect.gen(function*() {
+        const rendered = yield* HtmlServer.renderToHtml(News, props, {
+          includeProps: true
+        })
+        const state = JSON.parse(HtmlServer.serializeState(rendered.state))
+        const app = yield* container(rendered.html)
+        const server = [...app.querySelectorAll("*")]
+        const root = yield* HtmlHydrate.hydrateEffect(
+          News,
+          HtmlHydrate.decodeProps(News, state),
+          app,
+          state
+        )
+        yield* root.adopted
+        sameElements(app, server)
+        assert.deepStrictEqual(texts(app, "li"), props.items)
+        assert.strictEqual(
+          app.querySelector("ol")!.getAttribute("data-at"),
+          "1000"
+        )
+      }).pipe(Effect.scoped))
+
+    it.effect("leaves out root props that don't encode, with a warning, instead of failing the render", () => {
+      const warnings: Array<string> = []
+      const logger = Logger.make<unknown, void>((options) => {
+        if (options.logLevel === "Warn") warnings.push(String(options.message))
+      })
+      const SecretProps = Html.component({
+        name: "SecretProps",
+        props: Schema.Struct({ token: Schema.Redacted(Schema.String) }),
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.p("ok")
+      })
+      const key = Symbol.for("key")
+      const SymbolProps = Html.component({
+        name: "SymbolProps",
+        // Suspended, the field's codec is built only when it is parsed.
+        props: Schema.Struct({
+          child: Schema.suspend(() => Schema.Struct({ [key]: Schema.String }))
+        }),
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.p("ok")
+      })
+      return Effect.gen(function*() {
+        const secret = yield* HtmlServer.renderToHtml(
+          SecretProps,
+          { token: Redacted.make("top-secret") },
+          { includeProps: true }
+        )
+        assert.notInclude(HtmlServer.serializeState(secret.state), "top-secret")
+        const symbol = yield* HtmlServer.renderToHtml(
+          SymbolProps,
+          { child: { [key]: "value" } },
+          { includeProps: true }
+        )
+        assert.isUndefined(symbol.state["~props"])
+        assert.strictEqual(warnings.length, 2)
+        const error = yield* Effect.flip(
+          HtmlHydrate.decodeProps(SymbolProps, { "~props": { child: {} } })
+        )
+        assert.isTrue(Schema.isSchemaError(error))
+      }).pipe(Effect.provide(Logger.layer([logger])))
+    })
   })
 })

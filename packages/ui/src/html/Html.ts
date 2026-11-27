@@ -13,8 +13,8 @@
  * form's `fields`. A handler set with `{ preventDefault: true }` cancels the
  * browser's default when it produces a message and leaves it alone when it
  * returns `undefined`, so it decides per event. A form's `submit` is always
- * cancelled when it has a handler. Without one, only POST or GET targeting
- * another window goes to the browser. Nothing stops an event's
+ * cancelled when it has a handler or uses the `dialog` method. Otherwise,
+ * the host leaves the browser default intact. Nothing stops an event's
  * propagation: only the innermost element with a handler for an event gets
  * it.
  *
@@ -145,6 +145,7 @@
  */
 import * as Context from "effect/Context"
 import * as Schema from "effect/Schema"
+import type * as Types from "effect/Types"
 import * as Component from "../Component.ts"
 import { handle } from "../internal/handler.ts"
 import * as Renderer from "../Renderer.ts"
@@ -181,7 +182,10 @@ export class Host extends Context.Service<Host, {
     options: ScrollOptions
   ) => void
   readonly measure: (element: globalThis.Element) => Rect
-  readonly select: (element: globalThis.Element) => void
+  readonly select: (
+    element: globalThis.Element,
+    options?: SelectOptions | undefined
+  ) => void
   readonly requestSubmit: (element: globalThis.Element) => boolean
   readonly showPicker: (element: globalThis.Element) => boolean
 }>()("@effect/ui/html/Html/Host") {}
@@ -234,6 +238,19 @@ export interface ScrollOptions {
   readonly inline?: "start" | "center" | "end" | "nearest" | undefined
 }
 
+/**
+ * The options of `select`: the range to select, in UTF-16 code units. `end`
+ * defaults to `start`, which places the caret there.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface SelectOptions {
+  readonly start: number
+  readonly end?: number | undefined
+}
+
 // ---------------------------------------------------------------------------
 // events
 // ---------------------------------------------------------------------------
@@ -250,15 +267,18 @@ export type PointerType = "mouse" | "touch" | "pen" | ""
 
 /**
  * The payload of `click`, `dblclick`, `contextmenu`, `mousedown`,
- * `mouseup` and `pointerdown`: the button, the position in the viewport,
- * the modifier keys, and the kind of pointer.
+ * `mouseup` and the pointer events: the button, the position in the
+ * viewport, the modifier keys, and the pointer.
  *
  * **Details**
  *
- * `pointerType` is `""` for a click from the keyboard or a script. Otherwise
- * the browser host reads it from the `pointerdown` before the event, since
- * some browsers report a tap's `click` as a mouse's. A browser that sends no
- * pointer events reports `"mouse"`.
+ * `pointerType` is `""` for a click from the keyboard or a script. A pointer
+ * event reports its own. Otherwise the browser host reads it from the
+ * `pointerdown` before the event, since some browsers report a tap's `click`
+ * as a mouse's. A browser that sends no pointer events reports `"mouse"`.
+ *
+ * `pointerId` tells the pointers of a multi-touch apart, and is `-1` for an
+ * event that carries none, such as a `mousedown` or a click from the keyboard.
  *
  * @stability experimental
  * @category events
@@ -272,6 +292,7 @@ export interface PointerPayload {
   readonly ctrl: boolean
   readonly alt: boolean
   readonly meta: boolean
+  readonly pointerId: number
   readonly pointerType: PointerType
 }
 
@@ -311,17 +332,14 @@ export interface HoverPayload {
  * `readonly` field still counts. On element handlers `editable` describes the
  * event's target, not the element holding the handler.
  *
- * `selectionStart` and `selectionEnd` are the caret or selection of the
- * event's target, as the key finds it, when the target is a `textarea` or
- * an `input` whose type has a selection, such as `text` or `search`. They
- * are `null` for any other target, including an `email` or `number`
- * input, which browsers don't report a selection for.
+ * `selectionStart` and `selectionEnd` are the target's selection as the key
+ * finds it, as `SelectionPayload` describes.
  *
  * @stability experimental
  * @category events
  * @since 0.1.0
  */
-export interface KeyPayload {
+export interface KeyPayload extends SelectionPayload {
   readonly key: string
   readonly shift: boolean
   readonly ctrl: boolean
@@ -330,6 +348,24 @@ export interface KeyPayload {
   readonly composing: boolean
   readonly repeat: boolean
   readonly editable: boolean
+}
+
+/**
+ * The payload of `selectionchange` on an `input` or `textarea`: the current
+ * caret or selection. The browser queues the event, so changes in one task
+ * can arrive as one.
+ *
+ * **Details**
+ *
+ * Offsets are in UTF-16 code units. They are `null` unless the target is a
+ * `textarea` or an `input` type with a selection, such as `text` or
+ * `search`: an `email` or `number` input reports none.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface SelectionPayload {
   readonly selectionStart: number | null
   readonly selectionEnd: number | null
 }
@@ -347,11 +383,16 @@ export interface KeyPayload {
  * `""` for a `change`, and for an `input` the browser names no edit for,
  * such as choosing an option.
  *
+ * `selectionStart` and `selectionEnd` are the selection the edit left, as
+ * `SelectionPayload` describes. Read the caret here to keep it in step with
+ * `value`: `selectionchange` comes later, or not at all if the range didn't
+ * move.
+ *
  * @stability experimental
  * @category events
  * @since 0.1.0
  */
-export interface ValuePayload {
+export interface ValuePayload extends SelectionPayload {
   readonly value: string
   readonly composing: boolean
   readonly inputType: string
@@ -605,6 +646,30 @@ export interface DropTargetOptions extends View.EventOptions {
 }
 
 /**
+ * The options of `pointerdown`. With `capturePointer: true`, a press whose
+ * handler sends a message captures its pointer on the handler's element, so
+ * the element gets the press's `pointermove`, `pointerup` and
+ * `pointercancel` wherever the pointer goes.
+ *
+ * **Details**
+ *
+ * The browser releases the capture when the press ends. Capture sends the
+ * rest of the press to the element, so a `click` on a child goes to the
+ * element instead. A touch drag needs CSS `touch-action: none` on the
+ * element, or the browser scrolls and sends `pointercancel`.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface PointerDownOptions extends View.EventOptions {
+  readonly capturePointer?: boolean | undefined
+}
+
+type EventOptionsOf<K> = [K] extends ["pointerdown"] ? PointerDownOptions
+  : View.EventOptions
+
+/**
  * The payload of `focusin` and `focusout`: whether the other end of the
  * move is inside the handler's element. For `focusin` that is where focus
  * came from, and for `focusout` where it goes.
@@ -689,6 +754,13 @@ export interface FocusOutPayload extends FocusWithinPayload, BlurPayload {}
  * touch may send no mouse events, and a `pointerdown` whose default was
  * cancelled sends none.
  *
+ * `pointermove` is sent at most once per animation frame for each pointer,
+ * with its latest position, and its default can't be cancelled. A queued
+ * move is sent before its pointer's `pointerdown` or `pointerup` element
+ * event, and dropped at `pointercancel`, so the Model can revert at once.
+ * A capture-phase document subscriber hears the press or release before
+ * that move. To follow a drag outside the element, see `PointerDownOptions`.
+ *
  * @stability experimental
  * @category events
  * @since 0.1.0
@@ -700,6 +772,9 @@ export interface Events {
   readonly mousedown: PointerPayload
   readonly mouseup: PointerPayload
   readonly pointerdown: PointerPayload
+  readonly pointermove: PointerPayload
+  readonly pointerup: PointerPayload
+  readonly pointercancel: PointerPayload
   readonly mouseenter: HoverPayload
   readonly mouseleave: HoverPayload
   readonly keydown: KeyPayload
@@ -748,8 +823,10 @@ export type EventsOf<K extends string> =
   & (K extends "textarea" | "select"
     ? { readonly input: ValuePayload; readonly change: ValuePayload }
     : {})
-  & (K extends "input" | "textarea"
-    ? { readonly compositionend: CompositionPayload }
+  & (K extends "input" | "textarea" ? {
+      readonly compositionend: CompositionPayload
+      readonly selectionchange: SelectionPayload
+    }
     : {})
   & (K extends "form" ? { readonly submit: SubmitPayload; readonly reset: {} }
     : {})
@@ -782,9 +859,9 @@ export type ValueNode =
   | HTMLSelectElement
 
 /**
- * The builder of a void HTML element, such as `h.input` or `h.br`: the core
- * builder plus typed events, controlled properties, drag and drop and a few
- * attribute helpers, and no children. `Element` adds `children` for the other tags.
+ * A builder without children, such as `h.input` or `h.textarea`. Extends the
+ * core builder with typed events, controlled properties, drag and drop,
+ * and attribute helpers. `Element` adds children.
  *
  * **Details**
  *
@@ -867,14 +944,14 @@ export class VoidElement<
     )
   }
   /**
-   * Sets the `class` attribute from class tokens, skipping `false`, `null`,
+   * Appends class tokens to the `class` attribute, skipping `false`, `null`,
    * `undefined` and `""`.
    *
    * **Details**
    *
-   * The remaining tokens are joined with one space, as `classNames` does.
-   * When none remain, the attribute is removed instead of rendering
-   * `class=""`. Calling `class` again replaces the earlier value.
+   * Tokens are joined with one space after any existing classes. The attribute
+   * is omitted when no classes remain. Use
+   * `attr("class", value)` to replace or `attr("class", undefined)` to clear.
    *
    * **Example** (Adding classes conditionally)
    *
@@ -894,11 +971,14 @@ export class VoidElement<
    * @since 0.1.0
    */
   class(...tokens: ReadonlyArray<ClassToken>): this {
-    // One token, the common call, is the value as it is.
-    const value = tokens.length === 1
+    const added = tokens.length === 1
       ? tokens[0] || ""
       : joinClassTokens(tokens)
-    return this.attr("class", value === "" ? undefined : value)
+    const current = this.elementAttrs.class
+    return this.attr(
+      "class",
+      current && added ? current + " " + added : current || added || undefined
+    )
   }
   /**
    * Sets or removes the `disabled` boolean attribute.
@@ -1058,7 +1138,7 @@ export class VoidElement<
   override on<K extends string>(
     event: K & keyof E,
     handler: View.Handler<Msg, E[K & keyof E]>,
-    options?: View.EventOptions | undefined
+    options?: EventOptionsOf<K> | undefined
   ): this {
     if (options === undefined && (event === "dragstart" || event === "drop")) {
       const set = View.ownFields(this).eventOptions[event]
@@ -1349,7 +1429,6 @@ export const containerTags = [
   "table",
   "tbody",
   "td",
-  "textarea",
   "tfoot",
   "th",
   "thead",
@@ -1362,7 +1441,8 @@ export const containerTags = [
 ] as const
 
 /**
- * The void tags, which take no children.
+ * Tags whose builders take no children, including `textarea`.
+ * Set textarea content with `.value(...)`; it is not an HTML void element.
  *
  * @stability experimental
  * @category vocabulary
@@ -1375,6 +1455,7 @@ export const voidTags = [
   "img",
   "input",
   "source",
+  "textarea",
   "track",
   "wbr"
 ] as const
@@ -1389,7 +1470,7 @@ export const voidTags = [
 export type ContainerTag = typeof containerTags[number]
 
 /**
- * A void tag.
+ * A tag that takes no children.
  *
  * @stability experimental
  * @category vocabulary
@@ -1434,6 +1515,9 @@ export type SvgEvents = Pick<
   | "mousedown"
   | "mouseup"
   | "pointerdown"
+  | "pointermove"
+  | "pointerup"
+  | "pointercancel"
   | "mouseenter"
   | "mouseleave"
   | "keydown"
@@ -1621,6 +1705,16 @@ export interface SvgElement<
   Tag extends SvgTag = SvgTag
 > extends View.ContainerBuilder<Msg, R, SvgEvents, Node, Tag> {
   /**
+   * Sends a message when `event` fires, as `View.ElementBuilder.on` does.
+   *
+   * @since 0.1.0
+   */
+  on<K extends string>(
+    event: K & keyof SvgEvents,
+    handler: View.Handler<Msg, SvgEvents[K & keyof SvgEvents]>,
+    options?: EventOptionsOf<K> | undefined
+  ): this
+  /**
    * Sets one attribute; `undefined` removes it.
    *
    * @since 0.1.0
@@ -1641,7 +1735,7 @@ export interface SvgElement<
    */
   id(id: string): this
   /**
-   * Sets the `class` attribute from class tokens.
+   * Appends class tokens to the `class` attribute.
    *
    * @since 0.1.0
    */
@@ -1889,17 +1983,38 @@ type TypesOf<S> = {
   readonly [K in keyof S]: S[K] extends Schema.Top ? S[K]["Type"] : never
 }
 
+type ElementOf<Tag extends string> = Tag extends keyof HTMLElementTagNameMap
+  ? HTMLElementTagNameMap[Tag]
+  : HTMLElement
+
+type IsCallback<V> = [V] extends [null | undefined] ? false
+  : [V] extends [Function | null | undefined] ? true
+  : false
+
+type Properties<P, T> = Types.IsUnion<T> extends true ? P
+  :
+    & P
+    & {
+      readonly [
+        K in Exclude<
+          keyof T,
+          keyof HTMLElement | keyof P
+        > as IsCallback<T[K]> extends true ? never
+          : Types.EqualsWith<Pick<T, K>, Types.Mutable<Pick<T, K>>, K, never>
+      ]: T[K]
+    }
+
 /**
- * The builder under a custom element's property methods: an `Element` whose
- * `prop` takes only the declared properties, each typed by its Schema, and
- * whose `on` adds the declared events, each with its decoded `detail` as
- * the payload.
+ * A custom element builder with typed properties and events. Declared
+ * event handlers receive the decoded `detail` as their payload.
  *
  * **Details**
  *
  * `P` maps each declared property to its value type and `E` each declared
  * event to its `detail`. A declared event replaces an HTML event of the same
- * name. `CustomElement` adds a method per declared property.
+ * name. `Node` defaults to `HTMLElementTagNameMap[Tag]`, or `HTMLElement`
+ * for an unregistered tag, and types `ref` and `onMount`.
+ * `CustomElement` adds a method per declared property.
  *
  * @stability experimental
  * @category custom elements
@@ -1911,32 +2026,28 @@ export class CustomElementBuilder<
   out R = never,
   in out P = {},
   in out E = {},
-  out Tag extends string = string
-> extends Element<Msg, R, Omit<Events, keyof E> & E, HTMLElement, Tag> {
-  /**
-   * Writes the declared property `name` on the element as a JavaScript
-   * property, typed by its Schema. The browser host writes it when its value
-   * changes, and resets it when a render leaves it out.
-   *
-   * @since 0.1.0
-   */
-  override prop<K extends keyof P & string>(name: K, value: P[K]): this {
-    return super.prop(name, value)
-  }
+  out Tag extends string = string,
+  in out Node = ElementOf<Tag>
+> extends Element<Msg, R, Omit<Events, keyof E> & E, Node, Tag> {
   /**
    * Phantom: keeps the property methods through `View.WithRequirements`.
    *
    * @since 0.1.0
    */
-  declare readonly "~With"?: CustomElement<Msg, R | this["~Add"], P, E, Tag>
+  declare readonly "~With"?: CustomElement<
+    Msg,
+    R | this["~Add"],
+    P,
+    E,
+    Tag,
+    Node
+  >
 }
 
 type Undeclared<P, K extends string> = K extends keyof P ? never : unknown
 
 /**
- * The HTML methods a declared property can share a name with. Once a
- * declaration takes the name, the HTML method can't be called, so the
- * generated method is the only signature left.
+ * A declared property method replaces any HTML method of the same name.
  *
  * @stability experimental
  * @category custom elements
@@ -1947,8 +2058,20 @@ export interface CustomElementBuilder<
   out R = never,
   in out P = {},
   in out E = {},
-  out Tag extends string = string
+  out Tag extends string = string,
+  in out Node = ElementOf<Tag>
 > {
+  /**
+   * Writes the property `name` on the element as a JavaScript property,
+   * typed by its Schema or by the element's class. The browser host writes
+   * it when its value changes, and resets it when a render leaves it out.
+   *
+   * @since 0.1.0
+   */
+  prop<K extends keyof Properties<P, Node> & string>(
+    name: K,
+    value: Properties<P, Node>[K]
+  ): this
   disabled(
     this: Undeclared<P, "disabled">,
     disabled: boolean
@@ -1990,10 +2113,11 @@ export type CustomElement<
   R = never,
   P = {},
   E = {},
-  Tag extends string = string
+  Tag extends string = string,
+  Node = ElementOf<Tag>
 > =
   & PropertyMethods<P>
-  & CustomElementBuilder<Msg, R, P, E, Tag>
+  & CustomElementBuilder<Msg, R, P, E, Tag, Node>
 
 /**
  * What `customElement` takes: the element's `tag`, its JavaScript
@@ -2066,11 +2190,22 @@ export interface CustomElementBinding<Tag extends string, P, E> {
  * `Schema.Struct({})` declares an event without a payload. An event that
  * doesn't bubble reaches the element's own handler only.
  *
- * `prop` takes the same declarations, typed the same way, and sets a
- * property whose name has no method (see `CustomElementReserved`). The
- * HTML methods, such as `class`, `style` and `on("click", ...)`, work as
- * on any element. Registering the element with `customElements.define`, often by
- * importing its package, is still the app's job.
+ * `prop` accepts declared properties, including names without a method
+ * (see `CustomElementReserved`). For a single tag registered in
+ * `HTMLElementTagNameMap`, it also infers writable fields beyond
+ * `HTMLElement`, excluding methods and callbacks. Inferred values use
+ * the fields' read types; explicit schemas take precedence. The registered
+ * class also types `ref` and `onMount`.
+ *
+ * Declare schemas in `properties` for fluent property methods, callback
+ * properties, or accessors whose setters accept a different type from
+ * their getters' return types. Explicit schemas are also needed when the
+ * tag is absent from `HTMLElementTagNameMap` or has a union type.
+ *
+ * HTML methods such as `class`, `style` and `on("click", ...)` remain
+ * available unless a declared property replaces them. The app must still
+ * register the element with `customElements.define`, often by importing
+ * its package.
  *
  * Throws when `tag` isn't a custom element name, lowercase with a hyphen.
  *
@@ -2133,7 +2268,7 @@ export const customElement = <
       [event, schema]
     ) => [event, Schema.decodeUnknownExit(schema)])
   )
-  class Bound extends CustomElementBuilder<any, any, any, any, any> {
+  class Bound extends CustomElementBuilder<any, any, any, any, any, any> {
     override on(
       event: string,
       handler: View.Handler<unknown, unknown>,

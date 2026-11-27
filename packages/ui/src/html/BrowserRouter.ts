@@ -11,13 +11,15 @@
  *
  * Links are plain anchors with a printed route. A click is intercepted only
  * when the routes parse its href and it has no modifier key, `target` or
- * `download`. Anything else is a full page load. `<form method="get">` is
- * intercepted by the same test. Following either to the current route sends a
+ * `download`. Anything else is a full page load. The router intercepts a
+ * form submission only if it is not already cancelled, uses GET, targets
+ * the same window and has a URL the routes parse. It leaves other
+ * submissions alone; the host still cancels handled and `dialog` forms.
+ * Following a link or form to the current route sends a
  * message without scrolling to the top, announcing or moving focus. A `#hash`
  * link still scrolls to its target, even when it's the current hash, and a
  * bare `#` stays in the URL and scrolls to the top. Both work the same in a
- * root mounted inside a shadow root, open or closed. An unhandled POST, or a
- * GET targeting another window, submits natively.
+ * root mounted inside a shadow root, open or closed.
  *
  * Once a navigation settles (the first flush after the root received it in
  * which no Layer build begun since is still pending), the router scrolls,
@@ -94,6 +96,7 @@ import * as Effect from "effect/Effect"
 import type * as Fiber from "effect/Fiber"
 import * as Layer from "effect/Layer"
 import * as Option from "effect/Option"
+import * as base from "../internal/base.ts"
 import * as services from "../internal/services.ts"
 import { decodeComponent } from "../internal/url.ts"
 import type * as Route from "../Route.ts"
@@ -122,9 +125,10 @@ const replaceInterval = "200 millis"
 export interface Options {
   readonly routes: Route.AnyUnion
   /**
-   * The base path the routes are relative to. A string is used as it is. A
-   * function is given the first segment of the URL's path at startup and
-   * says whether it's the base, as with an i18n prefix like `/en`.
+   * The routes' base path, set when the Layer is built and restored when
+   * its Scope closes. Pass a string such as Vite's `import.meta.env.BASE_URL`,
+   * or a function that selects the first URL path segment as the base,
+   * as with an i18n prefix like `/en`.
    */
   readonly base?: string | ((segment: string) => boolean) | undefined
   /** Scroll to the top, a `#hash` or the saved position after a navigation. Defaults to `true`. */
@@ -215,14 +219,15 @@ const make = (
     const location = window.location
     const history = window.history
 
-    if (inFragment) routes.setBase("#")
-    else if (typeof options.base === "string") routes.setBase(options.base)
-    else if (options.base !== undefined) {
-      const segment = location.pathname.split("/")[1] ?? ""
-      routes.setBase(
-        segment !== "" && options.base(segment) ? `/${segment}` : ""
-      )
-    } else routes.setBase("")
+    const segment = location.pathname.split("/")[1] ?? ""
+    yield* base.scoped(
+      routes,
+      inFragment
+        ? "#"
+        : typeof options.base === "function"
+        ? segment !== "" && options.base(segment) ? `/${segment}` : ""
+        : options.base ?? ""
+    )
 
     /** `url.hash`, but `"#"` for a bare `#`, which `hash` reports as `""`. */
     const hashOf = (url: URL | Location) =>
@@ -547,13 +552,18 @@ const make = (
       if (href !== undefined) Effect.runSync(router.intent(href))
     }
     const onSubmit = (event: SubmitEvent) => {
-      const ownedUnhandled = submit.ownedUnhandled.has(event)
-      if (event.defaultPrevented && !ownedUnhandled) return
+      if (event.defaultPrevented) return
       const form = event.target as HTMLFormElement | null
       if (form === null || form.localName !== "form") return
       flushHistory()
       const submitter = event.submitter as HTMLButtonElement | null
-      if (submit.kindOf(form, submitter) !== "get") return
+      const method = submit.methodOf(form, submitter)
+      if (method === "post" || method === "dialog") return
+      const target = submitter?.getAttribute("formtarget") ??
+        submit.attribute(form, "target")
+      if (
+        target !== null && target !== "" && target.toLowerCase() !== "_self"
+      ) return
       const action = submitter?.getAttribute("formaction") ??
         submit.attribute(form, "action") ?? ""
       const url = new URL(action, document.baseURI)
@@ -564,14 +574,7 @@ const make = (
       }
       url.search = search.toString()
       url.hash = ""
-      const href = local(url)
-      // The host already stopped the browser's submission, so the Router makes it: a full page
-      // load for anything the routes don't parse.
-      if (ownedUnhandled) {
-        Effect.runSync(
-          href !== undefined ? router.navigate(href) : router.load(url.href)
-        )
-      } else follow(event, href)
+      follow(event, local(url))
     }
     const handled = new WeakSet<Event>()
     const begin = (event: Event) => {

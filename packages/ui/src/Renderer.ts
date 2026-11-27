@@ -20,9 +20,11 @@
  * @stability experimental
  * @since 0.1.0
  */
-import type * as Context from "effect/Context"
-import type * as Duration from "effect/Duration"
-import type * as Effect from "effect/Effect"
+import * as Cause from "effect/Cause"
+import * as Clock from "effect/Clock"
+import * as Context from "effect/Context"
+import * as Duration from "effect/Duration"
+import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import type * as Option from "effect/Option"
 import * as Predicate from "effect/Predicate"
@@ -31,6 +33,7 @@ import * as Schema from "effect/Schema"
 import * as SchemaTransformation from "effect/SchemaTransformation"
 import type * as Scope from "effect/Scope"
 import type * as Component from "./Component.ts"
+import type * as Kernel from "./internal/kernel.ts"
 import * as runtime from "./internal/runtime.ts"
 import * as services from "./internal/services.ts"
 import type * as View from "./View.ts"
@@ -43,10 +46,12 @@ import type * as View from "./View.ts"
  *
  * The handler runs once, synchronously. When it produces a message,
  * `onMessage` runs before the message is sent, while the host's event is
- * still being handled, so the host can cancel the event's default there. It
- * doesn't run when the handler returns `undefined` or fails, or when the
- * instance is gone or not yet started. The result is whether a handler
- * produced a message.
+ * still being handled, with the options the handler was set with, so the
+ * host can act on them there, such as cancelling the event's default. Each
+ * layer of an element that parts of headless components decorated runs it
+ * with its own options. It doesn't run when the handler returns `undefined`
+ * or fails, or when the instance is gone or not yet started. The result is
+ * whether a handler produced a message.
  *
  * @stability experimental
  * @category models
@@ -56,7 +61,7 @@ export type Dispatch = (
   event: string,
   handler: View.Handler<unknown, any>,
   payload: unknown,
-  onMessage?: (() => void) | undefined
+  onMessage?: ((options: View.EventOptions) => void) | undefined
 ) => boolean
 
 /**
@@ -122,8 +127,8 @@ export interface HostEvents<Node> {
  * its own events into plain payloads and calls `dispatch` for the innermost
  * element with a handler, so re-rendering never touches listeners. The
  * element's `EventOptions` come with its handlers: a host with cancellable
- * events honours `preventDefault: true` from `dispatch`'s `onMessage`, and
- * `preventDefault: "always"` before it calls `dispatch`.
+ * events honours `preventDefault: true` in the options `dispatch` gives
+ * `onMessage`, and `preventDefault: "always"` before it calls `dispatch`.
  *
  * A handler value is opaque to the host. It may be a message, a function or
  * a value the renderer made, such as the one standing for every layer of an
@@ -133,7 +138,9 @@ export interface HostEvents<Node> {
  *
  * `elements` lists the vocabularies the host shows, by name, or is `"any"`.
  * `controlled` lists the properties re-applied after every patch, since the
- * user may have changed them; the host skips a no-op. Its members must not
+ * user may have changed them; the host skips a no-op. A user edit the Model
+ * didn't follow isn't patched, so the host puts it back once the event has
+ * run. Its members must not
  * change once the host renders. `runsMounts` is `false` on hosts that never
  * run `onMount` work. `commit` is called once at the end of each flush and
  * after mounting, for hosts that apply changes in a batch.
@@ -303,6 +310,9 @@ export interface Hydration<Node> {
  * fetches it. `~static` is set by a render with `static: true`, and `~key` by
  * a render with `key` so hydration mounts at the same root path.
  *
+ * `~props` holds the root's props, encoded with its props Schema, from a
+ * render with `includeProps: true`. Use `HtmlHydrate.decodeProps` to read them.
+ *
  * `~reported` holds, by path, the message an owner of shared state last got
  * from its readers' reports. An owner that adopts its Model starts from it,
  * so the client sends that message again only if its reports differ, even
@@ -333,6 +343,7 @@ export interface State {
   readonly [path: string]: unknown
   readonly "~deferred"?: ReadonlyArray<string> | undefined
   readonly "~query"?: unknown
+  readonly "~props"?: unknown
   readonly "~reported"?: { readonly [path: string]: unknown } | undefined
   readonly "~static"?: boolean | undefined
   readonly "~key"?: string | undefined
@@ -516,13 +527,159 @@ export interface Refs {
 export const Refs: Context.Service<Refs, Refs> = services.Refs
 
 /**
+ * One phase that took longer than its budget, from `slowPhases`.
+ *
+ * **Details**
+ *
+ * - `update`: one `update` call, with its message.
+ * - `view`: one view call, without its children's views, which run later.
+ * - `flush`: one render pass, including every view, the host writes and the
+ *   `committed` callbacks. The first mount is one flush, from its first
+ *   `init`. A flush held for a view transition is reported once it commits,
+ *   without the time spent waiting for the browser.
+ *
+ * A view's time also counts toward its flush. A view rendered before a
+ * message's `update` runs outside any flush.
+ *
+ * `duration` and `budget` are in milliseconds.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type SlowPhase =
+  | {
+    readonly phase: "update"
+    readonly path: string
+    readonly component: string
+    readonly message: unknown
+    readonly duration: number
+    readonly budget: number
+  }
+  | {
+    readonly phase: "view"
+    readonly path: string
+    readonly component: string
+    readonly duration: number
+    readonly budget: number
+  }
+  | {
+    readonly phase: "flush"
+    readonly duration: number
+    readonly budget: number
+  }
+
+/**
+ * Reports each `update`, view or flush that takes longer than its budget, in
+ * every tree mounted with this Layer.
+ *
+ * **Details**
+ *
+ * A phase without a budget isn't timed, one within its budget allocates
+ * nothing, and one that throws isn't reported. Time comes from the `Clock`'s
+ * monotonic reading, so tests can script it. `onSlow` runs synchronously, and
+ * an error it throws is logged with `Effect.logError`.
+ *
+ * **Gotchas**
+ *
+ * `message` is the raw message, not redacted. Send only what you need, such
+ * as its `_tag`, to a remote service.
+ *
+ * **Example** (Reporting slow phases)
+ *
+ * ```ts
+ * import { Renderer } from "@effect/ui"
+ *
+ * const SlowPhases = Renderer.slowPhases({
+ *   update: "4 millis",
+ *   view: "16 millis",
+ *   flush: "16 millis",
+ *   onSlow: (slow) => console.warn(slow.phase, slow.duration)
+ * })
+ * ```
+ *
+ * @stability experimental
+ * @category layers
+ * @since 0.1.0
+ */
+export const slowPhases = (options: {
+  readonly update?: Duration.Input | undefined
+  readonly view?: Duration.Input | undefined
+  readonly flush?: Duration.Input | undefined
+  readonly onSlow: (slow: SlowPhase) => void
+}): Layer.Layer<never> => {
+  const update = budgetOf(options.update)
+  const view = budgetOf(options.view)
+  const flush = budgetOf(options.flush)
+  return Layer.succeed(services.SlowPhases, (ctx): Kernel.Slow => {
+    const clock = Context.get(ctx, Clock.Clock)
+    const now = () => clock.monotonicTimeNanosUnsafe()
+    const since = (from: bigint) => Number(now() - from) / 1_000_000
+    const report = (slow: SlowPhase) => {
+      try {
+        options.onSlow(slow)
+      } catch (error) {
+        Effect.runForkWith(ctx)(
+          Effect.logError(
+            "Renderer.slowPhases: onSlow failed",
+            Cause.die(error)
+          )
+        )
+      }
+    }
+    // The nanoseconds a flush ran before a transition held it.
+    let carried = BigInt("0")
+    return {
+      now,
+      update: update === undefined ? undefined : (from, inst, message) => {
+        const duration = since(from)
+        if (duration > update) {
+          report({
+            phase: "update",
+            path: inst.path,
+            component: inst.component.definition.name,
+            message,
+            duration,
+            budget: update
+          })
+        }
+      },
+      view: view === undefined ? undefined : (from, inst) => {
+        const duration = since(from)
+        if (duration > view) {
+          report({
+            phase: "view",
+            path: inst.path,
+            component: inst.component.definition.name,
+            duration,
+            budget: view
+          })
+        }
+      },
+      flush: flush === undefined ? undefined : (from, held) => {
+        const spent = carried + now() - from
+        carried = held ? spent : BigInt("0")
+        if (held) return
+        const duration = Number(spent) / 1_000_000
+        if (duration > flush) {
+          report({ phase: "flush", duration, budget: flush })
+        }
+      }
+    }
+  })
+}
+
+const budgetOf = (input: Duration.Input | undefined): number | undefined =>
+  input === undefined ? undefined : Duration.toMillis(input)
+
+/**
  * A mounted tree.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Root<out Model, in Msg> {
+export interface Root<out Model, in Msg, in Props = never> {
   /** The root instance's path, `/<name>` or `/<name>[<key>]` when keyed. */
   readonly path: string
   /** The session the message log groups this mount's entries under. */
@@ -531,6 +688,8 @@ export interface Root<out Model, in Msg> {
   readonly model: () => Model | undefined
   /** Sends a message to the root, as if from outside the tree. */
   readonly send: (message: Msg) => void
+  /** Gives the root new props without remounting, as a parent does a child. */
+  readonly setProps: (props: Props) => void
   /**
    * Completes once every instance has adopted the server's nodes, at once
    * without hydration. Head sync and the router's announcements start with
@@ -632,7 +791,7 @@ export const mount: <
     readonly onEmit?: ((event: Events) => void) | undefined
   }
 ) => Effect.Effect<
-  Root<Model, Msg>,
+  Root<Model, Msg, Props>,
   never,
   R | RF | RP | HostOf<V> | Renderer | Scope.Scope
 > = runtime.mount as any
@@ -686,6 +845,9 @@ export interface QueryOptions {
  * Use distinct `key` options for repeated roots in one document. The key
  * sets the root's path to `/<name>[<key>]` and is saved in state for hydration.
  *
+ * `includeProps: true` adds the root's props to the state as `~props`,
+ * as `HtmlServer.renderToHtml` describes.
+ *
  * `props` may be an Effect, as with `mount`: it is run once, before `init`,
  * and its requirements are added to the render's. The client resolves its
  * own, so with `Router.props` both sides read the route from their Router.
@@ -711,6 +873,7 @@ export const prerender: <
     readonly elements?: ReadonlyArray<string> | "any" | undefined
     readonly key?: string | undefined
     readonly static?: boolean | undefined
+    readonly includeProps?: boolean | undefined
   }
 ) => Effect.Effect<Prerendered<Model, View.HeadValue<V>>, never, R | RP> = (
   component,
@@ -721,5 +884,6 @@ export const prerender: <
     budget: options?.budget ?? "500 millis",
     elements: options?.elements ?? "any",
     key: options?.key,
-    static: options?.static
+    static: options?.static,
+    includeProps: options?.includeProps
   }) as Effect.Effect<Prerendered<any, any>>

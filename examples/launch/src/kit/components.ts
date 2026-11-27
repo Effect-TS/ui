@@ -22,6 +22,7 @@ export const modules = [
   "Menu",
   "Menubar",
   "Meter",
+  "NavigationLinks",
   "NavigationMenu",
   "NumberField",
   "OTPField",

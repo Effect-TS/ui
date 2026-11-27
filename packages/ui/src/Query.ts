@@ -2,7 +2,8 @@
  * A keyed data cache. Each query is a class service with a name, argument and
  * result Schemas, and a freshness duration. The cache keeps one entry per query
  * and arguments, shares in-flight fetches, refetches stale entries on demand,
- * and collects unused entries.
+ * and collects unused entries. A stream query, made with `StreamService`,
+ * follows a Stream instead of fetching.
  *
  * Attach a fetcher with `toLayer`: it builds once per Layer build and captures
  * its dependencies, so `get` requires only the query and cache. Fake it in
@@ -72,6 +73,7 @@ import * as SchemaParser from "effect/SchemaParser"
 import * as SchemaTransformation from "effect/SchemaTransformation"
 import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
+import * as Tracer from "effect/Tracer"
 import type * as Types from "effect/Types"
 import { runCodec } from "./internal/codecRun.ts"
 import type { Given } from "./internal/given.ts"
@@ -203,13 +205,25 @@ export declare namespace Query {
 export interface Service<
   in out Self,
   in out Name extends string,
-  in out Args,
-  in out A,
-  in out E
+  in out Args extends Schema.Top,
+  in out Success extends Schema.Top,
+  in out Error extends Schema.Top
 > extends
-  Context.ServiceClass<Self, Name, (args: Args) => Effect.Effect<A, E>>,
-  Query<Args, A, E>
+  Context.ServiceClass<
+    Self,
+    Name,
+    (args: Args["Type"]) => Effect.Effect<Success["Type"], Error["Type"]>
+  >,
+  Query<Args["Type"], Success["Type"], Error["Type"]>
 {
+  /**
+   * Preserves a supplied Schema; wraps a fields record in `Schema.Struct`.
+   * Defaults to an empty struct.
+   */
+  readonly args: Args
+  readonly success: Success
+  /** Defaults to `Schema.Never`. */
+  readonly error: Error
   /**
    * Builds a Layer providing the fetcher from a function or an Effect. Fetches
    * are interrupted when the Layer's Scope closes, waiting for cleanup before
@@ -217,8 +231,12 @@ export interface Service<
    */
   toLayer<LE = never, LR = never>(
     build:
-      | ((args: Args) => Effect.Effect<A, E>)
-      | Effect.Effect<(args: Args) => Effect.Effect<A, E>, LE, LR>
+      | ((args: Args["Type"]) => Effect.Effect<Success["Type"], Error["Type"]>)
+      | Effect.Effect<
+        (args: Args["Type"]) => Effect.Effect<Success["Type"], Error["Type"]>,
+        LE,
+        LR
+      >
   ): Layer.Layer<Self, LE, Exclude<LR, Scope.Scope>>
   /**
    * Returns the stored value when it's fresh, and fetches otherwise, joining
@@ -238,18 +256,20 @@ export interface Service<
    * run invalidates, it always calls the fetcher in the caller's fiber, and
    * stores nothing.
    */
-  get(args: Args): Effect.Effect<A, E, Self | Cache>
+  get(
+    args: Args["Type"]
+  ): Effect.Effect<Success["Type"], Error["Type"], Self | Cache>
   /**
    * Starts a fetch that outlives the caller, unless the entry is fresh, and
    * returns nothing.
    */
-  prefetch(args: Args): Effect.Effect<void, never, Self | Cache>
+  prefetch(args: Args["Type"]): Effect.Effect<void, never, Self | Cache>
   /**
    * Marks one entry, or every entry of the query when called without
    * arguments, stale. A watched entry refetches at once, a fetch in flight is
    * restarted, and any other entry refetches the next time it's asked for.
    */
-  invalidate(args?: Args): Effect.Effect<void, never, Cache>
+  invalidate(args?: Args["Type"]): Effect.Effect<void, never, Cache>
   /**
    * Watches an entry: loads it if it's cold or stale and nothing else watches
    * it, then emits every change. The Stream starts with the current state
@@ -257,28 +277,48 @@ export interface Service<
    * with a fetcher's defect.
    */
   changes(
-    args: Args
-  ): Stream.Stream<AsyncResult.AsyncResult<A, E>, never, Self | Cache>
+    args: Args["Type"]
+  ): Stream.Stream<
+    AsyncResult.AsyncResult<Success["Type"], Error["Type"]>,
+    never,
+    Self | Cache
+  >
   /**
    * Reads an entry's state without fetching. It doesn't create the entry or
    * keep it alive.
    */
-  peek(args: Args): Effect.Effect<AsyncResult.AsyncResult<A, E>, never, Cache>
+  peek(
+    args: Args["Type"]
+  ): Effect.Effect<
+    AsyncResult.AsyncResult<Success["Type"], Error["Type"]>,
+    never,
+    Cache
+  >
   /** One entry, as an invalidation target. */
-  entry(args: Args): EntryTarget<Query<Args, A, E>>
+  entry(
+    args: Args["Type"]
+  ): EntryTarget<Query<Args["Type"], Success["Type"], Error["Type"]>>
   /**
    * An optimistic patch of one entry, applied over its server value while the
    * run that declares it is queued or running. It implies invalidation of
    * the entry.
    */
-  patch(args: Args, f: (value: A) => A): Patch<Query<Args, A, E>>
+  patch(
+    args: Args["Type"],
+    f: (value: Success["Type"]) => Success["Type"]
+  ): Patch<Query<Args["Type"], Success["Type"], Error["Type"]>>
   /**
    * An optimistic patch of every entry of the query that holds a Success when
    * the run is issued. It implies invalidation of the whole query.
    */
-  patchAll(f: (value: A, args: Args) => A): Patch<Query<Args, A, E>>
+  patchAll(
+    f: (value: Success["Type"], args: Args["Type"]) => Success["Type"]
+  ): Patch<Query<Args["Type"], Success["Type"], Error["Type"]>>
   /** A write of a run's result into one entry, for a Command's `writes`. */
-  set(args: Args, value: A): Write<Query<Args, A, E>>
+  set(
+    args: Args["Type"],
+    value: Success["Type"]
+  ): Write<Query<Args["Type"], Success["Type"], Error["Type"]>>
 }
 
 /**
@@ -289,15 +329,15 @@ export interface Service<
  */
 export declare namespace Service {
   /**
-   * The arguments type of an `args` option: the Schema's type, or the type of
-   * the struct a fields record makes.
+   * The arguments Schema of an `args` option: the Schema itself, or the
+   * struct a fields record makes.
    *
    * @category utility types
    * @since 0.1.0
    */
-  export type ArgsType<Args extends Schema.Top | Schema.Struct.Fields> =
-    Args extends Schema.Top ? Args["Type"]
-      : Args extends Schema.Struct.Fields ? Schema.Struct<Args>["Type"]
+  export type ArgsSchema<Args extends Schema.Top | Schema.Struct.Fields> =
+    Args extends Schema.Top ? Args
+      : Args extends Schema.Struct.Fields ? Schema.Struct<Args>
       : never
 
   /**
@@ -432,7 +472,7 @@ export const Service: <Self>() => <
       readonly idleTimeToLive?: Duration.Input | undefined
       readonly refetchInterval?:
         | RefetchInterval<
-          Service.ArgsType<Args>,
+          Service.ArgsSchema<Args>["Type"],
           Success["Type"],
           Error["Type"]
         >
@@ -442,9 +482,9 @@ export const Service: <Self>() => <
 ) => Service<
   Self,
   Name,
-  Service.ArgsType<Args>,
-  Success["Type"],
-  Error["Type"]
+  Service.ArgsSchema<Args>,
+  Success,
+  Error
 > = (): any =>
 (
   name: string,
@@ -475,6 +515,9 @@ const queryClass = (def: QueryDef) => {
   const Base = Context.Service<any, Fetcher>()(def.name)
   class QueryService extends Base {
     static readonly [TypeId]: any = def
+    static readonly args = def.args
+    static readonly success = def.success
+    static readonly error = def.error
     static toLayer(
       build: Fetcher | Effect.Effect<Fetcher, any, any>
     ): Layer.Layer<any, any, any> {
@@ -751,8 +794,8 @@ export interface LoadedMore<Page> {
  *
  * It's a `Context.Service` whose value is the query's fetcher, which takes
  * the arguments and the cursor of the page to load, `None` for the first.
- * Its result is the page array. It has the statics of a query, except `set`,
- * and adds `loadMore`, `reset` and `items`.
+ * The fetcher returns one page; `get` returns the page array. It has the
+ * statics of a query, except `set`, and adds `loadMore`, `reset` and `items`.
  *
  * @stability experimental
  * @category models
@@ -761,25 +804,42 @@ export interface LoadedMore<Page> {
 export interface InfiniteService<
   in out Self,
   in out Name extends string,
-  in out Args,
-  in out Page,
+  in out Args extends Schema.Top,
+  in out Page extends Schema.Top,
   in out Item,
-  in out Cursor,
-  in out E
+  in out Cursor extends Schema.Top,
+  in out Error extends Schema.Top
 > extends
   Context.ServiceClass<
     Self,
     Name,
-    (args: Args, cursor: Option.Option<Cursor>) => Effect.Effect<Page, E>
+    (
+      args: Args["Type"],
+      cursor: Option.Option<Cursor["Type"]>
+    ) => Effect.Effect<Page["Type"], Error["Type"]>
   >,
-  InfiniteQuery<Args, Page, Item, E>
+  InfiniteQuery<Args["Type"], Page["Type"], Item, Error["Type"]>
 {
+  readonly args: Args
+  /**
+   * Wraps the supplied page Schema in `Schema.Array`; access the page Schema
+   * via `success.value`.
+   */
+  readonly success: Schema.$Array<Page>
+  /** Defaults to `Schema.Never`. */
+  readonly error: Error
   /** Builds a Layer providing the fetcher. */
   toLayer<LE = never, LR = never>(
     build:
-      | ((args: Args, cursor: Option.Option<Cursor>) => Effect.Effect<Page, E>)
+      | ((
+        args: Args["Type"],
+        cursor: Option.Option<Cursor["Type"]>
+      ) => Effect.Effect<Page["Type"], Error["Type"]>)
       | Effect.Effect<
-        (args: Args, cursor: Option.Option<Cursor>) => Effect.Effect<Page, E>,
+        (
+          args: Args["Type"],
+          cursor: Option.Option<Cursor["Type"]>
+        ) => Effect.Effect<Page["Type"], Error["Type"]>,
         LE,
         LR
       >
@@ -790,27 +850,29 @@ export interface InfiniteService<
    * flight. As for any query, a call waiting on a load that reverts is
    * interrupted.
    */
-  get(args: Args): Effect.Effect<ReadonlyArray<Page>, E, Self | Cache>
+  get(
+    args: Args["Type"]
+  ): Effect.Effect<ReadonlyArray<Page["Type"]>, Error["Type"], Self | Cache>
   /**
    * Loads the first page when the list is cold. When it holds pages, stale
    * ones included, it only keeps the entry from being collected.
    */
-  prefetch(args: Args): Effect.Effect<void, never, Self | Cache>
+  prefetch(args: Args["Type"]): Effect.Effect<void, never, Self | Cache>
   /** Marks one list, or every list of the query, stale, as for any query. */
-  invalidate(args?: Args): Effect.Effect<void, never, Cache>
+  invalidate(args?: Args["Type"]): Effect.Effect<void, never, Cache>
   /** Watches a list and emits its page array, as `changes` does for any query. */
   changes(
-    args: Args
+    args: Args["Type"]
   ): Stream.Stream<
-    AsyncResult.AsyncResult<ReadonlyArray<Page>, E>,
+    AsyncResult.AsyncResult<ReadonlyArray<Page["Type"]>, Error["Type"]>,
     never,
     Self | Cache
   >
   /** Reads a list's page array without loading anything. */
   peek(
-    args: Args
+    args: Args["Type"]
   ): Effect.Effect<
-    AsyncResult.AsyncResult<ReadonlyArray<Page>, E>,
+    AsyncResult.AsyncResult<ReadonlyArray<Page["Type"]>, Error["Type"]>,
     never,
     Cache
   >
@@ -826,35 +888,39 @@ export interface InfiniteService<
    * run to exit. It fails with the error of the page it waited for, and does
    * nothing when the list has ended.
    */
-  loadMore(args: Args): Effect.Effect<LoadedMore<Page>, E, Self | Cache>
+  loadMore(
+    args: Args["Type"]
+  ): Effect.Effect<LoadedMore<Page["Type"]>, Error["Type"], Self | Cache>
   /**
    * Drops every held page after the first, then invalidates the list, so it
    * loads again from the first page with only that page held.
    */
-  reset(args: Args): Effect.Effect<void, never, Cache>
+  reset(args: Args["Type"]): Effect.Effect<void, never, Cache>
   /**
    * The items of a page array, in order, with a later item whose `key` was
    * already seen left out.
    */
-  items(pages: ReadonlyArray<Page>): ReadonlyArray<Item>
+  items(pages: ReadonlyArray<Page["Type"]>): ReadonlyArray<Item>
   /** One list, as an invalidation target. */
-  entry(args: Args): EntryTarget<InfiniteQuery<Args, Page, Item, E>>
+  entry(
+    args: Args["Type"]
+  ): EntryTarget<InfiniteQuery<Args["Type"], Page["Type"], Item, Error["Type"]>>
   /**
    * An optimistic patch of one list, applied to each held page. It can't
    * change the page count, and implies invalidation of the list.
    */
   patch(
-    args: Args,
-    f: (page: Page, index: number) => Page
-  ): Patch<InfiniteQuery<Args, Page, Item, E>>
+    args: Args["Type"],
+    f: (page: Page["Type"], index: number) => Page["Type"]
+  ): Patch<InfiniteQuery<Args["Type"], Page["Type"], Item, Error["Type"]>>
   /**
    * An optimistic patch of every list of the query that holds pages when the
    * run is issued, applied to each page. It implies invalidation of the whole
    * query.
    */
   patchAll(
-    f: (page: Page, args: Args, index: number) => Page
-  ): Patch<InfiniteQuery<Args, Page, Item, E>>
+    f: (page: Page["Type"], args: Args["Type"], index: number) => Page["Type"]
+  ): Patch<InfiniteQuery<Args["Type"], Page["Type"], Item, Error["Type"]>>
 }
 
 /**
@@ -983,7 +1049,7 @@ export const InfiniteService: <Self>() => <
       readonly idleTimeToLive?: Duration.Input | undefined
       readonly refetchInterval?:
         | RefetchInterval<
-          Service.ArgsType<Args>,
+          Service.ArgsSchema<Args>["Type"],
           ReadonlyArray<PageSchema["Type"]>,
           Error["Type"]
         >
@@ -993,11 +1059,11 @@ export const InfiniteService: <Self>() => <
 ) => InfiniteService<
   Self,
   Name,
-  Service.ArgsType<Args>,
-  PageSchema["Type"],
+  Service.ArgsSchema<Args>,
+  PageSchema,
   Item,
-  CursorSchema["Type"],
-  Error["Type"]
+  CursorSchema,
+  Error
 > = (): any =>
 (
   name: string,
@@ -1087,6 +1153,236 @@ export const infiniteItems = (
   }
   return out
 }
+
+/**
+ * A stream query class, as returned by `StreamService`.
+ *
+ * **Details**
+ *
+ * It's a `Context.Service` whose value is the query's stream function. It
+ * has the statics of a query except `set`, since the stream is the entry's
+ * only writer.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface StreamService<
+  in out Self,
+  in out Name extends string,
+  in out Args extends Schema.Top,
+  in out Success extends Schema.Top,
+  in out Error extends Schema.Top
+> extends
+  Context.ServiceClass<
+    Self,
+    Name,
+    (args: Args["Type"]) => Stream.Stream<Success["Type"], Error["Type"]>
+  >,
+  Query<Args["Type"], Success["Type"], Error["Type"]>
+{
+  /**
+   * Preserves a supplied Schema; wraps a fields record in `Schema.Struct`.
+   * Defaults to an empty struct.
+   */
+  readonly args: Args
+  readonly success: Success
+  /** Defaults to `Schema.Never`. */
+  readonly error: Error
+  /**
+   * Builds a Layer providing the stream function. Streams are interrupted
+   * when the Layer's Scope closes.
+   */
+  toLayer<LE = never, LR = never>(
+    build:
+      | ((args: Args["Type"]) => Stream.Stream<Success["Type"], Error["Type"]>)
+      | Effect.Effect<
+        (args: Args["Type"]) => Stream.Stream<Success["Type"], Error["Type"]>,
+        LE,
+        LR
+      >
+  ): Layer.Layer<Self, LE, Exclude<LR, Scope.Scope>>
+  /**
+   * Returns the latest element while the stream is open. Otherwise opens it,
+   * or joins the one opening, and returns its first element.
+   */
+  get(
+    args: Args["Type"]
+  ): Effect.Effect<Success["Type"], Error["Type"], Self | Cache>
+  /** Opens the stream unless it's open, and returns nothing. */
+  prefetch(args: Args["Type"]): Effect.Effect<void, never, Self | Cache>
+  /**
+   * Closes the stream of one entry, or of every entry of the query when
+   * called without arguments. A watched entry opens a new one at once.
+   */
+  invalidate(args?: Args["Type"]): Effect.Effect<void, never, Cache>
+  /**
+   * Watches an entry: opens its stream unless it's open, then emits its
+   * changes, as `changes` does for any query.
+   */
+  changes(
+    args: Args["Type"]
+  ): Stream.Stream<
+    AsyncResult.AsyncResult<Success["Type"], Error["Type"]>,
+    never,
+    Self | Cache
+  >
+  /** Reads an entry's state without opening its stream. */
+  peek(
+    args: Args["Type"]
+  ): Effect.Effect<
+    AsyncResult.AsyncResult<Success["Type"], Error["Type"]>,
+    never,
+    Cache
+  >
+  /** One entry, as an invalidation target. */
+  entry(
+    args: Args["Type"]
+  ): EntryTarget<Query<Args["Type"], Success["Type"], Error["Type"]>>
+  /**
+   * An optimistic patch of one entry, applied over each element while the
+   * run that declares it is queued or running. It implies invalidation of
+   * the entry.
+   */
+  patch(
+    args: Args["Type"],
+    f: (value: Success["Type"]) => Success["Type"]
+  ): Patch<Query<Args["Type"], Success["Type"], Error["Type"]>>
+  /** An optimistic patch of every entry of the query that holds a Success. */
+  patchAll(
+    f: (value: Success["Type"], args: Args["Type"]) => Success["Type"]
+  ): Patch<Query<Args["Type"], Success["Type"], Error["Type"]>>
+}
+
+/**
+ * Defines a stream query: a query whose entry follows a Stream, such as a
+ * sync engine's subscription. Attach the stream function with `toLayer`.
+ *
+ * **When to use**
+ *
+ * Use when the server pushes changes to the data: every watcher of the same
+ * query with the same arguments shares one entry and one open stream.
+ *
+ * **Details**
+ *
+ * - The options are a query's, without `staleTime` and `refetchInterval`.
+ * - The stream opens where a fetch would start: on the first watcher, `get`
+ *   or `prefetch` of an entry with no open stream. The entry is `Initial`,
+ *   or its last value, with `waiting` until the first element, which
+ *   settles it as a fetch result does. Each later element is stored, or a
+ *   chunk's last.
+ * - Watchers see changes, as for any query: an element equal to the stored
+ *   value is stored but not emitted.
+ * - An entry is fresh while its stream is open, and stale otherwise.
+ * - The stream stays open while the entry exists: it closes when the entry
+ *   is collected, `idleTimeToLive` after it was last watched or asked for.
+ * - `invalidate` closes the stream, waits for its cleanup, and a watched
+ *   entry opens a new one.
+ * - A typed failure is stored over the last value and closes the stream.
+ *   Completion keeps the last value. Either way nothing reopens the stream
+ *   until the entry is asked for again.
+ * - A stream that ends before its first element is a defect.
+ * - A server render stores the first element and closes the stream. The
+ *   client opens it once the fetch-free window closes.
+ *
+ * **Gotchas**
+ *
+ * - Under the default `idleTimeToLive` of 5 minutes, a subscription stays
+ *   open 5 minutes after its last watcher leaves.
+ * - A run with an optimistic patch reopens the stream when it ends, as it
+ *   refetches an ordinary query. The new stream's first element drops the
+ *   patch, so if that snapshot predates the write, the old value shows
+ *   until the next element.
+ * - An element that already holds the change can arrive while the patch is
+ *   live, so write idempotent patches, such as setting a title rather than
+ *   adding to a count.
+ * - `Stream.fromEffect` completes after one element, so the entry goes
+ *   stale at once. In a test that wants a live entry, follow it with
+ *   `Stream.never`.
+ *
+ * **Example** (A note that follows its edits)
+ *
+ * ```ts import.meta.vitest
+ * import { Effect, Layer, Queue, Schema, Stream } from "effect"
+ * import { Query } from "@effect/ui"
+ *
+ * const Note = Schema.Struct({ id: Schema.String, title: Schema.String })
+ *
+ * const program = Effect.gen(function*() {
+ *   const edits = yield* Queue.unbounded<typeof Note.Type>()
+ *
+ *   class GetNote extends Query.StreamService<GetNote>()("notes/GetNote", {
+ *     args: { id: Schema.String },
+ *     success: Note
+ *   }) {}
+ *
+ *   const layer = Layer.merge(
+ *     GetNote.toLayer(() => Stream.fromQueue(edits)),
+ *     Query.layer()
+ *   )
+ *
+ *   return yield* Effect.gen(function*() {
+ *     yield* Queue.offer(edits, { id: "1", title: "Draft" })
+ *     const first = yield* GetNote.get({ id: "1" })
+ *     yield* Queue.offer(edits, { id: "1", title: "Final" })
+ *     yield* Effect.yieldNow
+ *     // The stream is still open, so this is served from the cache.
+ *     const latest = yield* GetNote.get({ id: "1" })
+ *     return [first.title, latest.title]
+ *   }).pipe(Effect.provide(layer))
+ * })
+ *
+ * await Effect.runPromise(program) // => ["Draft", "Final"]
+ * ```
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const StreamService: <Self>() => <
+  const Name extends string,
+  const Args extends Service.NoServices | {
+    readonly [x: string]: Service.NoServices
+  } = {},
+  Success extends Service.NoServices = never,
+  Error extends Service.NoServices = Schema.Never
+>(
+  name: Name,
+  options:
+    & NoInfer<Given<"args", Args, {}> & Given<"error", Error, Schema.Never>>
+    & {
+      readonly args?: Args | undefined
+      readonly success: Success
+      readonly error?: Error | undefined
+      readonly idleTimeToLive?: Duration.Input | undefined
+      readonly tags?: ReadonlyArray<Tag> | undefined
+      readonly staleTime?: never
+      readonly refetchInterval?: never
+    }
+) => StreamService<
+  Self,
+  Name,
+  Service.ArgsSchema<Args>,
+  Success,
+  Error
+> = (): any =>
+(
+  name: string,
+  options: {
+    readonly args?: Schema.Top | Schema.Struct.Fields | undefined
+    readonly success: Schema.Top
+    readonly error?: Schema.Top | undefined
+    readonly idleTimeToLive?: Duration.Input | undefined
+    readonly tags?: ReadonlyArray<Tag> | undefined
+  }
+): any =>
+  queryClass(makeDef(
+    name,
+    // Overridden, not left out: an options variable can still hold them.
+    { ...options, staleTime: 0, refetchInterval: undefined },
+    undefined,
+    liveOps
+  ))
 
 /**
  * A declared invalidation tag. A tag is a plain name, so two
@@ -1303,6 +1599,8 @@ export const invalidatesEntry = <R extends Query.Any>(
  * - `invalidation`: an invalidation hit a watched entry.
  * - `loadMore`: an infinite query's `loadMore`.
  * - `reset`: an infinite query's `reset` hit a watched list.
+ *
+ * It is also the `trigger` attribute of the fetch's span.
  *
  * @stability experimental
  * @category models
@@ -2100,6 +2398,8 @@ interface QueryDef {
   readonly codec: () => QueryCodec
   /** Set on an infinite query. Its `success` is the page array. */
   readonly list: ListDef | undefined
+  /** Set on a stream query. Its fetcher returns a Stream. */
+  readonly live: LiveOps | undefined
 }
 
 interface ListDef {
@@ -2179,15 +2479,20 @@ const parseInterval = (input: Duration.Input): number | "invalid" => {
 /**
  * Builds a query's data, and throws on what a definition may not say.
  */
-const makeDef = (name: string, options: {
-  readonly args?: Schema.Top | Schema.Struct.Fields | undefined
-  readonly success: Schema.Top
-  readonly error?: Schema.Top | undefined
-  readonly staleTime: Duration.Input
-  readonly idleTimeToLive?: Duration.Input | undefined
-  readonly refetchInterval?: RefetchInterval<any, any, any> | undefined
-  readonly tags?: ReadonlyArray<{ readonly name: string }> | undefined
-}, list?: ListDef): QueryDef => {
+const makeDef = (
+  name: string,
+  options: {
+    readonly args?: Schema.Top | Schema.Struct.Fields | undefined
+    readonly success: Schema.Top
+    readonly error?: Schema.Top | undefined
+    readonly staleTime: Duration.Input
+    readonly idleTimeToLive?: Duration.Input | undefined
+    readonly refetchInterval?: RefetchInterval<any, any, any> | undefined
+    readonly tags?: ReadonlyArray<{ readonly name: string }> | undefined
+  },
+  list?: ListDef,
+  live?: LiveOps
+): QueryDef => {
   const staleMs = nonNegative(name, "staleTime", options.staleTime)
   const idleMs = options.idleTimeToLive === undefined
     ? undefined
@@ -2268,7 +2573,8 @@ const makeDef = (name: string, options: {
     tags: (options.tags ?? []).map((tag) => tag.name),
     argsKey,
     logKey,
-    list
+    list,
+    live
   }
 }
 
@@ -2754,7 +3060,10 @@ interface CacheInternals {
   readonly seed: (snapshot: unknown) => boolean
   /** Called at every fetch start. */
   readonly onFetch: (listener: (event: FetchEvent) => void) => () => void
-  /** Called once a stored fetch has ended and its entry has emitted. */
+  /**
+   * Called once a stored fetch has ended and its entry has emitted. For a
+   * stream query: at its first element, and again when its stream closes.
+   */
   readonly onFetchEnd: (listener: () => void) => () => void
   readonly inspect: (def: QueryDef, args: unknown) => EntryInfo | undefined
   /** The stored fetches in flight, and those held until a live patch's run exits. */
@@ -3591,6 +3900,8 @@ interface Entry {
   /** Pending `get` callers of the stored fetch. */
   readonly waiters: Set<Waiter>
   fetch: FetchRec | undefined
+  /** A stream query's open stream, after its first element. It keeps the entry fresh. */
+  live: FetchRec | undefined
   /** Restarts since the last settle. */
   restarts: number
   /** A list's walk a patch dropped: the walk that starts once nothing holds it is its restart. */
@@ -3981,7 +4292,7 @@ const cacheIdleMs = (input: Duration.Input | undefined): number => {
   return Duration.toMillis(duration)
 }
 
-interface ListCacheEnv {
+interface CacheEnv {
   readonly settleOnce: boolean
   readonly fetches: boolean
   readonly isDisposed: () => boolean
@@ -4034,6 +4345,7 @@ interface ListCacheEnv {
     exit: Exit.Exit<A, any>
   ) => void
   readonly invalidateEntry: (entry: Entry, cause?: Trigger) => void
+  readonly fetchEnded: () => void
 }
 
 interface ListOps {
@@ -4044,7 +4356,7 @@ interface ListOps {
   readonly heldPages: (entry: Entry) => ReadonlyArray<unknown>
   readonly moreOf: (entry: Entry) => More<any>
   readonly prepareFetch: (
-    env: ListCacheEnv,
+    env: CacheEnv,
     entry: Entry,
     fetch: FetchRec,
     trigger: Trigger,
@@ -4052,13 +4364,13 @@ interface ListOps {
     append: boolean
   ) => { readonly body: () => Effect.Effect<any, any>; readonly page: PageRef }
   readonly onWalkExit: (
-    env: ListCacheEnv,
+    env: CacheEnv,
     entry: Entry,
     fetch: FetchRec,
     exit: Exit.Exit<WalkOutcome, any>
   ) => void
   readonly callerWalk: (
-    env: ListCacheEnv,
+    env: CacheEnv,
     def: QueryDef,
     args: unknown,
     logKey: () => string,
@@ -4067,15 +4379,15 @@ interface ListOps {
     onPage: (page: number, cursor: Schema.Json | undefined) => void
   ) => Effect.Effect<ReadonlyArray<unknown>, any>
   readonly loadMore: (
-    env: ListCacheEnv,
+    env: CacheEnv,
     def: QueryDef,
     args: unknown,
     fetcher: Fetcher,
     resume: (exit: Exit.Exit<LoadedMore<any>, any>) => void
   ) => () => void
-  readonly reset: (env: ListCacheEnv, def: QueryDef, args: unknown) => void
+  readonly reset: (env: CacheEnv, def: QueryDef, args: unknown) => void
   readonly heldLoadMore: (
-    env: ListCacheEnv,
+    env: CacheEnv,
     entry: Entry,
     trigger: Trigger
   ) => void
@@ -4127,7 +4439,7 @@ const listLoadedMore = (entry: Entry): LoadedMore<any> => ({
 })
 
 const listCheckPage = (
-  env: ListCacheEnv,
+  env: CacheEnv,
   def: QueryDef,
   logKey: () => string,
   page: unknown
@@ -4154,7 +4466,7 @@ const listCheckPage = (
 }
 
 const listWalk = (
-  env: ListCacheEnv,
+  env: CacheEnv,
   def: QueryDef,
   args: unknown,
   logKey: () => string,
@@ -4237,7 +4549,7 @@ const listWalk = (
   })
 
 const listStart = (
-  env: ListCacheEnv,
+  env: CacheEnv,
   entry: Entry,
   trigger: Trigger,
   build: Build
@@ -4476,6 +4788,78 @@ const listOps: ListOps = {
   }
 }
 
+/**
+ * What a stream query adds to the cache. It's carried on the definition, so
+ * only an app that defines a stream query bundles it.
+ */
+interface LiveOps {
+  /**
+   * A stored fetch: stores each chunk's last element, and the first settles the fetch while the stream stays open.
+   * A per-request cache stores the first element, then closes the stream.
+   */
+  readonly body: (
+    env: CacheEnv,
+    entry: Entry,
+    fetch: FetchRec,
+    build: Build
+  ) => Effect.Effect<any, any>
+  /** The stream's first element, which is all a caller-only read takes. */
+  readonly once: (
+    def: QueryDef,
+    stream: unknown,
+    logKey: () => string
+  ) => Effect.Effect<any, any>
+}
+
+const emptyStream = (def: QueryDef, logKey: string): Error =>
+  new Error(
+    "[Query] the stream of " + quote(def.name) + " at " + logKey +
+      " ended before its first element"
+  )
+
+const liveOps: LiveOps = {
+  body: (env, entry, fetch, build) => {
+    const stream: Stream.Stream<any, any> = build.fetcher(entry.args) as any
+    return Effect.andThen(
+      Stream.runForEachArray(stream, (chunk) =>
+        Effect.suspend(() => {
+          const value = chunk[env.settleOnce ? 0 : chunk.length - 1]
+          const result = AsyncResult.success(value, { timestamp: env.now() })
+          if (entry.live === fetch) {
+            // Only a new stream's first element confirms held patches, and an invalidation stays owed.
+            entry.result = result
+            env.emit(entry)
+            return Effect.void
+          }
+          if (entry.fetch !== fetch) return Effect.void
+          entry.kept = false
+          env.store(entry, result)
+          entry.fetch = undefined
+          if (!env.settleOnce) entry.live = fetch
+          env.resumeAll(entry.waiters, Exit.succeed(value))
+          env.afterFetch(entry, true, undefined)
+          env.fetchEnded()
+          // Settled before the unsubscribe, which the fiber still runs and teardown awaits.
+          return env.settleOnce ? Effect.interrupt : Effect.void
+        })),
+      // Still opening: the stream ended before its first element.
+      Effect.suspend(() =>
+        entry.fetch === fetch
+          ? Effect.die(emptyStream(entry.def, env.logKeyOf(entry)))
+          : Effect.void
+      )
+    )
+  },
+  once: (def, stream, logKey) =>
+    Effect.flatMap(
+      Stream.runHead(stream as Stream.Stream<any, any>),
+      (head) =>
+        Option.isSome(head)
+          ? Effect.succeed(head.value)
+          : Effect.die(emptyStream(def, logKey()))
+    )
+}
+
 const buildCache = (
   context: Context.Context<never>,
   options: Omit<Parameters<typeof makeCache>[0], "idleMs"> & {
@@ -4519,6 +4903,17 @@ const buildCache = (
 
   const now = (): number => clock.currentTimeMillisUnsafe()
   const runFork = Effect.runForkWith(context)
+  /** A fetch's span: named after the query, it parents the spans the fetcher opens. */
+  const traced = <A, E>(
+    def: QueryDef,
+    trigger: Trigger,
+    body: () => Effect.Effect<A, E>
+  ): Effect.Effect<A, E> =>
+    Effect.useSpan(
+      def.name,
+      { attributes: { trigger } },
+      (span) => Effect.provideService(body(), Tracer.ParentSpan, span)
+    )
   /** Runs `f` one scheduler step later. */
   const defer = (f: () => void): void => {
     runFork(
@@ -4619,6 +5014,7 @@ const buildCache = (
       watchers: new Set(),
       waiters: new Set(),
       fetch: undefined,
+      live: undefined,
       restarts: 0,
       heldRestart: false,
       kept: false,
@@ -4647,6 +5043,7 @@ const buildCache = (
   const removeEntry = (entry: Entry): void => {
     if (entry.removed) return
     entry.removed = true
+    dropFetch(entry)
     cancelIdle(entry)
     stopInterval(entry)
     const byKey = index.get(entry.def.name)
@@ -4719,7 +5116,9 @@ const buildCache = (
       ? entry.result === undefined
       : entry.result === undefined || entry.result._tag === "Failure" ||
         entry.invalidated ||
-        now() - entry.settledAt >= entry.def.staleMs
+        // A live stream keeps its entry fresh.
+        (entry.live === undefined &&
+          now() - entry.settledAt >= entry.def.staleMs)
   const hasLive = (entry: Entry): boolean =>
     entry.patches.some((patch) => patch.live)
   /** Inside the fetch-free window, a hydrated entry. */
@@ -4821,11 +5220,12 @@ const buildCache = (
       entry.idle = undefined
     }
   }
-  // A live patch blocks collection. A patch held after success doesn't.
+  // A live patch blocks collection. A patch held after success doesn't. A stream still opening doesn't either.
   const idleEligible = (entry: Entry): boolean =>
     !entry.removed && entry.watchers.size === 0 && entry.waiters.size === 0 &&
     entry.moreWaiters.size === 0 &&
-    entry.fetch === undefined && !hasLive(entry)
+    (entry.fetch === undefined || entry.def.live !== undefined) &&
+    !hasLive(entry)
   const idleTtl = (entry: Entry): number => entry.def.idleMs ?? defaultIdleMs
   // Built like `RcMap`'s: an `expiresAt` a reset moves, and a sleep that goes round again.
   const startIdle = (entry: Entry): void => {
@@ -4853,7 +5253,9 @@ const buildCache = (
     // Called after the entry's emission, so a run's wait ends after its watchers have seen the settle.
     checkAwaits(entry)
     if (disposed || !idleEligible(entry)) return
-    if (entry.result === undefined) return removeEntry(entry)
+    if (entry.result === undefined && entry.fetch === undefined) {
+      return removeEntry(entry)
+    }
     if (entry.idle === undefined) startIdle(entry)
   }
   const resetIdle = (entry: Entry): void => {
@@ -4987,9 +5389,9 @@ const buildCache = (
   const moreOf = (entry: Entry): More<any> | undefined =>
     entry.def.list?.ops.moreOf(entry)
 
-  let listEnvCache: ListCacheEnv | undefined
-  const listEnv = (): ListCacheEnv =>
-    listEnvCache ??= {
+  let envCache: CacheEnv | undefined
+  const cacheEnv = (): CacheEnv =>
+    envCache ??= {
       settleOnce,
       fetches,
       isDisposed: () => disposed,
@@ -5015,7 +5417,8 @@ const buildCache = (
       afterFetch,
       afterQuiet,
       resumeAll,
-      invalidateEntry
+      invalidateEntry,
+      fetchEnded: () => notify(fetchEndListeners, undefined)
     }
 
   // -- fetching ---------------------------------------------------------------
@@ -5030,14 +5433,19 @@ const buildCache = (
       entry.heldRestart = false
       restart = true
     }
+    // A stream still open closes: its successor waits for its cleanup.
+    if (entry.live !== undefined) dropFetch(entry)
     const fetch: FetchRec = { trigger, build, fiber: undefined, append }
     entry.fetch = fetch
-    cancelIdle(entry)
-    let body: () => Effect.Effect<any, any> = () => build.fetcher(entry.args)
+    if (!idleEligible(entry)) cancelIdle(entry)
+    const live = entry.def.live
+    let body: () => Effect.Effect<any, any> = live === undefined
+      ? () => build.fetcher(entry.args)
+      : () => live.body(cacheEnv(), entry, fetch, build)
     let page: PageRef | undefined
     if (entry.def.list !== undefined) {
       ;({ body, page } = entry.def.list.ops.prepareFetch(
-        listEnv(),
+        cacheEnv(),
         entry,
         fetch,
         trigger,
@@ -5057,7 +5465,7 @@ const buildCache = (
       previous === undefined
         ? Effect.yieldNow
         : Effect.uninterruptible(Fiber.await(previous)),
-      Effect.suspend(body)
+      traced(entry.def, trigger, body)
     ))
     fetch.fiber = fiber
     fetchFibers.add(fiber)
@@ -5075,9 +5483,10 @@ const buildCache = (
    * Interrupts the fetch without settling anything, and without waiting for its cleanup: the entry's next fetch,
    * the build's close and the cache's disposal wait for that. The caller restarts or reverts.
    */
-  const dropFetch = (entry: Entry, fetch: FetchRec): void => {
+  const dropFetch = (entry: Entry, fetch = entry.fetch ?? entry.live): void => {
     entry.fetch = undefined
-    if (fetch.fiber === undefined) return
+    entry.live = undefined
+    if (fetch?.fiber === undefined) return
     draining.set(drainKey(entry), fetch.fiber)
     fetch.fiber.interruptUnsafe()
   }
@@ -5184,10 +5593,15 @@ const buildCache = (
     fetch: FetchRec,
     exit: Exit.Exit<any, any>
   ): void => {
-    if (entry.fetch !== fetch || disposed) return
+    if (disposed) return
+    if (entry.live === fetch) {
+      // Ended after its first element: completion keeps the last value, a failure settles as a fetch's does.
+      entry.live = undefined
+      if (exit._tag === "Success") return afterFetch(entry, false, undefined)
+    } else if (entry.fetch !== fetch) return
     entry.kept = false
     if (entry.def.list !== undefined) {
-      return entry.def.list.ops.onWalkExit(listEnv(), entry, fetch, exit)
+      return entry.def.list.ops.onWalkExit(cacheEnv(), entry, fetch, exit)
     }
     entry.fetch = undefined
     let defect: Cause.Cause<never> | undefined
@@ -5220,7 +5634,7 @@ const buildCache = (
     attached.delete(build)
     if (disposed) return
     for (const entry of allEntries()) {
-      const fetch = entry.fetch
+      const fetch = entry.fetch ?? entry.live
       if (fetch !== undefined && fetch.build === build) {
         replaceFetch(entry, fetch)
       }
@@ -5244,6 +5658,16 @@ const buildCache = (
   }
 
   // -- caller-only fetches ----------------------------------------------------
+  /** A fetcher call for its callers alone. A stream query's is its first element. */
+  const fetchOnce = (
+    def: QueryDef,
+    build: Build,
+    args: unknown,
+    logKey: () => string
+  ): Effect.Effect<any, any> => {
+    const out = build.fetcher(args)
+    return def.live === undefined ? out : def.live.once(def, out, logKey)
+  }
   /**
    * Like a stored fetch, a caller-only one starts only once what it replaces has finished its cleanup: the stored
    * fetch it was converted from, or its own fetch under a build that closed.
@@ -5270,26 +5694,29 @@ const buildCache = (
       previous.push(replaced)
     }
     const entry = shared.entry
-    const body = entry.def.list === undefined
-      ? Effect.suspend(() => build.fetcher(entry.args))
-      : entry.def.list.ops.callerWalk(
-        listEnv(),
-        entry.def,
-        entry.args,
-        () => logKeyOf(entry),
-        build,
-        Math.max(entry.def.list.ops.heldPages(entry).length, 1),
-        (page, cursor) => {
-          if (shared.fiber === fiber) {
-            emitFetch(entry, "get", false, false, { page, cursor })
-          }
+    const walk = entry.def.list?.ops.callerWalk(
+      cacheEnv(),
+      entry.def,
+      entry.args,
+      () => logKeyOf(entry),
+      build,
+      Math.max(entry.def.list.ops.heldPages(entry).length, 1),
+      (page, cursor) => {
+        if (shared.fiber === fiber) {
+          emitFetch(entry, "get", false, false, { page, cursor })
         }
-      )
+      }
+    )
     const fiber = runFork(Effect.andThen(
       previous.length === 0
         ? Effect.yieldNow
         : Effect.uninterruptible(Fiber.awaitAll(previous)),
-      body
+      traced(
+        entry.def,
+        "get",
+        () =>
+          walk ?? fetchOnce(entry.def, build, entry.args, () => logKeyOf(entry))
+      )
     ))
     shared.fiber = fiber
     fetchFibers.add(fiber)
@@ -5554,23 +5981,23 @@ const buildCache = (
           })
         }
         if (existing !== undefined) resetIdle(existing)
-        if (registered.list === undefined) {
-          event(undefined)
-          return buildOf(fetcher).fetcher(args)
-        }
-        event({ page: 0, cursor: undefined })
-        const count = existing === undefined
-          ? 1
-          : Math.max(registered.list.ops.heldPages(existing).length, 1)
-        return registered.list.ops.callerWalk(
-          listEnv(),
-          registered,
-          args,
-          logKey,
-          buildOf(fetcher),
-          count,
-          (page, cursor) => event({ page, cursor })
-        )
+        const list = registered.list
+        const build = buildOf(fetcher)
+        event(list === undefined ? undefined : { page: 0, cursor: undefined })
+        return traced(registered, "get", () =>
+          list === undefined
+            ? fetchOnce(registered, build, args, logKey)
+            : list.ops.callerWalk(
+              cacheEnv(),
+              registered,
+              args,
+              logKey,
+              build,
+              existing === undefined
+                ? 1
+                : Math.max(list.ops.heldPages(existing).length, 1),
+              (page, cursor) => event({ page, cursor })
+            ))
       }
       const entry = ensureEntry(registered, args, argsKey)
       const result = entry.result
@@ -5610,6 +6037,8 @@ const buildCache = (
       return resetIdle(entry)
     }
     if (entry.fetch !== undefined) entry.kept = true
+    // A stream query's idle deadline runs while its stream opens, so it counts from the latest request.
+    resetIdle(entry)
     ensureFetch(entry, "prefetch", buildOf(fetcher))
     afterQuiet(entry)
   }
@@ -5617,10 +6046,10 @@ const buildCache = (
   const loadMore: CacheInternals["loadMore"] = (def, args, fetcher, resume) =>
     def.list === undefined
       ? constVoid
-      : def.list.ops.loadMore(listEnv(), def, args, fetcher, resume)
+      : def.list.ops.loadMore(cacheEnv(), def, args, fetcher, resume)
 
   const reset: CacheInternals["reset"] = (def, args) => {
-    def.list?.ops.reset(listEnv(), def, args)
+    def.list?.ops.reset(cacheEnv(), def, args)
   }
 
   // -- invalidation -----------------------------------------------------------
@@ -5658,6 +6087,8 @@ const buildCache = (
     // A refetch held back by a patch keeps the trigger it was held with.
     const trigger = entry.deferred ?? cause
     entry.deferred = undefined
+    // A live stream closes, and a watched entry opens another.
+    if (entry.live !== undefined) dropFetch(entry)
     // In flight: interrupted and restarted, watched or not.
     if (entry.fetch !== undefined) return replaceFetch(entry, entry.fetch)
     if (entry.watchers.size > 0) {
@@ -5719,7 +6150,7 @@ const buildCache = (
       }
       if (entry.def.list !== undefined && entry.fetch === undefined) {
         entry.def.list.ops.heldLoadMore(
-          listEnv(),
+          cacheEnv(),
           entry,
           deferred ?? "loadMore"
         )
@@ -6125,11 +6556,16 @@ const buildCache = (
         entry.result = undefined
         afterQuiet(entry)
       }
+      // A watched stream query opens its stream, which the window held back.
+      if (entry.def.live !== undefined) {
+        const build = survivingBuild(entry)
+        if (build !== undefined) ensureFetch(entry, "watch", build)
+      }
       if (
         entry.def.list !== undefined && entry.fetch === undefined &&
         !hasLive(entry)
       ) {
-        entry.def.list.ops.heldLoadMore(listEnv(), entry, "loadMore")
+        entry.def.list.ops.heldLoadMore(cacheEnv(), entry, "loadMore")
       }
     }
   }
@@ -6140,7 +6576,7 @@ const buildCache = (
     const out: Dehydrated = {}
     emitted = new Map()
     for (const entry of allEntries()) {
-      if (entry.fetch !== undefined) dropFetch(entry, entry.fetch)
+      dropFetch(entry)
       resumeAll(entry.waiters, Exit.interrupt())
       resumeAll(entry.moreWaiters, Exit.interrupt())
       entry.target = undefined
@@ -6397,7 +6833,7 @@ const buildCache = (
     for (const build of attached) build.listeners.delete(buildClosed)
     attached.clear()
     for (const entry of allEntries()) {
-      if (entry.fetch !== undefined) dropFetch(entry, entry.fetch)
+      dropFetch(entry)
       resumeAll(entry.waiters, Exit.interrupt())
       resumeAll(entry.moreWaiters, Exit.interrupt())
     }

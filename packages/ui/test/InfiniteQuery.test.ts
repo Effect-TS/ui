@@ -645,6 +645,10 @@ describe("Query lists", () => {
       )
     }).pipe(Effect.provide(Layer.merge(GetTags.layer, TestQuery.layer())))
   })
+
+  it("exposes the page array Schema as success", () => {
+    assert.strictEqual(makeList().ListMessages.success.value, Page)
+  })
 })
 
 /** The server's per-request cache. */

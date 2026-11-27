@@ -38,9 +38,11 @@ const SnakeMessage = UiSchema.TaggedEnum({
 // so the page doesn't scroll for a matched key and keeps every other key.
 // By default it skips `defaultPrevented` (a key an element's handler already
 // took), `composing`, `repeat` (a held key's auto-repeats), `ctrl`/`alt`/`meta`
-// combos, and `editable` (keys typed into a field); `whileTyping: true` lets
-// `Escape` through. The listener runs the declaration from the latest
-// `subscriptions`, so omitting the opposite direction updates with `model.heading`.
+// combos, `editable` (keys typed into a field) and `modal` (keys pressed while
+// a modal dialog is open); `whileTyping: true` lets `Escape` through, and
+// `whileModal: true` does the same behind a modal. The listener runs the
+// declaration from the latest `subscriptions`, so omitting the opposite
+// direction updates with `model.heading`.
 export const Snake = Html.component({
   name: "Snake",
   model: Schema.Struct({ running: Schema.Boolean, heading: Direction }),
@@ -79,6 +81,53 @@ const opposite = {
   left: "right",
   right: "left"
 } as const
+
+// ---------------------------------------------------------------------------
+// Key sequences
+// ---------------------------------------------------------------------------
+
+const NavMessage = UiSchema.TaggedEnum({
+  OpenedSearch: {},
+  WentToList: {},
+  WentToBoard: {}
+})
+
+// The running Subscription tracks the pending prefix outside the Model.
+// A press more than `timeout` (one second by default) after the last matched
+// press starts over. The first matching row wins, even for a prefix, so
+// registering both `g` and `g l` makes the later row unreachable.
+// In development, `keySequences` throws for unreachable rows.
+export const Nav = Html.component({
+  name: "Nav",
+  model: Schema.String,
+  message: NavMessage
+}).make({
+  init: () => "home",
+  update: {
+    OpenedSearch: () => "search",
+    WentToList: () => "list",
+    WentToBoard: () => "board"
+  },
+  view: (h, page) => h.p(page),
+  subscriptions: () => [
+    HtmlSubscription.keySequences([
+      { key: "/", message: NavMessage.OpenedSearch() },
+      { keys: ["g", "l"], message: NavMessage.WentToList() },
+      { keys: ["g", "b"], message: NavMessage.WentToBoard() }
+    ])
+  ]
+})
+
+// Set event `timeStamp` values to test expiry without advancing a test clock.
+// A matched prefix cancels the default even though it sends no message.
+export const navigated = Effect.gen(function*() {
+  const s = yield* HtmlScene.make(Nav, {})
+  s.fireDocument("keydown", { key: "g", timeStamp: 0 }).expectDefaultPrevented()
+    .fireDocument("keydown", { key: "l", timeStamp: 300 })
+    .expect(Locator.text("list")).toExist()
+    .fireDocument("keydown", { key: "g", timeStamp: 1000 })
+    .fireDocument("keydown", { key: "b", timeStamp: 2500 }).expectIgnored()
+})
 
 // ---------------------------------------------------------------------------
 // A scene fires document events

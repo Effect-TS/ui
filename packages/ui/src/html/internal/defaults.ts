@@ -307,7 +307,9 @@ export const planClickDefaults = (
       checked: type === "radio" ? true : HtmlLocator.checked(node) !== true,
       files: [],
       composing: false,
-      inputType: ""
+      inputType: "",
+      selectionStart: null,
+      selectionEnd: null
     }
     events.push({
       node,
@@ -372,11 +374,13 @@ const pathIn = (
 export const inputPayload = (
   node: Locator.Node,
   value: string,
-  details?: Partial<Pick<Html.InputPayload, "composing" | "inputType">>
+  details: Partial<Omit<Html.ValuePayload, "value">> = {}
 ): Html.ValuePayload | Html.InputPayload => {
   const edit = {
-    composing: details?.composing ?? false,
-    inputType: details?.inputType ?? "insertText"
+    composing: details.composing ?? false,
+    inputType: details.inputType ?? "insertText",
+    selectionStart: details.selectionStart ?? null,
+    selectionEnd: details.selectionEnd ?? null
   }
   return node.tag === "input"
     ? { value, checked: HtmlLocator.checked(node) === true, files: [], ...edit }
@@ -391,7 +395,9 @@ export const changePayload = (
   const input = typeof given === "string" ? { value: given } : given
   const edit = {
     composing: input.composing ?? false,
-    inputType: input.inputType ?? ""
+    inputType: input.inputType ?? "",
+    selectionStart: input.selectionStart ?? null,
+    selectionEnd: input.selectionEnd ?? null
   }
   const value = input.value ?? HtmlLocator.value(node) ?? ""
   return node.tag === "input"

@@ -7,7 +7,8 @@
  * an entry, so an app that doesn't provide a log pays nothing for it. Provide
  * `memory` for a ring buffer, `socket` to stream entries to a devtools
  * process, or `fanout` for several sinks. Production observability goes
- * through Effect's tracer, logger and metrics instead.
+ * through Effect's tracer, logger and metrics instead, and slow renders
+ * through `Renderer.slowPhases`.
  *
  * Entries hold decoded values and references, never copies. They're encoded
  * through the component's Schemas only when they're sent somewhere, as the
@@ -349,9 +350,9 @@ export interface Mounted extends InstanceBase {
 }
 
 /**
- * A mounted instance got new props from its parent, without a re-key. Its
- * queries' args can read them, so `Story.fromLog` applies it to reach the
- * state the instance ended with.
+ * A mounted instance got new props from its parent or `root.setProps`, without
+ * a re-key. Its queries' args can read them, so `Story.fromLog` applies it to
+ * reach the state the instance ended with.
  *
  * **Details**
  *
@@ -2088,6 +2089,18 @@ const encodeCause = (cause: Cause.Cause<unknown>): typeof CauseWire.Type => ({
       : { _tag: "Interrupt", fiberId: reason.fiberId ?? null }
   )
 })
+
+/**
+ * Returns a schema that encodes `Schema.Redacted` values as
+ * `{ "~redacted": true }` and rejects those placeholders on decode.
+ * Returns `schema` unchanged if it contains no `Schema.Redacted`.
+ *
+ * @stability experimental
+ * @category Wire
+ * @since 0.1.0
+ */
+export const redactSchema = (schema: Schema.Top): Schema.Top =>
+  holdsRedacted(schema.ast) ? Schema.make(redactAST(schema.ast)) : schema
 
 /**
  * Encodes any value as JSON, best effort, with the Wire's placeholders for

@@ -7,7 +7,8 @@ and Subscriptions that the runtime runs for you, and data comes from queries,
 built with `Query`, also in `@effect/ui`. `@effect/ui/html` adds the HTML elements, the
 browser host and router, and server rendering.
 
-`Query.Service`, `Query.InfiniteService`, and `Command.Service` declare only
+`Query.Service`, `Query.InfiniteService`, `Query.StreamService`, and
+`Command.Service` declare only
 their Schemas and options. `args` defaults to none and `error` to
 `Schema.Never`. A `Command.Service` sets `success` to the Message Schema of
 the component that consumes it; without `success` it's silent and its body
@@ -520,15 +521,24 @@ results would mislead.
 The cache never retries a failed fetch: a fetcher that should retry does so
 itself.
 
+When the server pushes changes, as a sync engine's subscription does, define
+the query with `Query.StreamService` and return a Stream from `toLayer`.
+Every watcher of an entry shares one open stream, and each element replaces
+the entry's value, so a component reads the edits from `h.queries` instead
+of copying them into its Model. The stream closes when the entry is
+collected, `idleTimeToLive` after its last watcher leaves. A server render
+ships the first element, and the client opens the stream once hydration's
+fetch-free window closes.
+
 In tests, `Story` steps such as `loaded("note", note)` take the query's
 name and write its result. To start from fetched data without sending
 `onChange`'s message, pass the results to `given`:
 `s.given(model, { note })`. The `MessageLog` records each result write as a
 `QueryChanged` entry, and an `Update` entry only for an `onChange` message.
 Each `Mounted` and `Update` entry records the results, restored or hydrated
-ones included, so `Story.fromLog` replays `$.queries` as it was. New props from a parent are logged as a
-`PropsChanged` entry, so the result's `props` and `queries()` hold what the
-instance ended with.
+ones included, so `Story.fromLog` replays `$.queries` as it was. New props from
+a parent or `root.setProps` are logged as a `PropsChanged` entry, so the
+result's `props` and `queries()` hold what the instance ended with.
 
 ### Slots
 
@@ -745,13 +755,13 @@ Choose a popup by who decides when it closes:
   component own focus, outside-interaction blocking, close requests and exit
   presence, as `@effect/ui-kit`'s `Dialog` does.
 
-Nothing is dispatched when a prop changes: the log records `PropsChanged`,
-and the next `update` reads the new value from `$.props`. To act on the
-change itself, re-key the child if the new value should start a fresh
-instance. If work should restart without resetting the Model, key a
-Subscription on the prop with `Subscription.make(name, deps, build)`. If the
-work needs a host node, pass the prop as a mount argument and observe
-argument changes in the mount.
+Nothing is dispatched when a prop changes, from a parent or `root.setProps`:
+the log records `PropsChanged`, and the next `update` reads the new value
+from `$.props`. To act on the change itself, re-key the child if the new
+value should start a fresh instance. If work should restart without resetting
+the Model, key a Subscription on the prop with
+`Subscription.make(name, deps, build)`. If the work needs a host node, pass the
+prop as a mount argument and observe argument changes in the mount.
 
 The **Who owns the state** example has a controlled modal, a workflow started
 by a send, a provider that owns visibility, a seed, and three patterns that
@@ -780,7 +790,9 @@ and the end of the test.
 Keys and presses that no element hears, such as a game's arrow keys or an
 Escape that closes a popup opened by hovering, are entries in
 `subscriptions`: `HtmlSubscription.onDocument("keydown", handler, options)`,
-`HtmlSubscription.shortcuts(table)` for a table of single-key shortcuts, and
+`HtmlSubscription.shortcuts(table)` for a table of single-key shortcuts,
+`HtmlSubscription.keySequences(table)` for one with rows such as
+`{ keys: ["g", "l"], message }`, and
 `HtmlSubscription.onWindow("focus" | "blur", handler)` for the window's
 focus. The handler and `preventDefault` mean what they mean on an element,
 and the payload adds `defaultPrevented`, so a listener can skip a key an

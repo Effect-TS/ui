@@ -82,6 +82,11 @@ const ScrollOptionsSchema = Schema.Struct({
   )
 })
 
+const SelectOptionsSchema = Schema.Struct({
+  start: Schema.Number,
+  end: Schema.optional(Schema.Number)
+})
+
 const onCommitOptions = <const In extends Command.ArgsInput>(
   args: In
 ): { readonly args: In } =>
@@ -171,12 +176,19 @@ export const Measure: Command.Factory<
  * @since 0.1.0
  */
 export const Select: Command.Factory<
-  { readonly ref: Renderer.Ref<any> },
+  {
+    readonly ref: Renderer.Ref<any>
+    readonly options?: Html.SelectOptions | undefined
+  },
   Found
 > = Command.make(
   "HtmlCommand.select",
-  onCommitOptions({ ref: Renderer.Ref }),
-  ({ ref }) => found(ref, (host, element) => host.select(element))
+  onCommitOptions({
+    ref: Renderer.Ref,
+    options: Schema.optional(SelectOptionsSchema)
+  }),
+  ({ options, ref }) =>
+    found(ref, (host, element) => host.select(element, options))
 )
 
 /**
@@ -300,26 +312,30 @@ export const measure = <N extends globalThis.Element, Msg>(
 > => Command.map(Measure.make({ ref }), f)
 
 /**
- * Selects all the text in the `input` or `textarea` `ref` names, once the
+ * Selects the text in the `input` or `textarea` `ref` names, once the
  * render the issuing `update` caused is committed, and sends `f`'s message.
+ * Without `options` it selects all the text; `{ start, end }` selects that
+ * range, and `{ start }` places the caret.
  *
  * **Details**
  *
- * It doesn't move focus: issue `focus` for that. The browser host first
- * writes the element's controlled `value` if the element shows something
- * else, such as a character `update` rejected, since writing it afterward
- * would drop the selection.
+ * The field already holds the value the same `update` set, even over a
+ * rejected edit. The range is in UTF-16 code units, clamped to the value's
+ * length. A field without a selection, such as an `email` input, is left as
+ * it is and still reports `{ found: true }`. Issue `focus` if the field
+ * needs focus: only Safari focuses it.
  *
- * **Example** (Selecting a field's text once it has focus)
+ * **Example** (Selecting a field's text, or placing the caret)
  *
  * ```ts
  * import { Html, HtmlCommand } from "@effect/ui/html"
  * import { UiSchema } from "@effect/ui"
  *
- * const Message = UiSchema.TaggedEnum({ FocusedAmount: {}, CompletedSelectAmount: {} })
+ * const Message = UiSchema.TaggedEnum({ CompletedSelectAmount: {} })
  * const Amount = Html.ref("Amount", "input")
  *
- * const command = HtmlCommand.select(Amount, () => Message.CompletedSelectAmount())
+ * const all = HtmlCommand.select(Amount, () => Message.CompletedSelectAmount())
+ * const caret = HtmlCommand.select(Amount, () => Message.CompletedSelectAmount(), { start: 2 })
  * ```
  *
  * @stability experimental
@@ -328,9 +344,13 @@ export const measure = <N extends globalThis.Element, Msg>(
  */
 export const select = <N extends HTMLInputElement | HTMLTextAreaElement, Msg>(
   ref: Renderer.Ref<N>,
-  f: (result: Found) => Msg
+  f: (result: Found) => Msg,
+  options?: Html.SelectOptions
 ): Command.Mapped<Command.Issued<Found, never, Found, "Effect">, Msg> =>
-  Command.map(Select.make({ ref }), f)
+  Command.map(
+    Select.make(options === undefined ? { ref } : { ref, options }),
+    f
+  )
 
 /**
  * Submits the form of the element `ref` names, as a press on its submit

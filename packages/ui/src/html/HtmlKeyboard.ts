@@ -8,6 +8,7 @@
  */
 import type * as Html from "./Html.ts"
 import type * as HtmlSubscription from "./HtmlSubscription.ts"
+import * as keys from "./internal/keys.ts"
 
 /**
  * One row of a table for {@link shortcuts}: a key to match, the message to
@@ -20,8 +21,12 @@ import type * as HtmlSubscription from "./HtmlSubscription.ts"
  * both — and takes precedence over `ctrl` and `meta`. `shift` is ignored
  * unless set, so a character key such as `"?"` or `"G"` matches regardless of
  * whether the user's keyboard layout requires Shift to type it. `whileTyping`
- * defaults to `false` (ignored when `editable` is true), and `repeat` defaults
- * to `false` (ignored while the key auto-repeats).
+ * defaults to `false` (ignored when `editable` is true), `whileModal`
+ * defaults to `false` (ignored on a document listener while a modal is open),
+ * and `repeat` defaults to `false` (ignored while the key auto-repeats).
+ *
+ * Set `whileModal: true` on document shortcut rows that should match inside
+ * a modal, such as a dialog's own `mod+s` shortcut.
  *
  * @stability experimental
  * @category events
@@ -36,7 +41,27 @@ export interface Shortcut<Msg> {
   readonly alt?: boolean | undefined
   readonly meta?: boolean | undefined
   readonly whileTyping?: boolean | undefined
+  readonly whileModal?: boolean | undefined
   readonly repeat?: boolean | undefined
+}
+
+/**
+ * A row of `HtmlSubscription.keySequences` that takes several presses:
+ * `keys` in order, such as `["g", "l"]`, in place of a {@link Shortcut}'s
+ * `key`.
+ *
+ * **Details**
+ *
+ * The modifiers and guards apply to every press of the row, as they do to a
+ * {@link Shortcut}'s one press.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface Sequence<Msg> extends Omit<Shortcut<Msg>, "key"> {
+  readonly keys: readonly [string, ...ReadonlyArray<string>]
+  readonly key?: never
 }
 
 /**
@@ -48,8 +73,9 @@ export interface Shortcut<Msg> {
  *
  * Events with `composing` are always ignored, and on document listeners
  * (`HtmlSubscription.onDocument`) events with `defaultPrevented` are ignored as
- * well (element payloads carry no `defaultPrevented`). Each row is checked in
- * order and the first match returns its `message`. Unmatched events return
+ * well. While `modal` is true, only rows with `whileModal: true` can match.
+ * Element payloads carry neither flag. Each row is checked in order and the
+ * first match returns its `message`. Unmatched events return
  * `undefined`, so `{ preventDefault: true }` cancels the browser's default
  * only for matched shortcuts. On element handlers, returning `undefined` does
  * not fall through to an ancestor element's handler because the host stops at
@@ -111,17 +137,7 @@ export const shortcuts = <const Rows extends ReadonlyArray<Shortcut<unknown>>>(
     payload.composing
   ) return undefined
   for (const shortcut of table) {
-    if (
-      shortcut.key === payload.key &&
-      (shortcut.mod === true
-        ? payload.ctrl !== payload.meta
-        : payload.ctrl === (shortcut.ctrl ?? false) &&
-          payload.meta === (shortcut.meta ?? false)) &&
-      payload.alt === (shortcut.alt ?? false) &&
-      (shortcut.shift === undefined || payload.shift === shortcut.shift) &&
-      (!payload.editable || shortcut.whileTyping === true) &&
-      (!payload.repeat || shortcut.repeat === true)
-    ) {
+    if (keys.matches(shortcut, shortcut.key, payload)) {
       return shortcut.message as Rows[number]["message"]
     }
   }

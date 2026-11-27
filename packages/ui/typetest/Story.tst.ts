@@ -1,15 +1,15 @@
 import { Command, Component, type Query, UiSchema, type View } from "@effect/ui"
 import type { HtmlPlay, HtmlScene } from "@effect/ui/html/testing"
-import type { Steps } from "@effect/ui/testing"
-import { Scene, Story } from "@effect/ui/testing"
+import type { Steps, TestHost } from "@effect/ui/testing"
+import { Case, Play, Scene, Story } from "@effect/ui/testing"
 import { Effect, Schema, type Scope, Stream } from "effect"
 import { describe, expect, it } from "tstyche"
-import type { SearchBox } from "../test/fixtures/components.ts"
 import {
   Counter,
   CounterMessage,
   SaveTodo,
   Search,
+  SearchBox,
   SearchMessage,
   TodoItem,
   TodoItemMessage,
@@ -385,5 +385,103 @@ describe("Story's re-exports of the Steps types", () => {
     expect<Story.KeyedLoad<Read>>().type.toBe<Steps.KeyedLoad<Read>>()
     expect<Story.Target>().type.toBe<Steps.Target>()
     expect<Story.StreamTarget>().type.toBe<Steps.StreamTarget>()
+  })
+})
+
+describe("Case", () => {
+  it("checks props, model and messages against the component and allows omitting empty props", () => {
+    expect(Case.make).type.toBeCallableWith(Counter, {
+      start: {
+        props: { initial: 1 },
+        model: { count: 2 },
+        messages: [CounterMessage.Increment()]
+      }
+    })
+    expect(Case.make).type.toBeCallableWith(SearchBox, { idle: {} })
+    expect(Case.make).type.not.toBeCallableWith(Counter, {
+      badProps: { props: { initial: "0" } }
+    })
+    expect(Case.make).type.not.toBeCallableWith(Counter, {
+      badModel: { props: { initial: 0 }, model: { count: "0" } }
+    })
+    expect(Case.make).type.not.toBeCallableWith(Counter, {
+      badMessage: {
+        props: { initial: 0 },
+        messages: [TodoItemMessage.Save()]
+      }
+    })
+  })
+
+  it("keeps the requirements its layer doesn't provide", () => {
+    const todo = { id: "t1", title: "Buy milk", done: false }
+    const SavePending = SaveTodo.toLayer(() => Effect.never)
+    const props = {} as
+      | Component.Props<typeof TodoItem>
+      | Effect.Effect<Component.Props<typeof TodoItem>, never, Config>
+    const cases = Case.make(TodoItem, {
+      unprovided: { props: { todo } },
+      provided: { props: { todo }, layer: SavePending },
+      // Only one branch provides SaveTodo.
+      either: Math.random() > 0.5
+        ? { props: { todo }, layer: SavePending }
+        : { props: { todo } },
+      effectProps: { props, layer: SavePending }
+    })
+    expect(Play.fromCase(cases.unprovided)).type.toBe<TodoPlay<SaveTodo>>()
+    expect(Play.fromCase(cases.provided)).type.toBe<TodoPlay<never>>()
+    expect(Play.fromCase(cases.either)).type.toBe<TodoPlay<SaveTodo>>()
+    expect(Play.fromCase(cases.effectProps)).type.toBe<TodoPlay<Config>>()
+  })
+})
+
+interface Config {
+  readonly _tag: "Config"
+}
+
+type TodoPlay<R> = Effect.Effect<
+  Play.Play<
+    Component.Model<typeof TodoItem>,
+    Component.Message<typeof TodoItem>,
+    Component.Events<typeof TodoItem>
+  >,
+  Play.StepError,
+  R | TestHost.TestHost | Scope.Scope
+>
+
+describe("Story.explore", () => {
+  it("takes results for Effect Commands only, inferred from each definition", () => {
+    const messages = [SearchMessage.Start()]
+    expect(Story.explore(SearchBox, {}, {
+      messages,
+      commands: [[Search, {
+        success: ({ text }) => [SearchMessage.Results({ items: [text] })]
+      }]],
+      depth: 2
+    })).type.toBe<Story.Explored>()
+    expect(Story.explore).type.not.toBeCallableWith(SearchBox, {}, {
+      messages,
+      commands: [[Search, { success: [1] }]],
+      depth: 2
+    })
+    expect(Story.explore).type.not.toBeCallableWith(SearchBox, {}, {
+      messages,
+      commands: [[Upload, {}]],
+      depth: 2
+    })
+  })
+
+  it("gives the invariant no history and no Command work", () => {
+    Story.explore(SearchBox, {}, {
+      messages: [SearchMessage.Start()],
+      depth: 1,
+      invariant: (story) => {
+        type Issued = (typeof story.pending)[number]["command"]
+        expect(story).type.not.toHaveProperty("interrupted")
+        expect<Issued>().type.toHaveProperty("name")
+        expect<Issued>().type.toHaveProperty("args")
+        expect<Issued>().type.not.toHaveProperty("effect")
+        expect(story.model.text).type.toBe<string>()
+      }
+    })
   })
 })

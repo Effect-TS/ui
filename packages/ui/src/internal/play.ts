@@ -5,7 +5,7 @@ import type * as Scope from "effect/Scope"
 import * as Locator from "../testing/Locator.ts"
 import type { StepError } from "../testing/Play.ts"
 import * as TestHost from "../testing/TestHost.ts"
-import * as controlled from "./controlled.ts"
+import * as caseRun from "./caseRun.ts"
 import * as scene from "./scene.ts"
 import { atSite, callSite } from "./steps.ts"
 import * as engine from "./story.ts"
@@ -16,7 +16,7 @@ export interface PlannedEvent {
   readonly description: string
   readonly event: string
   readonly payload: () => unknown
-  readonly edit?: (() => ReadonlyArray<TestHost.TestElement>) | undefined
+  readonly edit?: (() => void) | undefined
 }
 
 /** @internal */
@@ -94,11 +94,8 @@ export class PlayCursor {
     const site = callSite(this[step as keyof this] as Function)
     return Effect.gen({ self: this }, function*() {
       yield* this.settle
-      const edited = yield* Effect.sync(() =>
-        atSite(site, () => this.run(step, plan))
-      )
+      yield* Effect.sync(() => atSite(site, () => this.run(step, plan)))
       yield* this.settle
-      this.restoreControlled(edited)
     })
   }
 
@@ -115,24 +112,36 @@ export class PlayCursor {
     event: string,
     payload: () => unknown
   ):
-    | { readonly handled: boolean; readonly prevented: boolean }
+    | {
+      readonly handled: boolean
+      readonly prevented: boolean
+      /** The element a `pointerdown` captured on. */
+      readonly captured: TestHost.TestElement | undefined
+    }
     | undefined
   {
     const target = this.handlerOn(node, event)
     if (target === undefined) return undefined
-    const preventDefault = target.eventOptions[event]?.preventDefault
-    let prevented = event === "submit" || preventDefault === "always"
+    let prevented = event === "submit" ||
+      target.eventOptions[event]?.preventDefault === "always"
+    let captured: TestHost.TestElement | undefined
     const handled = target.dispatch!(
       event,
       target.handlers[event]!,
       payload(),
-      preventDefault === true
-        ? () => {
-          prevented = true
+      (
+        options: {
+          readonly preventDefault?: unknown
+          readonly capturePointer?: unknown
         }
-        : undefined
+      ) => {
+        if (options.preventDefault === true) prevented = true
+        if (options.capturePointer === true && event === "pointerdown") {
+          captured = target
+        }
+      }
     )
-    return { handled, prevented }
+    return { handled, prevented, captured }
   }
 
   protected recordInteraction(step: string, handled: boolean): void {
@@ -140,28 +149,17 @@ export class PlayCursor {
     this.ignored = handled ? undefined : step
   }
 
-  protected restoreControlled(
-    edited: ReadonlyArray<TestHost.TestElement>
-  ): void {
-    for (const node of edited) {
-      for (const [name, value] of controlled.wantedOf(node) ?? []) {
-        node.props[name] = value
-      }
-    }
-  }
-
   private run(
     step: string,
     plan: () => ReadonlyArray<PlannedEvent>
-  ): ReadonlyArray<TestHost.TestElement> {
+  ): void {
     const name = this.name(step)
     this.checkReady(name)
     let reached = false
     let handled = false
-    const edited: Array<TestHost.TestElement> = []
     const events = plan()
     for (const { edit, event, node, payload } of events) {
-      if (edit !== undefined) edited.push(...edit())
+      edit?.()
       const fired = this.dispatchEvent(node, event, payload)
       if (fired === undefined) continue
       reached = true
@@ -175,7 +173,6 @@ export class PlayCursor {
       )
     }
     this.recordInteraction(step, handled)
-    return edited
   }
 
   protected one<P>(
@@ -193,10 +190,7 @@ export class PlayCursor {
         description: locator.description,
         event,
         payload: () => value,
-        edit: edit === undefined ? undefined : () => {
-          edit(node, value)
-          return [node]
-        }
+        edit: edit === undefined ? undefined : () => edit(node, value)
       }]
     })
   }
@@ -295,13 +289,15 @@ export const begin = <S extends PlayCursor>(
   ) => S,
   module: string,
   make: Function,
-  component: any,
-  props: unknown
+  c: caseRun.Start
 ): Effect.Effect<S, StepError, TestHost.TestHost | Scope.Scope> => {
   const site = callSite(make)
   return Effect.gen(function*() {
     const testHost = yield* TestHost.TestHost
-    const root = yield* TestHost.mount(component, props as any)
+    const root = yield* caseRun.mount(
+      c,
+      TestHost.mount(c.component, c.props, { hot: caseRun.session(c) } as {})
+    )
     const play = new Ctor(module, root, testHost)
     yield* play.settle
     yield* Effect.addFinalizer((exit) =>

@@ -25,6 +25,7 @@ export const onEscape = <M>(message: M): Subscription.Subscription<M> =>
     key: "Escape",
     message,
     whileTyping: true,
+    whileModal: true,
     repeat: true
   }])
 
@@ -65,4 +66,35 @@ export const onScrollbar = (
     ? event.offsetX <= target.offsetWidth - target.clientWidth
     : event.offsetX > target.clientWidth)
   return onY || (scrollsX && event.offsetY > target.clientHeight)
+}
+
+// Wait briefly after pointerup: the browser may dispatch a click later,
+// but sends no event to confirm that no click will follow.
+export const onPressClick = (
+  document: Document,
+  press: PointerEvent,
+  clicked: (click: MouseEvent, end: () => void) => void,
+  ended?: () => void
+): void => {
+  const done = new AbortController()
+  const options = { capture: true, signal: done.signal }
+  const end = () => {
+    done.abort()
+    ended?.()
+  }
+  const own = (next: PointerEvent) => next.pointerId === press.pointerId
+  document.addEventListener("click", (click) => clicked(click, end), options)
+  document.addEventListener(
+    "pointerdown",
+    (next) => next !== press && end(),
+    options
+  )
+  document.addEventListener(
+    "pointercancel",
+    (next) => own(next) && end(),
+    options
+  )
+  document.addEventListener("pointerup", (next) => {
+    if (own(next)) setTimeout(end, 400)
+  }, options)
 }

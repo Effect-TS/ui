@@ -21,7 +21,7 @@ import * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import * as Inspector from "../Inspector.ts"
-import { Paused } from "./control.ts"
+import { Paused, type Picked } from "./control.ts"
 import * as Read from "./read.ts"
 
 export const Position = Schema.Literals([
@@ -42,12 +42,17 @@ export interface Feed {
   readonly failures: () => number
   readonly open: boolean
   readonly position: () => Position
+  readonly fields: ReadonlyArray<string>
   /** The message tags not recorded, when the page has a recorder to change. */
   readonly notRecording?: (() => ReadonlyArray<string>) | undefined
   /** The message tag of an `Update`, while the recorder records it. */
   readonly stoppable?:
     | ((session: string, seq: number) => string | undefined)
     | undefined
+  /** While pulled, the page's input picks an element: the pick, or `undefined` for Escape. */
+  readonly pick?: Stream.Stream<Picked | undefined> | undefined
+  /** Whether the session's root is still mounted on the page. */
+  readonly mounted?: ((session: string) => boolean) | undefined
 }
 
 export class Pages extends Context.Service<Pages, {
@@ -63,6 +68,10 @@ export class Pages extends Context.Service<Pages, {
     recording: boolean
   ) => Effect.Effect<void>
   readonly setPosition: (position: Position) => Effect.Effect<void>
+  readonly highlight: (
+    session: string,
+    instance: number | null
+  ) => Effect.Effect<void>
 }>()("@effect/ui-devtools/Pages") {}
 
 const FeedSchema = Schema.declare(
@@ -85,6 +94,7 @@ const OverlayModel = Schema.Struct({
   revision: Schema.Number,
   selected: Schema.NullOr(Schema.Number),
   filter: Filter,
+  field: Schema.NullOr(Read.Field),
   scope: Schema.NullOr(Schema.Number),
   browse: Schema.Boolean,
   find: Schema.String,
@@ -102,7 +112,10 @@ const OverlayModel = Schema.Struct({
   expanded: Schema.Array(Schema.String),
   position: Position,
   pickingCorner: Schema.Boolean,
-  announced: Schema.NullOr(Schema.String)
+  announced: Schema.NullOr(Schema.String),
+  picking: Schema.Boolean,
+  // The session of the last pick, shown when nothing is paused.
+  session: Schema.NullOr(Schema.String)
 })
 
 type OverlayModel = typeof OverlayModel.Type
@@ -121,6 +134,7 @@ const OverlayMessage = UiSchema.TaggedEnum({
   },
   ToggledBranch: { instance: Schema.Number },
   ClickedFilter: { filter: Filter },
+  ClickedField: { field: Read.Field },
   ClickedFollowLatest: {},
   ClickedBack: {},
   ScrolledTimeline: { atStart: Schema.Boolean },
@@ -139,7 +153,11 @@ const OverlayMessage = UiSchema.TaggedEnum({
   FailedPaint: Page.fields,
   ClickedCornerPicker: {},
   ClosedCornerPicker: {},
-  ChosePosition: { position: Position }
+  ChosePosition: { position: Position },
+  ClickedPick: {},
+  Picked: { session: Schema.String, instance: Schema.Number },
+  CancelledPick: {},
+  HoveredInstance: { instance: Schema.NullOr(Schema.Number) }
 })
 
 type OverlayMessage = typeof OverlayMessage.Type
@@ -241,6 +259,21 @@ export class SavePosition extends Command.Service<SavePosition>()(
     Effect.gen(function*() {
       const pages = yield* Pages
       return ({ position }) => pages.setPosition(position)
+    })
+  )
+}
+
+export class Highlight extends Command.Service<Highlight>()(
+  "devtools/Highlight",
+  {
+    args: { session: Schema.String, instance: Schema.NullOr(Schema.Number) },
+    mode: "switch"
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.gen(function*() {
+      const pages = yield* Pages
+      return ({ instance, session }) => pages.highlight(session, instance)
     })
   )
 }
@@ -356,10 +389,27 @@ const samePage = (
 
 const sessionOf = (feed: Feed, model: OverlayModel): Session | undefined => {
   const sessions = feed.inspector.sessions()
-  const paused = pageAt(model)?.session
-  return (paused === undefined
+  const shown = pageAt(model)?.session ?? model.session
+  return (shown === null
     ? undefined
-    : sessions.find((session) => session.id === paused)) ?? sessions.at(-1)
+    : sessions.find((session) => session.id === shown)) ?? sessions.at(-1)
+}
+
+const PickButton = (h: H, model: OverlayModel) => {
+  if (h.props.feed.pick === undefined) return null
+  const paused = pageAt(model) !== null
+  return h.button.class("pick", model.picking && "on")
+    .attr("aria-pressed", String(model.picking))
+    .attr("aria-label", "Pick an element on the page")
+    .attr(
+      "title",
+      paused
+        ? "Resume to pick an element"
+        : "Pick an element on the page to show its instance. Escape cancels."
+    )
+    .disabled(paused)
+    .on("click", OverlayMessage.ClickedPick())
+    .children(h.span.class("pick-icon").attr("aria-hidden", "true"))
 }
 
 const shows = (model: OverlayModel, session: string, seq: number) =>
@@ -529,6 +579,7 @@ const Header = (
         page !== null ? "Resume before clearing" : "Clear the timeline"
       )
       .on("click", OverlayMessage.ClickedClear()).children("Clear"),
+    PickButton(h, model),
     h.button.class("follow", following && "on").attr(
       "aria-pressed",
       String(following)
@@ -623,6 +674,14 @@ const ancestors = (session: Session, owner: Inspector.Summary | undefined) =>
     ? []
     : lineage(session, owner).slice(0, -1).map(({ instance }) => instance)
 
+const openedTo = (
+  open: ReadonlyArray<number>,
+  session: Session,
+  owner: Inspector.Summary | undefined
+) => [...new Set([...open, ...ancestors(session, owner)])]
+
+const unhovered = OverlayMessage.HoveredInstance({ instance: null })
+
 const Statuses = (h: H, summary: Inspector.Summary) => {
   const statuses = Read.statusesOf(summary)
   return h.span.class("status").attr(
@@ -688,6 +747,11 @@ const InstanceItem = (
       .attr("data-instance", name)
       .attr("title", "Show only " + name + " and the instances under it")
       .on("click", OverlayMessage.ClickedScope({ instance: summary.instance }))
+      .on(
+        "mouseenter",
+        OverlayMessage.HoveredInstance({ instance: summary.instance })
+      )
+      .on("mouseleave", unhovered)
       .children(
         tree
           ? null
@@ -854,6 +918,45 @@ const Filters = (h: H, model: OverlayModel) =>
     )
   )
 
+const sameField = (a: Read.Field | null, b: Read.Field) =>
+  a !== null && a.name === b.name && a.value === b.value
+
+const fieldText = (field: Read.Field) => field.name + " " + String(field.value)
+
+const FieldFilter = (h: H, field: Read.Field | null) =>
+  field === null ? null : h.div.class("only").attr("role", "group").attr(
+    "aria-label",
+    "Field filter"
+  ).children(
+    h.span.children("Only"),
+    h.button.class("code").attr("aria-pressed", "true").attr(
+      "title",
+      "Show every entry, not only " + fieldText(field)
+    ).on("click", OverlayMessage.ClickedField({ field })).children(
+      fieldText(field)
+    )
+  )
+
+// Save row width when only one field is declared; its name stays in the tooltip.
+const FieldButtons = (
+  h: H,
+  fields: ReadonlyArray<Read.Field>,
+  active: Read.Field | null,
+  named: boolean
+) =>
+  fields.length === 0 ? null : h.span.class("fields").children(
+    fields.map((field) => {
+      const on = sameField(active, field)
+      const text = fieldText(field)
+      return h.button.key(field.name).class("field", "code", on && "on")
+        .attr("aria-label", text)
+        .attr("title", text)
+        .attr("aria-pressed", String(on))
+        .on("click", OverlayMessage.ClickedField({ field }))
+        .children(named ? text : String(field.value))
+    })
+  )
+
 const NotRecording = (h: H, tags: ReadonlyArray<string>) =>
   tags.length === 0 ? null : h.div.class("stopped").attr("role", "group").attr(
     "aria-label",
@@ -923,6 +1026,7 @@ const Timeline = (
   h: H,
   session: Session,
   model: OverlayModel,
+  names: ReadonlyArray<string>,
   timeline: ReadonlyArray<Entry>,
   newest: number,
   hidden: number,
@@ -945,7 +1049,7 @@ const Timeline = (
         itemSize: 28,
         measure: false,
         initialCount: 40,
-        dataset: model.filter + ":" + model.scope,
+        dataset: JSON.stringify([model.filter, model.scope, model.field]),
         ...scrollOf(model, keys)
       },
       onEmit: {
@@ -1004,7 +1108,13 @@ const Timeline = (
                           .children(Read.nameOf(entry.path))
                         : null
                     )
-                  )
+                  ),
+                FieldButtons(
+                  h,
+                  Read.fieldsOf(session, entry, names),
+                  model.field,
+                  names.length > 1
+                )
               )
             })
           ),
@@ -1850,10 +1960,14 @@ const Panel = (h: H, model: OverlayModel) => {
     const instance = Read.instanceOf(entry)
     return instance !== undefined && isWithin(instance)
   })
-  const timeline = scoped.filter((entry) => Read.matches(entry, model.filter))
+  const field = model.field
+  const narrowed = field === null
+    ? scoped
+    : scoped.filter((entry) => Read.hasField(session, entry, field))
+  const timeline = narrowed.filter((entry) => Read.matches(entry, model.filter))
     .reverse()
   const hidden = model.filter === "messages"
-    ? scoped.length - timeline.length
+    ? narrowed.length - timeline.length
     : 0
   const selected = model.selected === null
     ? timeline[0]
@@ -1882,12 +1996,14 @@ const Panel = (h: H, model: OverlayModel) => {
         Instances(h, session, model, owner, timeline),
         h.div.children(
           Filters(h, model),
+          FieldFilter(h, model.field),
           NotRecording(h, feed.notRecording?.() ?? [])
         ),
         Timeline(
           h,
           session,
           model,
+          feed.fields,
           timeline,
           entries.at(-1)?.seq ?? 0,
           hidden,
@@ -1919,8 +2035,15 @@ const Panel = (h: H, model: OverlayModel) => {
 const synced = (model: OverlayModel, feed: Feed) => {
   const paused = feed.paused() ?? null
   const position = feed.position()
+  // A picked root that unmounted lets the panel follow the newest session again.
+  const released = model.session !== null &&
+    feed.mounted?.(model.session) === false
   return {
+    ...(released
+      ? { session: null, scope: null, selected: null, ...following }
+      : {}),
     ...(samePage(paused, model.paused) ? {} : { paused }),
+    ...(paused === null ? {} : { picking: false }),
     ...(position === model.position ? {} : { position })
   }
 }
@@ -1956,6 +2079,7 @@ const Launcher = (h: H, model: OverlayModel) => {
           String(sessionOf(h.props.feed, model)?.entries().length ?? 0)
         )
       ),
+    PickButton(h, model),
     failures <= 0 ?
       null :
       h.span.class("alert").attr(
@@ -1979,12 +2103,11 @@ const resumed = { paused: null, painting: null } as const
 const openTo = (model: OverlayModel, feed: Feed, seq: number) => {
   const session = sessionOf(feed, model)
   return !model.browse || session === undefined ? {} : {
-    branches: [
-      ...new Set([
-        ...model.branches,
-        ...ancestors(session, ownerOf(session, session.resolve(seq)))
-      ])
-    ]
+    branches: openedTo(
+      model.branches,
+      session,
+      ownerOf(session, session.resolve(seq))
+    )
   }
 }
 
@@ -2009,6 +2132,7 @@ export const Overlay = Html.component({
     revision: 0,
     selected: null,
     filter: "messages",
+    field: null,
     scope: null,
     browse: true,
     find: "",
@@ -2026,7 +2150,9 @@ export const Overlay = Html.component({
     expanded: [],
     position: $.props.feed.position(),
     pickingCorner: false,
-    announced: null
+    announced: null,
+    picking: false,
+    session: null
   }),
   update: {
     ReceivedFrames: ($) =>
@@ -2052,7 +2178,8 @@ export const Overlay = Html.component({
         pickingCorner: false,
         failures: $.props.feed.failures()
       }).run(
-        SaveOpen.make({ open: false })
+        SaveOpen.make({ open: false }),
+        Highlight.make({ session: "", instance: null })
       ),
     ClickedEntry: ($, { seq }) => {
       const paint = repaint($.model, $.props.feed, seq)
@@ -2070,6 +2197,7 @@ export const Overlay = Html.component({
       return $.evolve({
         selected: seq,
         filter: "all",
+        field: null,
         scope: null,
         pinned: false,
         reveal: seq,
@@ -2091,6 +2219,10 @@ export const Overlay = Html.component({
             : [...open, instance]
       }),
     ClickedFilter: ($, { filter }) => $.evolve({ filter }),
+    ClickedField: ($, { field }) =>
+      sameField($.model.field, field)
+        ? $.evolve({ field: null })
+        : $.evolve({ field, scope: null }),
     ClickedFollowLatest: ($) => {
       const next = $.evolve({ selected: null, ...following })
       return pageAt($.model) === null
@@ -2149,6 +2281,7 @@ export const Overlay = Html.component({
       return $.evolve({
         revision: increment,
         selected: null,
+        field: null,
         scope: hasScope ? $.model.scope : null,
         atStart: true,
         ...following
@@ -2157,6 +2290,7 @@ export const Overlay = Html.component({
     Painted: ($, paused) =>
       $.evolve({
         paused,
+        picking: false,
         ...(samePage($.model.painting, paused) ? { painting: null } : {})
       }),
     FailedPaint: ($, page) =>
@@ -2169,12 +2303,58 @@ export const Overlay = Html.component({
         position,
         pickingCorner: false,
         announced: "Inspector moved to " + cornerLabel(position).toLowerCase()
-      }).run(SavePosition.make({ position }))
+      }).run(SavePosition.make({ position })),
+    ClickedPick: ($) =>
+      pageAt($.model) === null
+        ? $.evolve({ picking: !$.model.picking, pickingCorner: false })
+        : $.model,
+    Picked: ($, { instance, session }) => {
+      const picked = $.props.feed.inspector.sessions().find((s) =>
+        s.id === session
+      )
+      return $.evolve({
+        open: true,
+        picking: false,
+        session,
+        scope: instance,
+        find: "",
+        ...(picked === undefined ? {} : {
+          branches: openedTo(
+            $.model.branches,
+            picked,
+            picked.summary(instance)
+          )
+        }),
+        selected: null,
+        ...following
+      }).run(...($.model.open ? [] : [SaveOpen.make({ open: true })]))
+    },
+    CancelledPick: ($) => $.evolve({ picking: false }),
+    HoveredInstance: ($, { instance }) => {
+      const session = sessionOf($.props.feed, $.model)
+      return session === undefined
+        ? $.model
+        : $.run(Highlight.make({ session: session.id, instance }))
+    }
   },
-  subscriptions: ({ props }) => [
+  subscriptions: ({ model, props }) => [
     Subscription.make(
       "devtools/frames",
       props.feed.changes.pipe(Stream.map(() => OverlayMessage.ReceivedFrames()))
+    ),
+    model.picking && pageAt(model) === null && props.feed.pick !== undefined &&
+    Subscription.make(
+      "devtools/pick",
+      props.feed.pick.pipe(
+        Stream.map((picked) =>
+          picked === undefined
+            ? OverlayMessage.CancelledPick()
+            : OverlayMessage.Picked({
+              session: picked.session,
+              instance: picked.instance
+            })
+        )
+      )
     )
   ],
   view: (h, model) =>
@@ -2203,7 +2383,8 @@ export const mountOverlay = (
         Clear.layer,
         SaveOpen.layer,
         SetRecording.layer,
-        SavePosition.layer
+        SavePosition.layer,
+        Highlight.layer
       ).pipe(Layer.provide(Layer.succeed(Pages, pages)))
     ),
     Effect.asVoid
