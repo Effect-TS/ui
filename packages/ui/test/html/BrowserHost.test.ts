@@ -2321,6 +2321,7 @@ describe("BrowserHost", { concurrent: false }, () => {
                 h.button.attrs({ type: "submit", formmethod: "dialog" })
                   .children("Close")
               ),
+              // An upper-case tag is still a form.
               h.el("FORM").attrs({ "aria-label": "Dialog", method: "dialog" }),
               h.form.attrs({ "aria-label": "Handled post", method: "post" })
                 .on("submit", "Submitted")
