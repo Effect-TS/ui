@@ -102,6 +102,12 @@ export * as LayoutAnimation from "./LayoutAnimation.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as Linking from "./Linking.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Modal.ts"
 
 /**

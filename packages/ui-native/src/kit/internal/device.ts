@@ -122,11 +122,21 @@ export const get = <A>(
 export const changes = <A>(
   sourceOf: (device: Native.Device) => Source<A>
 ): Stream.Stream<A> =>
+  events((device, listener) => sourceOf(device).subscribe(listener))
+
+/**
+ * The values `listen` reports while the Stream runs.
+ *
+ * @internal
+ */
+export const events = <A>(
+  listen: (device: Native.Device, listener: (value: A) => void) => () => void
+): Stream.Stream<A> =>
   Stream.callback<A>((queue) =>
     Native.Device.use((device) =>
       Effect.acquireRelease(
         Effect.sync(() =>
-          sourceOf(device).subscribe((value) => Queue.offerUnsafe(queue, value))
+          listen(device, (value) => Queue.offerUnsafe(queue, value))
         ),
         (off) => Effect.sync(off)
       )
