@@ -3083,6 +3083,26 @@ describe("BrowserHost", { concurrent: false }, () => {
           .toEqual([false, 0, true, ""])
       }).pipe(Effect.scoped))
 
+    it.effect("closing a mounted root closes its modal dialog", () =>
+      Effect.gen(function*() {
+        const Modal = Html.component({
+          name: "Modal",
+          model: Schema.Struct({}),
+          message: Schema.Never
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) => h.dialog.modal(true).children("Hi")
+        })
+        const app = yield* container
+        const dialog = yield* Effect.gen(function*() {
+          yield* BrowserHost.mountEffect(Modal, {}, app)
+          yield* tick
+          return app.querySelector("dialog")!
+        }).pipe(Effect.scoped)
+        expect(dialog.open).toBe(false)
+      }))
+
     it.effect("document shortcuts don't fire while a modal dialog is open", () =>
       Effect.gen(function*() {
         const Message = UiSchema.TaggedEnum({ Help: {}, Closed: {} })
@@ -3260,8 +3280,12 @@ describe("BrowserHost", { concurrent: false }, () => {
           host.commit?.()
           dialog.dispatchEvent(new Event("close"))
           expect(seen).toEqual(["closed"])
-          // A host disposed while it's open holds the page's shortcuts until it closes.
+          // Disposed with it reopened, the host holds the page's shortcuts
+          // past the stale `close`, until the dialog really closes.
+          dialog.open = false
+          host.commit?.()
           host.dispose()
+          dialog.dispatchEvent(new Event("close"))
           const press = () =>
             document.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))
           press()

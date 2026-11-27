@@ -915,17 +915,22 @@ export const makeHost = (
       endTargets()
       // A disposed host reopens nothing.
       restore?.clear()
-      // Without the host's listener, a modal still open releases its own
-      // hold as it closes.
+      // `shown` stays, so removing the nodes still closes their dialogs.
+      // Without the host's listener, a modal left open releases its hold
+      // once it really closes, past any stale `close`.
       for (const dialog of shown) {
-        const release = modals.get(dialog)
-        modals.delete(dialog)
-        if (release === undefined) continue
-        if (dialog.open) {
-          dialog.addEventListener("close", release, { once: true })
-        } else release()
+        if (!modals.has(dialog)) continue
+        if (!dialog.open) {
+          unmodal(dialog)
+          continue
+        }
+        const closed = () => {
+          if (dialog.open) return
+          dialog.removeEventListener("close", closed)
+          unmodal(dialog)
+        }
+        dialog.addEventListener("close", closed)
       }
-      shown.clear()
     }
   }
 }
