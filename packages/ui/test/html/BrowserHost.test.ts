@@ -132,6 +132,29 @@ describe("BrowserHost", { concurrent: false }, () => {
       delete (document as { visibilityState?: unknown }).visibilityState
     }))
 
+  it.effect("runs a props Effect once, so props that are an Effect stay data", () =>
+    Effect.gen(function*() {
+      const Lazy = Component.define({
+        name: "Lazy",
+        props: Schema.declare((u): u is Effect.Effect<never, string> =>
+          Effect.isEffect(u)
+        ),
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.text("mounted")
+      })
+      const app = yield* container
+      yield* BrowserHost.mountEffect(
+        Lazy,
+        Effect.succeed(Effect.fail("ran inner")),
+        app
+      )
+      expect(app.textContent).toBe("mounted")
+    }).pipe(Effect.scoped))
+
   it.live("runs Commands on HtmlScheduler unless the caller provides a Scheduler", () =>
     Effect.gen(function*() {
       const posted: Array<string> = []

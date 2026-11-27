@@ -14,13 +14,30 @@ interface JsonCodec {
   ) => Effect.Effect<unknown, SchemaIssue.Issue>
 }
 const jsonCodecs = new WeakMap<object, JsonCodec>()
-const jsonCodecOf = (schema: Schema.Codec<any, any>): JsonCodec => {
+// A Schema with no JSON form, such as one with a symbol key, throws when its
+// codec is built, which a suspended Schema defers until it parses that value.
+const forbid = (defect: unknown) =>
+  Effect.fail(new SchemaIssue.Forbidden({ message: String(defect) }))
+/** @internal */
+export const jsonCodecOf = (schema: Schema.Codec<any, any>): JsonCodec => {
   let found = jsonCodecs.get(schema)
   if (found === undefined) {
-    const codec = Schema.toCodecJson(schema as Schema.Codec<unknown, unknown>)
+    let codec: Schema.Codec<unknown, unknown> | undefined
+    const json = () =>
+      codec ??= Schema.toCodecJson(schema as Schema.Codec<unknown, unknown>)
+    const guarded = (
+      make: () => (input: unknown) => Effect.Effect<unknown, SchemaIssue.Issue>
+    ) => {
+      let parse: ReturnType<typeof make> | undefined
+      return (input: unknown) =>
+        Effect.catchDefect(
+          Effect.suspend(() => (parse ??= make())(input)),
+          forbid
+        )
+    }
     found = {
-      encode: SchemaParser.encodeUnknownEffect(codec),
-      decode: SchemaParser.decodeUnknownEffect(codec)
+      encode: guarded(() => SchemaParser.encodeUnknownEffect(json())),
+      decode: guarded(() => SchemaParser.decodeUnknownEffect(json()))
     }
     jsonCodecs.set(schema, found)
   }
@@ -103,6 +120,13 @@ export const forgetStateCodec = (component: Component.Any): void => {
 }
 
 /** @internal */
+export const encodeJson = (
+  schema: Schema.Codec<any, any>,
+  value: unknown
+): Effect.Effect<unknown, SchemaIssue.Issue> =>
+  holdsRedacted(schema.ast) ? failRedacted : jsonCodecOf(schema).encode(value)
+
+/** @internal */
 export const encodePage = (
   component: Component.Any,
   model: unknown,
@@ -118,10 +142,7 @@ export const encodePage = (
   if (last === undefined) {
     return Effect.mapEager(state, (state) => ({ state, reported: undefined }))
   }
-  const message = component.definition.message
-  const reported = holdsRedacted(message.ast)
-    ? failRedacted
-    : jsonCodecOf(message).encode(last.message)
+  const reported = encodeJson(component.definition.message, last.message)
   return Effect.flatMapEager(
     state,
     (state) => Effect.mapEager(reported, (reported) => ({ state, reported }))

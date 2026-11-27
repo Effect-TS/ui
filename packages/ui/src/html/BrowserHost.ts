@@ -589,6 +589,18 @@ export const mountRoot = (
     )
     const outer = yield* Effect.context<Scope.Scope>()
     const attached = hot.devTools(container)
+    const mountContext = attached !== undefined &&
+        Context.get(outer, messageLog.MessageLog) === messageLog.noop
+      ? Context.add(context, messageLog.MessageLog, attached.messageLog)
+      : context
+    // Props resolve before a hot snapshot clears the container, so a failure
+    // leaves its HTML.
+    const resolved = Effect.isEffect(props)
+      ? yield* Effect.provideContext(
+        props as Effect.Effect<unknown>,
+        mountContext
+      )
+      : props
     const hotSession = hot.open(component, container, options?.key)
     const hydrating = hotSession?.hasSnapshot === true ? undefined : hydrate
     if (hydrating !== hydrate) container.textContent = ""
@@ -599,14 +611,10 @@ export const mountRoot = (
     const scheduled = scheduler === undefined
       ? context
       : Context.add(context, Scheduler.Scheduler, scheduler)
-    const mountContext = attached !== undefined &&
-        Context.get(outer, messageLog.MessageLog) === messageLog.noop
-      ? Context.add(context, messageLog.MessageLog, attached.messageLog)
-      : context
     const root = yield* Effect.provideContext(
       runtime.mountDom(
         component,
-        props,
+        resolved,
         container,
         make,
         [Html.name],
