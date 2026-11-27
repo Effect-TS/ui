@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { UiSchema } from "@effect/ui"
+import { type Component, UiSchema, type View } from "@effect/ui"
 import { Calendar, Field } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
@@ -7,6 +7,33 @@ import { DateTime, Effect, Schema } from "effect"
 import { byId, click, container, tick } from "./utils/document.ts"
 
 const utc = (iso: string) => DateTime.makeUnsafe(iso + "T00:00:00Z")
+
+// A grid whose day buttons have their ISO date as `id`.
+const grid = (
+  h: View.Tags<Html.Elements, any>,
+  calendar: Component.Headless.Parts<typeof Calendar>
+) =>
+  calendar.root(h.div).children(
+    calendar.grid(h.table).children(
+      h.tbody(
+        ...calendar.weeks.map((week) =>
+          h.tr(
+            ...week.map((date) =>
+              calendar.cell({ element: h.td, date }).children(
+                calendar.day({
+                  element: h.button.attr(
+                    "id",
+                    DateTime.formatIsoDateUtc(date)
+                  ),
+                  date
+                })
+              )
+            )
+          )
+        )
+      )
+    )
+  )
 
 const Message = UiSchema.TaggedEnum({
   Jumped: {},
@@ -54,28 +81,7 @@ const Page = Html.component({
           Picked: () => undefined,
           RequestedMonth: ({ month }) => Message.RequestedMonth({ month })
         },
-        view: (calendar) =>
-          calendar.root(h.div).children(
-            calendar.grid(h.table).children(
-              h.tbody(
-                ...calendar.weeks.map((week) =>
-                  h.tr(
-                    ...week.map((date) =>
-                      calendar.cell({ element: h.td, date }).children(
-                        calendar.day({
-                          element: h.button.attr(
-                            "id",
-                            DateTime.formatIsoDateUtc(date)
-                          ),
-                          date
-                        })
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          )
+        view: (calendar) => grid(h, calendar)
       })
     )
 })
@@ -151,6 +157,47 @@ const FieldPage = Html.component({
     )
 })
 
+const PickMessage = UiSchema.TaggedEnum({
+  Picked: { date: Schema.DateTimeUtc },
+  RequestedMonth: { month: Schema.DateTimeUtc }
+})
+
+const PickPage = Html.component({
+  name: "PickPage",
+  model: Schema.Struct({
+    month: Schema.DateTimeUtc,
+    picked: Schema.Array(Schema.String)
+  }),
+  message: PickMessage
+}).make({
+  init: () => ({ month: utc("2026-11-01"), picked: [] }),
+  update: {
+    Picked: ($, { date }) =>
+      $.evolve({
+        picked: [...$.model.picked, DateTime.formatIsoDateUtc(date)]
+      }),
+    RequestedMonth: ($, { month }) => $.evolve({ month })
+  },
+  view: (h, model) =>
+    h.div(
+      h.p.attr("id", "picked").children(model.picked.join(" ")),
+      Calendar(h, {
+        props: {
+          value: null,
+          month: model.month,
+          today: utc("2026-11-15"),
+          firstDayOfWeek: 0,
+          locale: "en-US"
+        },
+        onEmit: {
+          Picked: ({ date }) => PickMessage.Picked({ date }),
+          RequestedMonth: ({ month }) => PickMessage.RequestedMonth({ month })
+        },
+        view: (calendar) => grid(h, calendar)
+      })
+    )
+})
+
 // A browser blurs an element that has focus as it leaves the document.
 const blurOnRemoval = Effect.acquireRelease(
   Effect.sync(() => {
@@ -171,6 +218,21 @@ const keydown = (id: string, key: string) =>
   byId(id).dispatchEvent(
     new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })
   )
+
+const arrowRight = () => keydown(document.activeElement!.id, "ArrowRight")
+const arrowUp = () => keydown(document.activeElement!.id, "ArrowUp")
+
+// Enter on a focused button activates it with a click.
+const enter = () => (document.activeElement as HTMLElement).click()
+
+// A browser runs microtasks between two trusted events, but no other task.
+const rapidly = (...events: Array<() => void>) =>
+  Effect.promise(async () => {
+    for (const send of events) {
+      send()
+      for (let i = 0; i < 10; i++) await Promise.resolve()
+    }
+  })
 
 describe("Calendar in a document", { concurrent: false }, () => {
   it.effect("a month change moves focus to the new tab stop, even outside the shown month", () =>
@@ -217,5 +279,50 @@ describe("Calendar in a document", { concurrent: false }, () => {
       yield* tick
       assert.isNotNull(document.getElementById("2027-02-15"))
       assert.strictEqual(document.activeElement?.id, "apply")
+    }).pipe(Effect.scoped))
+
+  it.effect("rapid keys move from the day just reached, Enter picks it, and a non-focusing click keeps keyboard focus", () =>
+    Effect.gen(function*() {
+      yield* BrowserHost.mountEffect(PickPage, {}, yield* container)
+      yield* tick
+      byId("2026-11-15").focus()
+      yield* tick
+      yield* rapidly(arrowRight, arrowRight, enter)
+      yield* tick
+      assert.strictEqual(document.activeElement?.id, "2026-11-17")
+      assert.strictEqual(byId("picked").textContent, "2026-11-17")
+
+      byId("2026-11-21").click()
+      yield* tick
+      assert.strictEqual(document.activeElement?.id, "2026-11-17")
+      assert.strictEqual(byId("picked").textContent, "2026-11-17 2026-11-21")
+      arrowRight()
+      yield* tick
+      assert.strictEqual(document.activeElement?.id, "2026-11-18")
+    }).pipe(Effect.scoped))
+
+  it.effect("rapid keys across a month change handle reversals, pointer clicks, and Enter", () =>
+    Effect.gen(function*() {
+      yield* BrowserHost.mountEffect(PickPage, {}, yield* container)
+      yield* tick
+      byId("2026-11-30").focus()
+      yield* tick
+      yield* rapidly(arrowRight, arrowUp, enter)
+      yield* tick
+      assert.strictEqual(document.activeElement?.id, "2026-11-24")
+      assert.strictEqual(byId("picked").textContent, "2026-11-24")
+
+      byId("2026-11-30").focus()
+      yield* tick
+      yield* rapidly(arrowRight, () => click(byId("2026-11-30")))
+      yield* tick
+      assert.strictEqual(byId("picked").textContent, "2026-11-24 2026-11-30")
+
+      byId("2026-12-31").focus()
+      yield* tick
+      yield* rapidly(arrowRight, arrowRight, enter)
+      yield* tick
+      assert.strictEqual(document.activeElement?.id, "2027-01-02")
+      assert.strictEqual(byId("picked").textContent, "2026-11-24 2026-11-30")
     }).pipe(Effect.scoped))
 })

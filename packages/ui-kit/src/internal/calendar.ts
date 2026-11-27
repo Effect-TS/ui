@@ -55,6 +55,7 @@ export const CalendarGridModel = Schema.Struct({
   focused: Schema.Boolean,
   shownMonth: Schema.DateTimeUtc,
   pendingFocus: Schema.NullOr(Schema.DateTimeUtc),
+  pickedDay: Schema.NullOr(Schema.DateTimeUtc),
   // The root's CSS `direction` is right-to-left.
   rtl: Schema.Boolean
 })
@@ -403,8 +404,16 @@ export const syncMonthPhase = (
 
 export const tabStopOf = (
   focusedDay: DateTime.Utc | null,
+  picked: DateTime.Utc | null,
   context: FocusContext,
   weeks: Weeks
 ): DateTime.Utc | null =>
-  rendered(context, weeks, focusedDay) ??
-    focusInGrid(context, weeks, focusedDay)
+  rendered(
+    context,
+    weeks,
+    picked !== null &&
+      context.preferred !== null &&
+      sameDay(picked, context.preferred)
+      ? picked
+      : focusedDay
+  ) ?? focusInGrid(context, weeks, focusedDay)

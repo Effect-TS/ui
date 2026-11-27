@@ -321,6 +321,30 @@ describe("Calendar", () => {
         "data-focused": undefined,
         tabindex: "-1"
       })
+      // Blurring keeps the roving tab stop on the last focused day, not `value`
+      scene.blur(dayLoc("2026-11-20"))
+      owns(scene, dayLoc("2026-11-20"), {
+        "data-focused": undefined,
+        tabindex: "0"
+      })
+      owns(scene, dayLoc("2026-11-15"), { tabindex: "-1" })
+      // An accepted non-focusing pick becomes the tab stop once focus leaves
+      scene.focus(dayLoc("2026-11-20"))
+      scene.click(dayLoc("2026-11-21")).emitted(
+        CalendarEvents.Picked({ date: utc("2026-11-21") })
+      )
+      scene.props(
+        baseProps({
+          value: utc("2026-11-21"),
+          min: utc("2026-11-05"),
+          max: utc("2026-11-28"),
+          firstDayOfWeek: 1
+        })
+      )
+      owns(scene, dayLoc("2026-11-20"), { "data-focused": "", tabindex: "0" })
+      scene.blur(dayLoc("2026-11-20"))
+      owns(scene, dayLoc("2026-11-21"), { tabindex: "0" })
+      owns(scene, dayLoc("2026-11-20"), { tabindex: "-1" })
 
       // Default firstDayOfWeek comes from the locale, including a `-u-fw-` override
       const us = yield* makeScene(baseProps({ locale: "en-US" }))
@@ -338,6 +362,7 @@ describe("Calendar", () => {
           focused: false,
           shownMonth: utc("2026-11-01"),
           pendingFocus: null,
+          pickedDay: null,
           rtl: false
         },
         props: baseProps()
@@ -445,6 +470,7 @@ describe("Calendar", () => {
         ["2026-11-15"]
       )
 
+      scene.focus(dayLoc("2026-11-18"))
       assert.deepStrictEqual(
         focused(
           scene.keydown(dayLoc("2026-11-18"), "Home").expectDefaultPrevented()
@@ -458,6 +484,7 @@ describe("Calendar", () => {
         ["2026-11-21"]
       )
 
+      scene.focus(dayLoc("2026-11-15"))
       scene.keydown(dayLoc("2026-11-15"), "ArrowRight", { alt: true })
         .expectIgnored().expectDefaultPrevented(false)
       scene.keydown(dayLoc("2026-11-15"), "Enter")
