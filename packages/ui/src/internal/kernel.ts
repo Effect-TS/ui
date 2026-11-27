@@ -342,16 +342,19 @@ export class Instance {
       (view.alive === undefined && this.under || this.parent!.path) + "/" +
       segmentOf(view.component, view.key)
   }
-  /** The message `handler` produces for `payload`, unsent: `undefined` when it produces none, fails or the instance is closed. */
+  /**
+   * The message `handler` produces, unsent: `undefined` when it produces none, fails or the instance is closed.
+   * `read` is called only for a function handler, and a failed read is the handler's failure.
+   */
   message(
     handler: unknown,
-    payload: unknown,
+    read: () => unknown,
     where: FailedIn = "event"
   ): unknown {
     if (this.closed) return undefined
     if (typeof handler !== "function") return handler
     try {
-      return handler(payload)
+      return handler(read())
     } catch (error) {
       fail(this, where, Cause.die(error))
       return undefined
@@ -363,7 +366,7 @@ export class Instance {
     source: unknown,
     where: FailedIn = "event"
   ): boolean {
-    const message = this.message(handler, payload, where)
+    const message = this.message(handler, () => payload, where)
     if (message === undefined) return false
     send(this, message, source)
     return true

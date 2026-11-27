@@ -1,4 +1,3 @@
-import * as Cause from "effect/Cause"
 import * as Kernel from "../../internal/kernel.ts"
 import * as transitionRun from "../../internal/transitionRun.ts"
 import type * as View from "../../View.ts"
@@ -353,6 +352,23 @@ export const makeHost = (
   const elementOf = (node: globalThis.Node) =>
     (node as Node).$r?.v as View.Element<any, any> | undefined
 
+  /** What a handler set with `options` does to its event once it produces a message. */
+  const sent = (
+    node: globalThis.Node,
+    event: Event | undefined,
+    options: Html.PointerDownOptions | undefined
+  ) => {
+    if (options?.preventDefault === true) event?.preventDefault()
+    if (options?.capturePointer === true) {
+      // A pointer the browser doesn't know as active, such as a synthetic event's, can't be captured.
+      try {
+        ;(node as globalThis.Element).setPointerCapture(
+          (event as PointerEvent).pointerId
+        )
+      } catch {}
+    }
+  }
+
   const dispatch = (
     node: globalThis.Node,
     name: string,
@@ -365,35 +381,19 @@ export const makeHost = (
     if (handler === undefined) return false
     const options = element!.eventOptions[name]
     if (options?.preventDefault === "always") event?.preventDefault()
-    const sent = (own: Html.PointerDownOptions | undefined) => {
-      if (own?.preventDefault === true) event?.preventDefault()
-      if (own?.capturePointer === true) {
-        // A pointer the browser doesn't know as active, such as a synthetic event's, can't be captured.
-        try {
-          ;(node as globalThis.Element).setPointerCapture(
-            (event as PointerEvent).pointerId
-          )
-        } catch {}
-      }
-    }
     const inst = rec!.inst
     step(() => {
       if (inst.closed) return false
       if (handler?.["~fire"] !== undefined) {
-        return handler["~fire"](payload(), name, sent)
+        return handler["~fire"](
+          payload(),
+          name,
+          (own: View.EventOptions) => sent(node, event, own)
+        )
       }
-      // A constant message doesn't read the event, and a failed read is the component's event failure.
-      let message = handler
-      if (typeof handler === "function") {
-        try {
-          message = handler(payload())
-        } catch (error) {
-          Kernel.fail(inst, "event", Cause.die(error))
-          return false
-        }
-      }
+      const message = inst.message(handler, payload)
       if (message === undefined) return false
-      sent(options)
+      sent(node, event, options)
       Kernel.send(inst, message, name)
       return true
     })
@@ -409,38 +409,44 @@ export const makeHost = (
     | readonly [globalThis.Element, Html.DragOverPayload, ReadonlyArray<string>]
     | undefined
   let overSent: Html.DragOverPayload | undefined
-  let moveFrame = false
-  const moves = new Map<number, readonly [globalThis.Element, unknown]>()
+  /** The latest move of each pointer, by id, while a frame is pending. */
+  let moves:
+    | Map<number, readonly [globalThis.Element, PointerEvent]>
+    | undefined
 
   const sendMove = (
-    [element, payload]: readonly [globalThis.Element, unknown]
-  ) => element.isConnected && dispatch(element, "pointermove", () => payload)
+    [element, event]: readonly [globalThis.Element, PointerEvent]
+  ) =>
+    element.isConnected &&
+    dispatch(
+      element,
+      "pointermove",
+      () => payloadOf("pointermove", event, null, element, undefined)
+    )
 
   const queueMove = (event: PointerEvent, path: ReadonlyArray<Node>) => {
     for (const node of path) {
       if (node === container) return
       if (elementOf(node)?.handlers.pointermove === undefined) continue
-      const element = node as globalThis.Element
-      moves.set(event.pointerId, [
-        element,
-        payloadOf("pointermove", event, event.target, element, undefined)
-      ])
-      if (moveFrame) return
-      moveFrame = true
-      return later(() => {
-        moveFrame = false
-        const queued = [...moves.values()]
-        moves.clear()
-        for (const move of queued) sendMove(move)
-      })
+      if (moves === undefined) {
+        const queued = moves = new Map()
+        later(() => {
+          // Teardown took the queue.
+          if (moves !== queued) return
+          moves = undefined
+          for (const move of queued.values()) sendMove(move)
+        })
+      }
+      moves.set(event.pointerId, [node as globalThis.Element, event])
+      return
     }
   }
 
   /** Sends the pointer's queued move before a press or release, and drops it at a cancel. */
   const endMove = (name: string, event: PointerEvent) => {
-    const queued = moves.get(event.pointerId)
+    const queued = moves?.get(event.pointerId)
     if (queued === undefined) return
-    moves.delete(event.pointerId)
+    moves!.delete(event.pointerId)
     if (name !== "pointercancel") sendMove(queued)
   }
 
@@ -585,6 +591,9 @@ export const makeHost = (
     const name = event.type
     const path = event.composedPath() as Array<Node>
     const custom = view !== null && event instanceof view.CustomEvent
+    if (name === "pointermove" && !custom) {
+      return queueMove(event as PointerEvent, path)
+    }
     const detailFor = (node: Node) =>
       custom && isCustomTag((node as globalThis.Element).localName ?? "")
     if (detailFor(event.target as Node)) {
@@ -599,9 +608,8 @@ export const makeHost = (
     if (dropTargetEvents.has(name)) {
       return onDropTarget(name, event as DragEvent, path)
     }
-    if (name === "pointermove") return queueMove(event as PointerEvent, path)
     if (
-      moves.size > 0 &&
+      moves !== undefined &&
       (name === "pointerdown" || name === "pointerup" ||
         name === "pointercancel")
     ) endMove(name, event as PointerEvent)
@@ -960,7 +968,7 @@ export const makeHost = (
         container.removeEventListener(name, listener, true)
       }
       listening.clear()
-      moves.clear()
+      moves = undefined
       endTargets()
     }
   }

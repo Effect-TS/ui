@@ -14,8 +14,6 @@ export type Listener = (payload: unknown, preventDefault: () => void) => void
 const key = defaults.keyPayload("", undefined)
 const pointerEvents: ReadonlySet<string> = new Set([
   "click",
-  "mousedown",
-  "mouseup",
   "pointerup",
   "pointercancel"
 ])

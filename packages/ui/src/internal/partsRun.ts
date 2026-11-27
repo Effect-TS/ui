@@ -18,8 +18,9 @@ export class Layered {
     onMessage?: (options: View.EventOptions) => void
   ): boolean {
     let sent = false
+    const read = () => payload
     for (const layer of this.layers) {
-      const message = layer.inst.message(layer.handler, payload)
+      const message = layer.inst.message(layer.handler, read)
       if (message === undefined) continue
       sent = true
       onMessage?.(layer.options)

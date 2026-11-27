@@ -159,7 +159,7 @@ const bridge = (
               onMessage
             )
           }
-          const message = inst.message(handler, payload)
+          const message = inst.message(handler, () => payload)
           if (message === undefined) return false
           onMessage?.(
             (rec.v as View.Element<any, any>).eventOptions[event] ??

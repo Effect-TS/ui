@@ -165,7 +165,7 @@ const fired = (
       "~fire": (
         payload: unknown,
         event: string,
-        sent: Parameters<Renderer.Dispatch>[3]
+        sent: (options: View.EventOptions) => void
       ) => dispatch(event, handler, payload, sent)
     }
   }

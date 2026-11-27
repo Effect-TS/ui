@@ -175,7 +175,7 @@ export const payloadOf = (
         x: e.clientX ?? 0,
         y: e.clientY ?? 0,
         ...modifiers(event),
-        pointerId: typeof e.pointerId === "number" ? e.pointerId : -1,
+        pointerId: e.pointerId ?? -1,
         pointerType: pressedWith(name, event, pointer)
       }
     }

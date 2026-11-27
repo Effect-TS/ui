@@ -502,7 +502,7 @@ export const makeHost = (
     node: OT.BaseRenderable,
     name: string,
     payload: unknown,
-    onMessage?: Parameters<Renderer.Dispatch>[3]
+    onMessage?: ((options: View.EventOptions) => void) | undefined
   ): boolean => {
     const entry = events.get(node)
     if (entry === undefined) return false
