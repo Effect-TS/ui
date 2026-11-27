@@ -519,8 +519,9 @@ results would mislead.
 
 By default, the fetch for the old args runs on and fills the cache, so a
 quick switch back shows it at once. Set `interruptPrevious: true` on the
-entry to interrupt it instead, while the new args fetch at once; `debounce`
-does the same. A fetch another instance, a `get` or a prefetch still needs
+entry to interrupt it instead, while the new args fetch at once. An entry
+with `debounce` interrupts it too, but new args that need a fetch still wait
+for the timer. A fetch another instance, a `get` or a prefetch still needs
 runs on. If the args change faster than a fetch completes, nothing new shows
 until they hold still.
 
