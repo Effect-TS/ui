@@ -40,8 +40,9 @@
  * A swipe starts from the popup with a mouse, a pen or a finger, in
  * `swipeDirection`. With a mouse or a pen, it doesn't start from `content` or
  * from a `button`, `a`, `input`, `select`, `textarea`, `label`,
- * `[role=button]`, `[role^=menuitem]` or `[role=option]`. It also doesn't
- * start from an element with `data-swipe-ignore`. `data-swipe-ignore="x"`
+ * `[role="button"]`, `[role="menuitem"]`, `[role="menuitemcheckbox"]`,
+ * `[role="menuitemradio"]` or `[role="option"]`. It also doesn't start from an
+ * element with `data-swipe-ignore`. `data-swipe-ignore="x"`
  * or `"y"` ignores only touches along that axis. A touch on content that
  * scrolls scrolls it. One that starts with the content scrolled to its edge
  * nearest the drawer's, and moves toward the drawer's edge, swipes. A pinch, a selection of text and a swipe
@@ -414,7 +415,7 @@ const openVelocityThreshold = 0.1
 const minOpenDistance = 1
 
 const interactive =
-  "button,a,input,select,textarea,label,[role=button],[role^=menuitem],[role=option]"
+  "button,a,input,select,textarea,label,[role=button],[role=menuitem],[role=menuitemcheckbox],[role=menuitemradio],[role=option]"
 const ignoreAttribute = "data-swipe-ignore"
 const contentAttribute = "data-drawer-content"
 
