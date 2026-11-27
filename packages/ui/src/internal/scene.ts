@@ -70,6 +70,53 @@ const matches = (value: string, expected: string | RegExp): boolean =>
     ? value === expected
     : new RegExp(expected).test(value)
 
+const compare = (
+  value: string | undefined,
+  expected: string | RegExp | false | undefined,
+  name: string,
+  kind: string
+): string | undefined => {
+  const pass = expected === false
+    ? value === undefined
+    : value !== undefined &&
+      (expected === undefined || matches(value, expected))
+  if (pass) return undefined
+  const what = JSON.stringify(name) + " " + kind
+  return value === undefined
+    ? `it has no ${what}`
+    : `its ${what} is ${JSON.stringify(value)}`
+}
+
+/** @internal */
+export type Expected = { readonly [name: string]: string | RegExp | false }
+
+const own = (values: Locator.Node["attrs"], name: string) =>
+  values !== undefined && Object.hasOwn(values, name) ? values[name] : undefined
+
+/**
+ * `key` normalizes expected names for both lookup and failure messages.
+ *
+ * @internal
+ */
+export const record = (
+  expected: Expected,
+  kind: string,
+  read: (node: Locator.Node) => Locator.Node["attrs"],
+  key: (name: string) => string = (name) => name
+): Matcher =>
+  single((node) => {
+    const values = read(node)
+    const failures: Array<string> = []
+    for (const [name, value] of Object.entries(expected)) {
+      const at = key(name)
+      const failure = value === undefined
+        ? `${JSON.stringify(at)} is undefined, use false for an absent ${kind}`
+        : compare(own(values, at), value, at, kind)
+      if (failure !== undefined) failures.push(failure)
+    }
+    return failures.length === 0 ? undefined : failures.join(", ")
+  })
+
 /**
  * The matchers every scene's `expect` has, each made from the arguments the test gave it.
  *
@@ -93,23 +140,23 @@ export const matchers = {
     name: string,
     expected?: string | RegExp | false
   ): Matcher =>
-    single(({ attrs }) => {
-      const value = attrs !== undefined && Object.hasOwn(attrs, name)
-        ? attrs[name]
-        : undefined
-      const pass = expected === false
-        ? value === undefined
-        : value !== undefined &&
-          (expected === undefined || matches(value, expected))
-      if (pass) return undefined
-      return value === undefined
-        ? `it has no ${JSON.stringify(name)} attribute`
-        : `its ${JSON.stringify(name)} attribute is ${JSON.stringify(value)}`
-    })
+    single(({ attrs }) =>
+      compare(own(attrs, name), expected, name, "attribute")
+    ),
+  toHaveAttributes: (expected: Expected): Matcher =>
+    record(expected, "attribute", ({ attrs }) => attrs)
 }
 
 const describeExpected = (expected: unknown): string =>
-  expected instanceof RegExp ? String(expected) : JSON.stringify(expected)
+  expected instanceof RegExp
+    ? String(expected)
+    : typeof expected === "object" && expected !== null
+    ? `{${
+      Object.entries(expected).map(([name, value]) =>
+        JSON.stringify(name) + ": " + describeExpected(value)
+      ).join(", ")
+    }}`
+    : JSON.stringify(expected)
 
 /** @internal */
 export const makeExpectation = <A>(

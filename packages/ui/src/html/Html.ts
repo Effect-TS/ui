@@ -150,6 +150,7 @@ import { handle } from "../internal/handler.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
 import type * as HtmlHead from "./HtmlHead.ts"
+import { cssProperty } from "./internal/cssProperty.ts"
 import * as elements from "./internal/elements.ts"
 
 // ---------------------------------------------------------------------------
@@ -858,11 +859,7 @@ export class VoidElement<
     const declarations: Array<string> = []
     for (const [name, value] of Object.entries(style)) {
       if (!value) continue
-      const property = name.startsWith("--")
-        ? name
-        : name.replace(/[A-Z]/g, (letter) => "-" + letter.toLowerCase())
-          .replace(/^(webkit|moz|ms)-/, "-$1-")
-      declarations.push(property + ":" + value)
+      declarations.push(cssProperty(name) + ":" + value)
     }
     return this.attr(
       "style",

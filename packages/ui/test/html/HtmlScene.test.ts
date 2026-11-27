@@ -315,6 +315,66 @@ describe("HtmlScene", () => {
       )
     }))
 
+  it("expect.toHaveStyle matches inline declarations by exact name, handles repeats and punctuation, and reports every mismatch", () => {
+    const Styled = Html.component({
+      name: "Styled",
+      model: Schema.Null,
+      message: Schema.Never
+    }).make({
+      init: () => null,
+      update: ($) => $.model,
+      view: (h) =>
+        h.div(
+          h.div.attr("data-testid", "panel").style({
+            "--uat-panel-left": "123px",
+            marginLeft: "1px",
+            color: "blue"
+          }),
+          h.div.attr("data-testid", "raw").attr(
+            "style",
+            " --uat-panel-left : 123px ; color: red !important; color: blue; --var: 1px; --var: 2px; background-image: url(data:image/png;base64,a/*b;c); content: \"a\\\";b\"; -webkit-touch-callout: none; /* left: 1px; */ --empty: ; --label: a\\;b; --theme: {left:0; color:red;}; --bang: a\\!important; --bang: b"
+          )
+        )
+    })
+    const scene = HtmlScene.start(Styled, {})
+    const panel = Locator.testId("panel")
+    const raw = Locator.testId("raw")
+
+    scene
+      .expect(panel).toHaveStyle({
+        "--uat-panel-left": /123px/,
+        marginLeft: "1px",
+        "margin-left": "1px",
+        left: false,
+        color: "blue"
+      })
+      .expect(raw).toHaveStyle({
+        "--uat-panel-left": "123px",
+        color: "red !important",
+        "--var": "2px",
+        backgroundImage: "url(data:image/png;base64,a/*b;c)",
+        content: "\"a\\\";b\"",
+        "-webkit-touch-callout": "none",
+        "-Webkit-Touch-Callout": "none",
+        "--empty": "",
+        "--label": "a\\;b",
+        "--theme": "{left:0; color:red;}",
+        "--bang": "b",
+        left: false,
+        "--missing": false
+      })
+
+    assert.throws(
+      () =>
+        scene.expect(panel).toHaveStyle({
+          left: "1px",
+          color: /^r/,
+          marginLeft: false
+        }),
+      /HtmlScene\.expect\(\[data-testid="panel"\]\)\.toHaveStyle\(.*\/\^r\/.*\): it has no "left" declaration, its "color" declaration is "blue", its "margin-left" declaration is "1px"; elements:/
+    )
+  })
+
   it("clicking a disabled control throws", () => {
     const scene = HtmlScene.start(Settings, {})
     assert.throws(

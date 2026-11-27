@@ -90,7 +90,7 @@ import * as HtmlLocator from "./HtmlLocator.ts"
 
 /**
  * The assertions `expect(locator)` offers in an `HtmlScene`: the scene's,
- * plus checks on fields. The checks on fields want exactly one match.
+ * plus checks on fields and inline styles. These want exactly one match.
  *
  * @stability experimental
  * @category models
@@ -105,6 +105,30 @@ export interface Expect<S> extends Scene.Expect<S> {
   toBeDisabled(disabled?: boolean): S
   /** Asserts the element's accessible name, as `HtmlLocator.nameOf` computes it. */
   toHaveAccessibleName(name: string | RegExp): S
+  /**
+   * Asserts the element's inline `style` declarations, read from its
+   * `style` attribute rather than computed. A string or `RegExp` checks a
+   * declaration's value as written, `false` its absence. A failure lists
+   * every declaration that doesn't match.
+   *
+   * - Names are the camelCase and `--custom` names `.style` takes, or any
+   *   dashed CSS name, and match a declaration's name exactly: `left` doesn't
+   *   match `margin-left`.
+   * - Spacing around `:` and `;` is ignored. Values are compared trimmed,
+   *   `!important` included, with no shorthand expansion.
+   * - For repeated properties, the last `!important` value wins, or the last
+   *   value if none is important.
+   */
+  toHaveStyle(
+    style:
+      & {
+        readonly [K in Exclude<keyof Html.Style, `--${string}`>]?:
+          | string
+          | RegExp
+          | false
+      }
+      & { readonly [name: `${string}-${string}`]: string | RegExp | false }
+  ): S
 }
 
 // The same union as `Scene.ts`'s.
