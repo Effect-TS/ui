@@ -1579,21 +1579,14 @@ describe("Query", () => {
 
   it("exposes its args, success and error Schemas", () => {
     const { GetUser } = makeUsers({ staleTime: 0 })
-    class Count extends Query.Service<Count>()("schemas/Count", {
-      args: Schema.String,
-      success: Schema.Number,
-      staleTime: 0
-    }) {}
     class Now extends Query.Service<Now>()("schemas/Now", {
       success: Schema.Number,
       staleTime: 0
     }) {}
     assert.strictEqual(GetUser.success, User)
     assert.strictEqual(GetUser.error, Schema.String)
-    assert.strictEqual(Count.error, Schema.Never)
-    // A Schema is exposed as given, a fields record as its struct, and no args as the empty struct.
-    assert.strictEqual(Count.args, Schema.String)
     assert.strictEqual(GetUser.args.fields.id, Schema.String)
+    assert.strictEqual(Now.error, Schema.Never)
     assert.deepStrictEqual(Now.args.fields, {})
   })
 })

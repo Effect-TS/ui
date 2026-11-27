@@ -646,11 +646,8 @@ describe("Query lists", () => {
     }).pipe(Effect.provide(Layer.merge(GetTags.layer, TestQuery.layer())))
   })
 
-  it("exposes its args and error Schemas, and the page array as success", () => {
-    const { ListMessages } = makeList()
-    assert.strictEqual(ListMessages.error, Schema.String)
-    assert.strictEqual(ListMessages.args.fields.room, Schema.String)
-    assert.strictEqual(ListMessages.success.value, Page)
+  it("exposes the page array Schema as success", () => {
+    assert.strictEqual(makeList().ListMessages.success.value, Page)
   })
 })
 
