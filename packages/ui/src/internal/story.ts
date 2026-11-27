@@ -948,12 +948,8 @@ const loadStep = (
   return writeResult(story, entry, snapshot, [])
 }
 
-/**
- * The result's last Success at `argsKey`: its value, or a Failure's previous one.
- *
- * @internal
- */
-export const storedAt = (
+/** The result's last Success at `argsKey`: its value, or a Failure's previous one. */
+const storedAt = (
   story: State<any, any, any, any>,
   name: string,
   argsKey: string
@@ -1577,12 +1573,8 @@ export const settleStep = (
   )
 }
 
-/**
- * The component's own queries, each with the entries it is at: one per args it returns now.
- *
- * @internal
- */
-export function* currentEntries(
+/** The component's own queries, each with the entries it is at: one per args it returns now. */
+function* currentEntries(
   story: State<any, any, any, any>
 ): Generator<
   {
@@ -1687,10 +1679,8 @@ const registeredPatches = (
 /**
  * The running or queued Command whose optimistic patch is live on the entry of query `name` at
  * `argsKey`, if any.
- *
- * @internal
  */
-export const patcherOf = (
+const patcherOf = (
   story: State<any, any, any, any>,
   name: string,
   argsKey: string
@@ -1732,15 +1722,23 @@ export const describe = (
     JSON.stringify(MessageLog.encodeArgs(command.argsSchema, command.args))
   })`
 
+/**
+ * Whether a Command waits on refetches.
+ *
+ * @internal
+ */
+export const isWaiting = (entry: Pending<any>): boolean =>
+  entry.awaiting !== undefined && entry.awaiting.length > 0
+
 /** @internal */
 export const describePending = (pending: ReadonlyArray<Pending<any>>): string =>
   pending.length === 0 ?
     "nothing" :
     pending.map((entry) =>
       `${describe(entry.command)} [${entry.status}${
-        entry.awaiting === undefined || entry.awaiting.length === 0
-          ? ""
-          : ` on ${entry.awaiting.map((awaited) => awaited.name).join(", ")}`
+        isWaiting(entry)
+          ? ` on ${entry.awaiting!.map((awaited) => awaited.name).join(", ")}`
+          : ""
       }]`
     ).join(", ")
 
@@ -2048,6 +2046,44 @@ export const unloaded = (
 }
 
 /**
+ * The query entries a step can settle now: `load` for one with no result or that a wait is on, and
+ * `more` for a pending load more that holds pages. None under a live patch, where no fetch settles.
+ *
+ * @internal
+ */
+export function* settleable(
+  story: State<any, any, any, any>
+): Generator<
+  {
+    readonly query: componentQueries.Entry
+    readonly args: unknown
+    readonly load: boolean
+    readonly more: boolean
+  }
+> {
+  const missing = unloaded(story)
+  const awaited = story.pending.flatMap((entry) => entry.awaiting ?? [])
+  for (const { entries, query } of currentEntries(story)) {
+    const name = query.name
+    const def = Query.defOf(query.query)
+    for (const { args, argsKey } of entries) {
+      if (patcherOf(story, name, argsKey) !== undefined) continue
+      const load = missing.some((entry) =>
+        entry.name === name && entry.argsKey === argsKey
+      ) ||
+        awaited.some((entry) =>
+          entry.name === name && def.argsKey(entry.args) === argsKey
+        )
+      const more = story.loadingMore.includes(name) &&
+        Option.isSome(storedAt(story, name, argsKey))
+      if (load || more) {
+        yield { query, args, load, more }
+      }
+    }
+  }
+}
+
+/**
  * A mount as a failure message shows it: its name, and its args encoded by their Schema, as the log
  * would, a redacted value included.
  *
@@ -2081,61 +2117,45 @@ const isKept = (
     kept.name === entry.name && kept.argsKey === entry.argsKey
   )
 
-/** Enabled queries with no result that no `keepPending` marked. */
+/** The entries of enabled queries with no result that no `keepPending` marked. */
+const unkept = (story: State<any, any, any, any>) =>
+  unloaded(story).filter((entry) => !isKept(story, entry))
+
 const missingQueries = (story: State<any, any, any, any>): Array<string> =>
-  unloaded(story).flatMap((entry) =>
-    isKept(story, entry)
-      ? []
-      : [
-        `the query "${entry.name}" has no result${entry.label}: load it with loaded or loadFailed, or keep it with keepPending("${entry.name}")`
-      ]
+  unkept(story).map((entry) =>
+    `the query "${entry.name}" has no result${entry.label}: load it with loaded or loadFailed, or keep it with keepPending("${entry.name}")`
   )
 
 /**
- * What blocks a message step that `keepPending` can mark: the Commands, and the queries by name.
+ * What blocks a message step until it settles or `keepPending` marks it: Commands, and load mores
+ * and queries with no result, by name.
  *
  * @internal
  */
-export const keepable = (
-  story: State<any, any, any, any>
-): {
-  readonly commands: ReadonlyArray<Pending<any>>
-  readonly queries: ReadonlyArray<string>
-} => ({
+export const blocking = (story: State<any, any, any, any>) => ({
   commands: story.pending.filter((entry) =>
     !exempt(entry) && !story.ack.kept.includes(entry)
   ),
-  queries: Array.from(
-    new Set([
-      ...story.loadingMore.filter((name) => !story.ack.keptMore.includes(name)),
-      ...unloaded(story).flatMap((entry) =>
-        isKept(story, entry) ? [] : [entry.name]
-      )
-    ])
-  )
+  more: story.loadingMore.filter((name) => !story.ack.keptMore.includes(name)),
+  queries: unkept(story).map((entry) => entry.name)
 })
 
 /** Work in flight that blocks a message step: what nothing settled, kept or exempts. */
-const inFlight = (story: State<any, any, any, any>): Array<string> => [
-  ...story.pending.flatMap((entry) =>
-    exempt(entry) || story.ack.kept.includes(entry)
-      ? []
-      : [
-        `${describe(entry.command)} [${entry.status}] is pending: ${
-          settleHint(entry)
-        }, or keep it with keepPending`
-      ]
-  ),
-  ...story.loadingMore.flatMap((name) =>
-    story.ack.keptMore.includes(name)
-      ? []
-      : [
-        `a load more of "${name}" is pending: settle it with loadedMore or loadMoreFailed, or keep it with keepPending("${name}")`
-      ]
-  ),
-  ...missingQueries(story),
-  ...unacknowledgedMounts(story)
-]
+const inFlight = (story: State<any, any, any, any>): Array<string> => {
+  const { commands, more } = blocking(story)
+  return [
+    ...commands.map((entry) =>
+      `${describe(entry.command)} [${entry.status}] is pending: ${
+        settleHint(entry)
+      }, or keep it with keepPending`
+    ),
+    ...more.map((name) =>
+      `a load more of "${name}" is pending: settle it with loadedMore or loadMoreFailed, or keep it with keepPending("${name}")`
+    ),
+    ...missingQueries(story),
+    ...unacknowledgedMounts(story)
+  ]
+}
 
 /** Every pending Command and load more, kept or exempt included: what the end of a test and `given` can't leave. */
 const allPending = (story: State<any, any, any, any>): Array<string> => [
