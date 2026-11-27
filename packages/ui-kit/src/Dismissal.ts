@@ -89,13 +89,11 @@ import { elementOf } from "./internal/dom.ts"
 import { onScrollbar, trackComposing } from "./internal/interaction.ts"
 import {
   claimPress,
-  handingOff,
   join,
   type Layer,
   rewatch,
   stackOf,
-  topFor,
-  watcherOf
+  topFor
 } from "./internal/layers.ts"
 import { inKept } from "./internal/topLayer.ts"
 
@@ -206,11 +204,11 @@ export const trackDismissal = (
       open: () => true,
       takes: (claim) =>
         (current.reasons ?? Reason.literals).includes(claim as Reason),
-      watch: watcherOf(stack, document.defaultView, () => send("close-watcher"))
+      cancelled: () => send("close-watcher")
     }
     const top = (reason: Reason, event: Event) =>
       topFor(stack, reason, event) === layer
-    const away = (target: EventTarget | null): target is Node => {
+    const away = (target: EventTarget | null): boolean => {
       if (
         target === null || node.contains(target as Node) ||
         inKept(target as Node)
@@ -229,45 +227,35 @@ export const trackDismissal = (
     const onPointerDown = (event: PointerEvent) => {
       const { pointerType, target } = event
       if (
-        event.button !== 0 || !event.isPrimary || !away(target) ||
-        !top("outside-press", event)
+        event.button !== 0 || !event.isPrimary ||
+        !top("outside-press", event) || !away(target)
       ) return
       // A finger asks on the tap's click, so a scroll doesn't.
-      if (pointerType === "touch") claimPress(stack, event, layer)
-      else if (!onScrollbar(target, event)) {
-        claimPress(stack, event, layer)
+      if (pointerType === "touch") {
+        claimPress(stack, event, (click) => {
+          if (top("outside-press", click) && away(click.target)) {
+            send("outside-press", pointerType)
+          }
+        })
+      } else if (!onScrollbar(target, event)) {
+        claimPress(stack, event)
         send("outside-press", pointerType)
       }
     }
-    const onClick = (event: MouseEvent) => {
-      const press = stack.pressed
-      if (
-        press?.layer !== layer || press.pointerType !== "touch" || press.clicked
-      ) return
-      press.clicked = true
-      if (away(event.target) && top("outside-press", event)) {
-        send("outside-press", "touch")
-      }
-    }
     const onFocusIn = (event: FocusEvent) => {
-      if (
-        stack.pressed === undefined && !handingOff() && away(event.target) &&
-        top("focus-out", event)
-      ) send("focus-out")
+      if (top("focus-out", event) && away(event.target)) send("focus-out")
     }
 
     const controller = new AbortController()
     const { signal } = controller
     const composing = trackComposing(document, signal)
-    let leave = () => {}
     return Effect.acquireRelease(
       Effect.sync(() => {
         document.addEventListener("keydown", onKeyDown, { signal })
         const capture = { capture: true, signal }
         document.addEventListener("pointerdown", onPointerDown, capture)
-        document.addEventListener("click", onClick, capture)
         document.addEventListener("focusin", onFocusIn, capture)
-        leave = join(stack, layer)
+        join(stack, layer, signal)
       }).pipe(
         Effect.tap(() =>
           Effect.forkScoped(Stream.runForEach(changes, (next) =>
@@ -278,10 +266,7 @@ export const trackDismissal = (
         )
       ),
       () =>
-        Effect.sync(() => {
-          controller.abort()
-          leave()
-        })
+        Effect.sync(() => controller.abort())
     )
   })
 

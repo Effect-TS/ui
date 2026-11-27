@@ -11,11 +11,13 @@ export const isHTMLElement = (node: unknown): node is HTMLElement => {
 export const elementOf = (target: EventTarget | null): Element | null =>
   isElement(target) ? target : (target as Node | null)?.parentElement ?? null
 
-export const perDocument = <A>(make: () => A): (document: Document) => A => {
+export const perDocument = <A>(
+  make: (document: Document) => A
+): (document: Document) => A => {
   const made = new WeakMap<Document, A>()
   return (document) => {
     let value = made.get(document)
-    if (value === undefined) made.set(document, value = make())
+    if (value === undefined) made.set(document, value = make(document))
     return value
   }
 }

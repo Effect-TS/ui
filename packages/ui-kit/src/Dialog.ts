@@ -262,20 +262,19 @@ import {
 } from "./internal/dom.ts"
 import {
   methodOf,
+  onPressClick,
   onScrollbar,
   trackComposing
 } from "./internal/interaction.ts"
 import {
   type Claim,
-  handingOff,
   handOff,
   join,
   type Layer,
   rewatch,
   type Stack,
   stackOf,
-  topFor,
-  watcherOf
+  topFor
 } from "./internal/layers.ts"
 import {
   hideOthers,
@@ -597,8 +596,7 @@ const TrackDialog = Mount.makeStream(
   (node: HTMLDialogElement, args, changes) =>
     Stream.callback<DialogMessage>((queue) => {
       const document = node.ownerDocument
-      const view = document.defaultView
-      const frame = frameOf(view)
+      const frame = frameOf(document.defaultView)
       const stack = stackOf(document)
       let current: TrackDialogArgs = args
       const send = (message: DialogMessage) => Queue.offerUnsafe(queue, message)
@@ -622,11 +620,7 @@ const TrackDialog = Mount.makeStream(
         node,
         open: () => current.open,
         takes: () => true,
-        watch: watcherOf(
-          stack,
-          view,
-          () => send(DialogMessage.CancelledCloseWatcher())
-        )
+        cancelled: () => send(DialogMessage.CancelledCloseWatcher())
       }
       const topmost = (claim: Claim, event?: Event) =>
         current.topmost && topFor(stack, claim, event) === entry
@@ -784,29 +778,12 @@ const TrackDialog = Mount.makeStream(
       // viewport has left or stopped taking events before the tap's click,
       // which would land on the page behind it. When the tap landed directly
       // on the page, its click goes through, as a mouse's does.
-      const swallowClick = (press: PointerEvent) => {
-        const done = new AbortController()
-        const options = { capture: true, signal: done.signal }
-        const stop = () => done.abort()
-        document.addEventListener("click", (event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          stop()
-        }, options)
-        document.addEventListener(
-          "pointerdown",
-          (event) => event !== press && stop(),
-          options
-        )
-        document.addEventListener(
-          "pointercancel",
-          (event) => event.pointerId === press.pointerId && stop(),
-          options
-        )
-        document.addEventListener("pointerup", (event) => {
-          if (event.pointerId === press.pointerId) setTimeout(stop, 400)
-        }, options)
-      }
+      const swallowClick = (press: PointerEvent) =>
+        onPressClick(document, press, (click, end) => {
+          click.preventDefault()
+          click.stopPropagation()
+          end()
+        })
       const onPointerDown = (event: PointerEvent) => {
         pressed = undefined
         const target = event.target as Node | null
@@ -866,13 +843,11 @@ const TrackDialog = Mount.makeStream(
           focusInside || target === null || current.modal !== false ||
           !current.open || !showed
         ) return
-        // A press a `Dismissal` layer took moved focus, not the user.
         if (
           !topmost("focus-out", event) || inDialogAbove(stack, node, target) ||
-          (ignored !== null && target.contains(ignored)) ||
-          stack.pressed !== undefined
+          (ignored !== null && target.contains(ignored))
         ) return
-        if (current.dismissible && !handingOff() && !onTrigger(target)) {
+        if (current.dismissible && !onTrigger(target)) {
           send(DialogMessage.FocusedOutside())
         }
       }
@@ -919,13 +894,13 @@ const TrackDialog = Mount.makeStream(
         const focused = focusedNow() as HTMLElement | null
         const away = !held && focused !== null && focused !== document.body &&
           !node.contains(focused)
-        // Focus in another dialog stays there. A layer inside this one, such as
-        // a `Dismissal` layer still mounted in the popup, isn't another.
+        // Focus in another layer stays there. Still inside this one, also in a
+        // `Dismissal` layer mounted in the popup, it is this dialog's to return.
         if (
-          focused !== null &&
+          focused !== null && !node.contains(focused) &&
           stack.layers.some((other) =>
             other.open() && other.node.contains(focused) &&
-            !node.contains(other.node) && !parents.includes(other)
+            !parents.includes(other)
           )
         ) return
         if (!finalFocus) {
@@ -980,9 +955,7 @@ const TrackDialog = Mount.makeStream(
           !previous.initialFocus
         ) opening(focusedNow())
         if (next.open !== previous.open || next.modal !== previous.modal) hold()
-        if (next.open !== previous.open || next.topmost !== previous.topmost) {
-          rewatch(stack)
-        }
+        if (next.open !== previous.open) rewatch(stack)
         if (previous.open && !next.open) {
           pressed = undefined
           closing()
@@ -1010,10 +983,9 @@ const TrackDialog = Mount.makeStream(
         opening(active)
       }
 
-      let leave = () => {}
       return Effect.acquireRelease(
         Effect.sync(() => {
-          leave = join(stack, entry)
+          join(stack, entry, signal)
           document.addEventListener("keydown", onKeyDown, { signal })
           document.addEventListener("pointerdown", onPointerDown, {
             capture: true,
@@ -1055,7 +1027,6 @@ const TrackDialog = Mount.makeStream(
         ),
         () =>
           Effect.sync(() => {
-            leave()
             controller.abort()
             observer.disconnect()
             page.disconnect()
