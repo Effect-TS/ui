@@ -1895,10 +1895,14 @@ type IsReadonly<T, K extends keyof T> =
   (<V>() => V extends Pick<T, K> ? 1 : 2) extends
     (<V>() => V extends { -readonly [Q in K]: T[Q] } ? 1 : 2) ? false : true
 
+type IsCallback<V> = [V] extends [Function | null | undefined]
+  ? [V] extends [null | undefined] ? false : true
+  : false
+
 type ElementProperties<T> = {
   readonly [
     K in keyof T as K extends keyof HTMLElement | symbol ? never
-      : NonNullable<T[K]> extends Function ? never
+      : IsCallback<T[K]> extends true ? never
       : IsReadonly<T, K> extends true ? never
       : K
   ]: T[K]
@@ -1920,8 +1924,8 @@ type Properties<P, Tag extends string> =
  * event to its `detail`. A declared event replaces an HTML event of the same
  * name. When `Tag` is in `HTMLElementTagNameMap`, its element class types
  * `ref` and `onMount`, and `prop` also takes its writable fields that
- * `HTMLElement` lacks, minus methods. A declared property wins over a field
- * of the same name. `CustomElement` adds a method per declared property.
+ * `HTMLElement` lacks, minus methods and callbacks, each typed as it
+ * reads. A declared property wins over a field of the same name. `CustomElement` adds a method per declared property.
  *
  * @stability experimental
  * @category custom elements
@@ -2095,8 +2099,11 @@ export interface CustomElementBinding<Tag extends string, P, E> {
  * property whose name has no method (see `CustomElementReserved`). When
  * the element's library registers its class in `HTMLElementTagNameMap`, as
  * Lit, Stencil and Shoelace do, `prop` also takes the class's writable
- * fields, typed by it, so `properties` is only needed for a method or for
- * an element with no types. That class also types `ref` and `onMount`. The
+ * fields, typed as they read, and that class types `ref` and `onMount`.
+ * Declare a property in `properties` for a method, for an element with no
+ * types, for a callback, which isn't inferred, or for an accessor whose
+ * setter takes another type than its getter returns, such as `currentTime`
+ * on Shoelace's `sl-animation`. The
  * HTML methods, such as `class`, `style` and `on("click", ...)`, work as
  * on any element. Registering the element with `customElements.define`, often by
  * importing its package, is still the app's job.
