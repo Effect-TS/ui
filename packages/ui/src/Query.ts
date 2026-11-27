@@ -5434,6 +5434,8 @@ const buildCache = (
     if (holds > 0) {
       // Decided at release. The window is read now, as the decision would have been.
       held.add(entry)
+      // It takes over a fetch abandoned in this hold: only its own abandon can mark it again.
+      abandoned.delete(entry)
     } else if (first && isStale(entry) && !windowed) {
       // Only the zero-to-one transition is a fetch trigger: a joining watcher never refetches. Inside the
       // fetch-free window a hydrated entry isn't fetched.
@@ -5534,9 +5536,13 @@ const buildCache = (
       // Still held while deciding: a fetch started here can reach a watcher whose handler registers another,
       // which is decided in the next round, as part of this hold.
       while (held.size > 0 || abandoned.size > 0) {
-        for (const entry of abandoned) {
-          abandoned.delete(entry)
-          if (!entry.removed) abandonFetch(entry)
+        // Abandoned fetches go only once no registration is left to decide, as one may take them over.
+        if (held.size === 0) {
+          for (const entry of abandoned) {
+            abandoned.delete(entry)
+            if (!entry.removed) abandonFetch(entry)
+          }
+          continue
         }
         const entries = Array.from(held)
         held.clear()
