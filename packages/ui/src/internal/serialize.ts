@@ -44,12 +44,12 @@ const Open = 1
 const Close = 2
 const Enter = 3
 const Leave = 4
-/** A `FallbackSnap`, closed by `FallbackEnd` with its path. */
+/** A `FallbackSnap`, closed by `Leave` with its path. */
 const Fallback = 5
-const FallbackEnd = 6
-/** An `InstanceSnap`, then its content, `Kept`, its kept children, and `End`. */
-const Instance = 7
-/** The instance's path when it has kept children, each after an `Into` with its path. */
+/** An `InstanceSnap`, then its content and `Done`, or `Kept`, its kept children and `End`. */
+const Instance = 6
+const Done = 7
+/** The instance's path, then each kept child after an `Into` with its path. */
 const Kept = 8
 const Into = 9
 const End = 10
@@ -80,10 +80,10 @@ export const snapshot = (
   const tape: Array<unknown> = []
   const late: Array<Fiber.Fiber<Page, SchemaIssue.Issue>> = []
   /**
-   * What is left to record, last first, in threes: a Rec after its owner and base, an instance, or
-   * `undefined` after a tape entry to add as it is.
+   * What is left to record, last first: a Rec after its owner and base, an instance, or an opcode after
+   * its value, to add to the tape as it is.
    */
-  const todo: Array<any> = [undefined, undefined, root]
+  const todo: Array<any> = [root]
   const kidsOf = (
     owner: Kernel.Instance,
     kids: ReadonlyArray<Kernel.Rec> | undefined,
@@ -118,42 +118,34 @@ export const snapshot = (
           rendered?.v._tag === "Element"
       } satisfies InstanceSnap
     )
-    todo.push(End, undefined, undefined)
-    let kept: string | undefined
-    const entries = inst.kept?.children()
-    if (entries !== undefined) {
-      for (let index = entries.length - 1; index >= 0; index--) {
-        const entry = entries[index]!
-        if (entry.rec === undefined && !entry.inst.closed) {
-          kept = inst.path
-          todo.push(
-            undefined,
-            undefined,
-            entry.inst,
-            Into,
-            entry.inst.path,
-            undefined
-          )
-        }
+    const kept = inst.kept?.children().filter((entry) =>
+      entry.rec === undefined && !entry.inst.closed
+    )
+    if (kept === undefined || kept.length === 0) todo.push(undefined, Done)
+    else {
+      todo.push(undefined, End)
+      for (let index = kept.length - 1; index >= 0; index--) {
+        const child = kept[index]!.inst
+        todo.push(child, child.path, Into)
       }
+      todo.push(inst.path, Kept)
     }
-    todo.push(Kept, kept, undefined)
     if (inst.failure === undefined && rendered !== undefined) {
       todo.push(inst, inst.path, rendered)
     }
   }
   while (todo.length > 0) {
-    const at: Kernel.Rec | Kernel.Instance | undefined = todo.pop()
-    const base = todo.pop()
-    const owner = todo.pop()
-    if (at === undefined) {
-      tape.push(owner, base)
+    const at: Kernel.Rec | Kernel.Instance | number = todo.pop()
+    if (typeof at === "number") {
+      tape.push(at, todo.pop())
       continue
     }
     if (at instanceof Kernel.Instance) {
       instance(at)
       continue
     }
+    const base: string = todo.pop()
+    const owner: Kernel.Instance = todo.pop()
     const view = at.v
     switch (view._tag) {
       case "Text":
@@ -161,13 +153,13 @@ export const snapshot = (
         break
       case "Element":
         tape.push(Open, view)
-        todo.push(Close, view.tag, undefined)
+        todo.push(view.tag, Close)
         kidsOf(owner, at.kids, base)
         break
       case "Outlet": {
         const path = at.inst.path + "/" + slotSegment(view.name)
         tape.push(Enter, path)
-        todo.push(Leave, path, undefined)
+        todo.push(path, Leave)
         kidsOf(at.inst.parent!, at.kids, path)
         break
       }
@@ -189,7 +181,7 @@ export const snapshot = (
             status: failedChild ? undefined : statusOf(owner.env)
           } satisfies FallbackSnap
         )
-        todo.push(FallbackEnd, path, undefined)
+        todo.push(path, Leave)
         kidsOf(owner, at.kids, base)
       }
     }
@@ -270,9 +262,11 @@ export const write = (
           break
         case Enter:
           sink.enter(value)
+          outer.push(under)
           break
         case Leave:
           sink.leave(value)
+          under = outer.pop()
           break
         case Fallback: {
           const snap: FallbackSnap = value
@@ -285,10 +279,6 @@ export const write = (
           under = true
           break
         }
-        case FallbackEnd:
-          sink.leave(value)
-          under = outer.pop()
-          break
         case Instance: {
           const snap: InstanceSnap = value
           const inst = snap.inst
@@ -319,18 +309,22 @@ export const write = (
           outer.push(bare ? undefined : path)
           break
         }
+        case Done: {
+          const path = outer.pop()
+          if (path !== undefined) sink.leave(path)
+          under = outer.pop()
+          break
+        }
         case Kept: {
           const path = outer.pop()
           if (path !== undefined) sink.leave(path)
           outer.push(into, byChild)
-          if (value !== undefined) {
-            ;(into === state
-              ? kept
-              : (into["~kept"] ??= {}) as Record<string, unknown>)[value] =
-              byChild =
-                {}
-            sink = mute
-          }
+          ;(into === state
+            ? kept
+            : (into["~kept"] ??= {}) as Record<string, unknown>)[value] =
+            byChild =
+              {}
+          sink = mute
           break
         }
         case Into:

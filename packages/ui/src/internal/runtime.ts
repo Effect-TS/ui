@@ -878,7 +878,7 @@ const loadsOf = (root: Kernel.Instance): Array<Load> => {
   const todo: Array<any> = []
   const enter = (inst: Kernel.Instance) => {
     if (inst.kept !== undefined) {
-      const parked = [...inst.kept.parked()]
+      const parked = inst.kept.parked()
       for (let index = parked.length - 1; index >= 0; index--) {
         todo.push(inst.path, parked[index])
       }
