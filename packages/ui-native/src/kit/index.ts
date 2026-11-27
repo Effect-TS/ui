@@ -24,6 +24,12 @@ export * from "./ActivityIndicator.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as Alert from "./Alert.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as Animation from "./Animation.ts"
 
 /**
