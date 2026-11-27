@@ -14,19 +14,21 @@ const grid = (
   calendar: Component.Headless.Parts<typeof Calendar>
 ) =>
   calendar.root(h.div).children(
-    calendar.grid(h.table).children(
-      h.tbody(
-        ...calendar.weeks.map((week) =>
-          h.tr(
-            ...week.map((date) =>
-              calendar.cell({ element: h.td, date }).children(
-                calendar.day({
-                  element: h.button.attr(
-                    "id",
-                    DateTime.formatIsoDateUtc(date)
-                  ),
-                  date
-                })
+    ...calendar.months.map((month) =>
+      month.grid(h.table).children(
+        h.tbody(
+          ...month.weeks.map((week) =>
+            h.tr(
+              ...week.map((date) =>
+                month.cell({ element: h.td, date }).children(
+                  month.day({
+                    element: h.button.attr(
+                      "id",
+                      DateTime.formatIsoDateUtc(date)
+                    ),
+                    date
+                  })
+                )
               )
             )
           )
@@ -128,23 +130,25 @@ const FieldPage = Html.component({
             view: (calendar) =>
               calendar.root(field.group(h.div.attr("id", "group"))).children(
                 // Keyed by month, so each month change replaces the grid.
-                calendar.grid(
-                  h.table.key(DateTime.formatIsoDateUtc(calendar.month))
-                ).children(
-                  h.tbody(
-                    ...calendar.weeks.map((week) =>
-                      h.tr(
-                        ...week.map((date) =>
-                          calendar.cell({ element: h.td, date }).children(
-                            calendar.day({
-                              element: field.member(
-                                h.button.attr(
-                                  "id",
-                                  DateTime.formatIsoDateUtc(date)
-                                )
-                              ),
-                              date
-                            })
+                ...calendar.months.map((month) =>
+                  month.grid(
+                    h.table.key(DateTime.formatIsoDateUtc(month.month))
+                  ).children(
+                    h.tbody(
+                      ...month.weeks.map((week) =>
+                        h.tr(
+                          ...week.map((date) =>
+                            month.cell({ element: h.td, date }).children(
+                              month.day({
+                                element: field.member(
+                                  h.button.attr(
+                                    "id",
+                                    DateTime.formatIsoDateUtc(date)
+                                  )
+                                ),
+                                date
+                              })
+                            )
                           )
                         )
                       )
@@ -214,6 +218,14 @@ const blurOnRemoval = Effect.acquireRelease(
     Effect.sync(() => (window.Node.prototype.removeChild = removeChild))
 )
 
+// A month change settles over several frames, which can outlast one `tick`.
+const focusLands = Effect.fnUntraced(function*(id: string) {
+  for (let i = 0; i < 20 && document.activeElement?.id !== id; i++) {
+    yield* tick
+  }
+  assert.strictEqual(document.activeElement?.id, id)
+})
+
 const keydown = (id: string, key: string) =>
   byId(id).dispatchEvent(
     new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })
@@ -244,8 +256,8 @@ describe("Calendar in a document", { concurrent: false }, () => {
         yield* tick
         change()
         yield* tick
+        yield* focusLands("2026-12-01")
         assert.strictEqual(byId("2026-12-01").getAttribute("tabindex"), "0")
-        assert.strictEqual(document.activeElement?.id, "2026-12-01")
         click(byId("reset"))
         yield* tick
       })
@@ -267,7 +279,7 @@ describe("Calendar in a document", { concurrent: false }, () => {
       // `click` sends the event without moving focus.
       click(byId("apply"))
       yield* tick
-      assert.strictEqual(document.activeElement?.id, "2027-01-15")
+      yield* focusLands("2027-01-15")
       assert.isFalse(byId("group").hasAttribute("data-touched"))
 
       keydown("2027-01-15", "PageDown")
