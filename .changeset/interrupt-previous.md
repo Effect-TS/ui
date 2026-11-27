@@ -2,4 +2,4 @@
 "@effect/ui": minor
 ---
 
-Add `interruptPrevious` to `queries` entries: when the args change, the fetch for the old args is interrupted unless something else still needs it, and the new args fetch at once.
+Add `interruptPrevious` to `queries` entries, to interrupt a superseded fetch that nothing else needs without the delay of `debounce`.

@@ -378,7 +378,7 @@ describe("Query results", () => {
     )
   })
 
-  /** a moves from 1 to 2 mid-fetch: the fetches started before the clock moves on, and what became of 1's. */
+  /** Moves a from 1 to 2 mid-fetch. `started` counts the fetches begun before the clock moves. */
   const supersede = (interruptPrevious: boolean) => {
     const app = makeApp({ interruptPrevious })
     return run(

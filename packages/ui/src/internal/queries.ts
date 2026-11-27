@@ -40,7 +40,7 @@ export interface Entry {
   readonly args: QueryFn
   /** From `debounce`: how many milliseconds a fetch for changed args waits. */
   readonly debounce: number | undefined
-  /** From `interruptPrevious` or `debounce`: args the entry stops watching have their fetch interrupted. */
+  /** From `interruptPrevious` or `debounce`: interrupt the fetch of args the entry leaves. */
   readonly interrupt: boolean
   readonly dropPrevious: boolean
   readonly onChange: ((...args: Array<any>) => unknown) | undefined
