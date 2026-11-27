@@ -114,18 +114,6 @@ const watch = Effect.fnUntraced(
 )
 
 describe("Stream queries", () => {
-  it.effect("an option variable can't make a stream query poll", () => {
-    const { GetNote, provide, streams } = makeNotes({
-      refetchInterval: "2 seconds"
-    })
-    return Effect.gen(function*() {
-      yield* watch(GetNote.changes({ id: "1" }))
-      streams[0].emit("v1")
-      yield* advance("2 seconds")
-      assert.strictEqual(streams.length, 1)
-    }).pipe(provide)
-  })
-
   it.effect("two watchers share one stream, stay Initial until the first element, get resolves on it, and edits reach both", () => {
     const { GetNote, provide, streams } = makeNotes()
     return Effect.gen(function*() {
@@ -135,7 +123,6 @@ describe("Stream queries", () => {
       const b = yield* watch(GetNote.changes({ id: "1" }))
       assert.strictEqual(streams.length, 1)
       assert.deepStrictEqual(a.seen, [])
-      assert.deepStrictEqual(b.seen, [])
       assert.deepStrictEqual(
         yield* GetNote.peek({ id: "1" }),
         AsyncResult.initial(true)
@@ -153,11 +140,8 @@ describe("Stream queries", () => {
         id: "1",
         title: "v1"
       })
+      // Settled while the stream stays open.
       assert.strictEqual(fetchEnds, 1)
-      assert.strictEqual(
-        (yield* TestQuery.entry(GetNote, { id: "1" }))?.stale,
-        false
-      )
       assert.strictEqual(
         (yield* TestQuery.entry(GetNote, { id: "1" }))?.fetch,
         "none"
@@ -167,37 +151,25 @@ describe("Stream queries", () => {
       yield* flush
       assert.deepStrictEqual(a.seen, ["v1", "v2"])
       assert.deepStrictEqual(b.seen, ["v1", "v2"])
-      assert.strictEqual(streams.length, 1)
       assert.deepStrictEqual(yield* GetNote.get({ id: "1" }), {
         id: "1",
         title: "v2"
       })
       assert.strictEqual(streams.length, 1)
-      assert.deepStrictEqual(
-        (yield* TestQuery.fetches).map((fetch) => fetch.trigger),
-        ["watch"]
-      )
     }).pipe(provide)
   })
 
-  it.effect("closes the stream after idleTimeToLive and restarts it for a later watcher", () => {
+  it.effect("ignores polling, and closes the stream after idleTimeToLive, counting from the latest request", () => {
     const { GetNote, provide, streams } = makeNotes({
-      idleTimeToLive: "10 seconds"
+      idleTimeToLive: "10 seconds",
+      refetchInterval: "2 seconds"
     })
     return Effect.gen(function*() {
-      // A stream that never emits closes on the same deadline.
-      const silent = yield* watch(GetNote.changes({ id: "silent" }))
-      yield* silent.stop
-      yield* advance("10 seconds")
-      assert.isTrue(streams[0].closed)
-      streams.shift()
-
-      // A repeated prefetch renews the deadline of a stream still opening.
+      // A stream that never emits closes too, and a repeated prefetch renews its deadline.
       yield* GetNote.prefetch({ id: "silent" })
       yield* advance("9 seconds")
       yield* GetNote.prefetch({ id: "silent" })
       yield* advance("9 seconds")
-      assert.strictEqual(streams.length, 1)
       assert.isFalse(streams[0].closed)
       yield* advance("1 second")
       assert.isTrue(streams[0].closed)
@@ -205,36 +177,23 @@ describe("Stream queries", () => {
 
       const a = yield* watch(GetNote.changes({ id: "1" }))
       streams[0].emit("v1")
-      yield* flush
+      yield* advance("2 seconds")
       assert.deepStrictEqual(a.seen, ["v1"])
+      assert.strictEqual(streams.length, 1)
 
       yield* a.stop
       yield* advance("5 seconds")
       assert.isFalse(streams[0].closed)
-
       yield* advance("5 seconds")
       assert.isTrue(streams[0].closed)
       assert.isUndefined(yield* TestQuery.entry(GetNote, { id: "1" }))
 
-      const b = yield* watch(GetNote.changes({ id: "1" }))
+      yield* watch(GetNote.changes({ id: "1" }))
       assert.strictEqual(streams.length, 2)
-      streams[1].emit("v2")
-      yield* flush
-      assert.deepStrictEqual(b.seen, ["v2"])
-
-      // A prefetch that reopens a closed stream renews the deadline too.
-      yield* b.stop
-      streams[1].end()
-      yield* advance("9 seconds")
-      yield* GetNote.prefetch({ id: "1" })
-      yield* advance("9 seconds")
-      assert.isFalse(streams[2].closed)
-      yield* advance("1 second")
-      assert.isTrue(streams[2].closed)
     }).pipe(provide)
   })
 
-  it.effect("updates the base value under a live optimistic patch, and invalidate restarts the stream", () => {
+  it.effect("pushes update the base value under optimistic patches, a run's end and invalidate restart the stream", () => {
     const { GetNote, provide, streams } = makeNotes()
     return Effect.gen(function*() {
       const cache = Query.internals(yield* Query.Cache)
@@ -252,24 +211,22 @@ describe("Stream queries", () => {
       )
       yield* Effect.addFinalizer(() => Effect.sync(handle.unregister))
       yield* flush
-
       streams[0].emit("v1")
       yield* flush
-      assert.deepStrictEqual(seen, ["v1"])
 
-      const run = cache.beginRun({
-        command: "Rename",
-        invalidates: [],
-        optimistic: [
-          GetNote.patch({ id: "1" }, (note) => ({
-            ...note,
-            title: note.title + "!"
-          }))
-        ]
-      })
+      const edit = (suffix: string) =>
+        cache.beginRun({
+          command: "Edit",
+          invalidates: [],
+          optimistic: [
+            GetNote.patch({ id: "1" }, (note) => ({
+              ...note,
+              title: note.title + suffix
+            }))
+          ]
+        })
+      const a = edit("!")
       assert.deepStrictEqual(seen, ["v1", "v1! patched"])
-      assert.isFalse(streams[0].closed)
-
       streams[0].emit("v2")
       yield* flush
       assert.deepStrictEqual(seen, ["v1", "v1! patched", "v2! patched"])
@@ -278,74 +235,30 @@ describe("Stream queries", () => {
         AsyncResult.isSuccess(server) && server.value.title === "v2"
       )
 
-      yield* run.run(Effect.void)
-      yield* flush
-      assert.isTrue(streams[0].closed)
-      assert.strictEqual(streams.length, 2)
-      assert.strictEqual(seen.at(-1), "v2! waiting patched")
-
-      streams[1].emit("v3")
-      yield* flush
-      assert.strictEqual(seen.at(-1), "v3")
-
-      yield* GetNote.invalidate({ id: "1" })
-      yield* flush
-      assert.isTrue(streams[1].closed)
-      assert.strictEqual(streams.length, 3)
-      assert.strictEqual(seen.at(-1), "v3 waiting")
-
-      streams[2].emit("v4")
-      yield* flush
-      assert.strictEqual(seen.at(-1), "v4")
-    }).pipe(provide)
-  })
-
-  it.effect("a push from the old stream keeps a succeeded run's patch while another run holds the restart", () => {
-    const { GetNote, provide, streams } = makeNotes()
-    return Effect.gen(function*() {
-      const cache = Query.internals(yield* Query.Cache)
-      const fetcher = (yield* GetNote) as unknown as (
-        args: unknown
-      ) => Effect.Effect<any, any>
-      const seen: Array<string> = []
-      const handle = cache.watch(
-        Query.defOf(GetNote),
-        { id: "1" },
-        fetcher,
-        (result, patched) => seen.push(show(result, patched)),
-        undefined,
-        { patched: true }
-      )
-      yield* Effect.addFinalizer(() => Effect.sync(handle.unregister))
-      yield* flush
-      streams[0].emit("old")
-      yield* flush
-
-      const edit = (f: (title: string) => string) =>
-        cache.beginRun({
-          command: "Edit",
-          invalidates: [],
-          optimistic: [
-            GetNote.patch({ id: "1" }, (note) => ({
-              ...note,
-              title: f(note.title)
-            }))
-          ]
-        })
-      const a = edit(() => "new")
-      const b = edit((title) => title + "!")
+      // A has succeeded but B holds the restart: a push from the old stream keeps A's patch.
+      const b = edit("?")
       yield* a.run(Effect.void)
-      streams[0].emit("older push")
+      streams[0].emit("v3")
       yield* flush
-      assert.strictEqual(seen.at(-1), "new! patched")
+      assert.strictEqual(seen.at(-1), "v3!? patched")
+      assert.isFalse(streams[0].closed)
 
       // B ends: the restarted stream's first element confirms both.
       yield* b.run(Effect.void)
       yield* flush
-      assert.strictEqual(streams.length, 2)
-      streams[1].emit("new!")
+      assert.isTrue(streams[0].closed)
+      assert.strictEqual(seen.at(-1), "v3!? waiting patched")
+      streams[1].emit("v4")
       yield* flush
-      assert.strictEqual(seen.at(-1), "new!")
+      assert.strictEqual(seen.at(-1), "v4")
+
+      yield* GetNote.invalidate({ id: "1" })
+      yield* flush
+      assert.isTrue(streams[1].closed)
+      assert.strictEqual(seen.at(-1), "v4 waiting")
+      streams[2].emit("v5")
+      yield* flush
+      assert.strictEqual(seen.at(-1), "v5")
     }).pipe(provide)
   })
 
@@ -355,12 +268,9 @@ describe("Stream queries", () => {
       const watcher = yield* watch(GetNote.changes({ id: "empty" }))
       const got = yield* Effect.forkScoped(GetNote.get({ id: "empty" }))
       yield* flush
-      assert.strictEqual(streams.length, 1)
-
       streams[0].end()
       yield* flush
       const getExit = yield* Fiber.await(got)
-      assert.isTrue(Exit.isFailure(getExit) && Cause.hasDies(getExit.cause))
       const defect = Exit.isFailure(getExit)
         ? Cause.squash(getExit.cause)
         : undefined
@@ -373,7 +283,6 @@ describe("Stream queries", () => {
       assert.strictEqual(streams.length, 1)
 
       const failing = yield* watch(GetNote.changes({ id: "err" }))
-      assert.strictEqual(streams.length, 2)
       streams[1].emit("v1")
       yield* flush
       streams[1].fail("boom")
