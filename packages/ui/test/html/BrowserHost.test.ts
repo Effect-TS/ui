@@ -2325,8 +2325,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           yield* tick
           expect(root.model()).toEqual([event.timeStamp])
         }).pipe(Effect.scoped))
-
-      it.effect("a keyup reports composing when the keydown of the same key composed, with only keyup handled", () =>
+      it.effect("a keyup reports composing when the keydown of the same key composed, until that keyup, with only keyup handled", () =>
         Effect.gen(function*() {
           const Released = Html.component({
             name: "Released",
@@ -2351,25 +2350,43 @@ describe("BrowserHost", { concurrent: false }, () => {
           const root = yield* BrowserHost.mountEffect(Released, {}, app)
           yield* tick
           const text = HtmlLocator.getByRole(app, "textbox", { name: "Text" })
-          const fire = (type: string, init: KeyboardEventInit) =>
-            text.dispatchEvent(
+          const fire = (
+            type: string,
+            init: KeyboardEventInit,
+            target: Element = text
+          ) =>
+            target.dispatchEvent(
               new KeyboardEvent(type, { bubbles: true, code: "Enter", ...init })
             )
           // Chrome on Windows reports the keydown that commits as "Process", and
           // its keyup, after compositionend, as a plain Enter.
-          fire("keydown", { key: "Process", isComposing: true, keyCode: 229 })
-          text.dispatchEvent(
-            new CompositionEvent("compositionend", { bubbles: true })
-          )
-          fire("keyup", { key: "Enter", keyCode: 13 })
-          fire("keydown", { key: "Enter", keyCode: 13 })
-          fire("keyup", { key: "Enter", keyCode: 13 })
+          const commit = () => {
+            fire("keydown", { key: "Process", isComposing: true, keyCode: 229 })
+            text.dispatchEvent(
+              new CompositionEvent("compositionend", { bubbles: true })
+            )
+          }
+          commit()
+          fire("keyup", { key: "Enter" })
+          // An Enter whose keydown no listener saw, like one pressed before focus
+          // moved in, is a plain release.
+          fire("keydown", { key: "Enter" }, document.createElement("button"))
+          fire("keyup", { key: "Enter" })
+          // Another key pressed and released before the commit's release.
+          commit()
+          fire("keydown", { key: "Shift", code: "ShiftLeft" })
+          fire("keyup", { key: "Shift", code: "ShiftLeft" })
+          fire("keyup", { key: "Enter" })
           yield* tick
           expect(root.model()).toEqual([
             "el:Enter:true",
             "doc:Enter:true",
             "el:Enter:false",
-            "doc:Enter:false"
+            "doc:Enter:false",
+            "el:Shift:false",
+            "doc:Shift:false",
+            "el:Enter:true",
+            "doc:Enter:true"
           ])
         }).pipe(Effect.scoped))
 

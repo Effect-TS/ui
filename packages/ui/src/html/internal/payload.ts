@@ -148,7 +148,10 @@ const fieldOf = (
     ? target
     : element) as HTMLInputElement
 
-let composingCode: string | null = null
+// The physical keys whose keydown composed, until their keyup.
+const composingCodes = new Set<string>()
+// Keyups that released one, so every listener of the same keyup agrees.
+const composingKeyups = new WeakSet<Event>()
 
 // Safari reports the key that ends a composition with `isComposing` false and `keyCode` 229.
 const isComposingKey = (event: KeyboardEvent): boolean =>
@@ -156,12 +159,17 @@ const isComposingKey = (event: KeyboardEvent): boolean =>
   (event as { readonly keyCode?: number }).keyCode === 229
 
 /**
- * Remembers the physical key of a composing `keydown` so its matching `keyup`
- * after `compositionend` still reports `composing: true`.
+ * Tracks keydown and keyup so the keyup of a key whose keydown composed still
+ * reports `composing: true` after `compositionend`. Call it for both, before
+ * any payload of the event is read, wherever either is listened for.
  */
-export const noteKeyDown = (event: Event): void => {
+export const noteKey = (event: Event): void => {
   const e = event as KeyboardEvent
-  composingCode = (isComposingKey(e) && e.code) || null
+  if (!e.code) return
+  if (e.type === "keydown") {
+    if (isComposingKey(e)) composingCodes.add(e.code)
+    else composingCodes.delete(e.code)
+  } else if (composingCodes.delete(e.code)) composingKeyups.add(event)
 }
 
 /**
@@ -206,8 +214,7 @@ export const payloadOf = (
       return {
         key: e.key ?? "",
         ...modifiers(event),
-        composing: isComposingKey(e) ||
-          (name === "keyup" && e.code === composingCode),
+        composing: isComposingKey(e) || composingKeyups.has(event),
         repeat: e.repeat === true,
         editable: isEditable(event.composedPath()[0] ?? target),
         ...selectionOf(target)
