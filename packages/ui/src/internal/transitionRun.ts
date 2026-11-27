@@ -25,6 +25,7 @@ class Running implements Kernel.Transitions {
     if (on) {
       this.stilled++
       this.types = undefined
+      if (!this.holding) this.drain()
     } else if (this.stilled > 0) {
       this.stilled--
     }
@@ -50,19 +51,24 @@ class Running implements Kernel.Transitions {
   }
   settle(): void {
     this.types = undefined
+    if (!this.holding) this.drain()
     this.resume()
   }
-  resume(): void {
-    if (!this.holding) return
-    this.holding = false
+  drain(): void {
     const tree = this.tree
     if (tree.closed) return
     const waiting = this.waiting
+    if (waiting.length === 0) return
     this.waiting = []
     for (let index = 0; index < waiting.length; index++) {
       defer(tree, waiting[index]!)
     }
-    if (!this.starting) Kernel.flush(tree)
+  }
+  resume(): void {
+    if (!this.holding) return
+    this.holding = false
+    this.drain()
+    if (!this.starting && !this.tree.closed) Kernel.flush(this.tree)
   }
 }
 

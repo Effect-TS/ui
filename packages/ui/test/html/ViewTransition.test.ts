@@ -320,14 +320,20 @@ describe("view transitions", { concurrent: false }, () => {
       expect(card()).toBe("Like 2")
     }).pipe(Effect.scoped))
 
-  it.effect("a pop the browser already animated renders without a transition, and the next pop still gets one", () =>
+  it.effect("a pop the browser already animated renders without a transition, drains queued child messages, and leaves the next pop animated", () =>
     Effect.gen(function*() {
       const transitions = yield* fakeTransitions()
-      const { click, shown } = yield* start
+      const { card, click, runTasks, shown, tasks } = yield* held
       click("Open")
-      yield* tick
+      while (transitions.started.length === 0) {
+        if (tasks.length > 0) tasks.shift()!()
+        else yield* tick
+      }
       transitions.started[0]!.update()
+      runTasks()
       expect(shown()).toBe("Detail grid ")
+      click("List")
+      click(card())
       yield* Effect.acquireUseRelease(
         Effect.sync(() => {
           const Original = window.PopStateEvent
@@ -338,19 +344,24 @@ describe("view transitions", { concurrent: false }, () => {
           }
           return Original
         }),
-        () =>
-          Effect.sync(() => window.history.back()).pipe(Effect.andThen(tick)),
+        () => Effect.sync(() => window.history.back()),
         (Original) =>
           Effect.sync(() => {
             win.PopStateEvent = Original
           })
       )
-      expect({ shown: shown(), started: transitions.started.length }).toEqual({
-        shown: "Grid grid ",
+      runTasks()
+      expect({
+        shown: shown(),
+        card: card(),
+        started: transitions.started.length
+      }).toEqual({
+        shown: "Grid list ",
+        card: "Like 1",
         started: 1
       })
       window.history.forward()
-      yield* tick
+      runTasks()
       expect(transitions.started.map((started) => started.types)).toEqual([
         ["to-detail"],
         ["to-detail"]
