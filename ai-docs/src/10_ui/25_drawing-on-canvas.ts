@@ -29,10 +29,10 @@ const SkyMessage = UiSchema.TaggedEnum({
 // A scene from the Model
 // ---------------------------------------------------------------------------
 
-// The scene is plain data: `Canvas.Rect`, `Circle`, `Path`, `Text` and a
-// nestable `Group` that translates, rotates, scales and fades what it holds.
-// The constructors skip validation, so building a scene every frame is cheap.
-// Each shape is a Schema too, so a Model can hold shapes.
+// The scene is plain data: `Canvas.Rect`, `Circle`, `Path`, `Text`, `Image`
+// and a nestable `Group` that translates, rotates, scales and fades what it
+// holds. The constructors skip validation, so building a scene every frame is
+// cheap. Each shape is a Schema too, so a Model can hold shapes.
 export const sceneOf = (
   comets: ReadonlyArray<typeof Comet.Type>
 ): ReadonlyArray<Canvas.Shape> => [
@@ -69,9 +69,10 @@ export const sceneOf = (
 
 // `Canvas.view` returns the `h.canvas` builder with the `Canvas.Paint`
 // mount, which takes the element's one mount slot. It paints on mount and
-// again only when the scene differs, so a render that leaves it equal
-// doesn't repaint. The server writes `<canvas width height>` and the
-// fallback children; nothing paints until the client mounts.
+// again only when the scene differs, or when an `Image` finishes loading, so a
+// render that leaves the scene equal doesn't repaint. The server writes
+// `<canvas width height>` and the fallback children; nothing paints until the
+// client mounts.
 //
 // `pixelRatio: "auto"` sizes the backing store by `devicePixelRatio`, read
 // in the mount, so the view stays pure. With a ratio other than `1` the view

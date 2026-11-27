@@ -792,8 +792,9 @@ its next step settles.
 
 `Canvas.view(h, { width, height, shapes, pixelRatio, onPointerDown, onPointerMove, onPointerUp })`,
 from `@effect/ui/html`, draws a scene of plain shapes: `Canvas.Rect`,
-`Circle`, `Path`, `Text` and a nestable `Group`. Build the scene from the
-Model in `view`. The canvas repaints only when the scene differs. It
+`Circle`, `Path`, `Text`, `Image` and a nestable `Group`. Build the scene from
+the Model in `view`. The canvas repaints only when the scene differs, or when
+an `Image` finishes loading. It
 returns the `h.canvas` builder, so classes, attributes and fallback
 children chain on it, and it takes the element's mount. Pointer handlers
 get `x` and `y` in scene units. `pixelRatio: "auto"` draws sharply on a

@@ -80,10 +80,11 @@ const tagged =
 const sameByTag = <
   S extends Schema.Top & { readonly Type: { readonly _tag: string } }
 >(
-  cases: Record<string, Schema.Top>
+  cases: Record<S["Type"]["_tag"], Schema.Top>
 ) =>
   Schema.overrideToEquivalence<S>(() => {
-    const same = Record.map(cases, (schema) => Schema.toEquivalence(schema))
+    const same: Record<string, (a: unknown, b: unknown) => boolean> = Record
+      .map(cases, (schema) => Schema.toEquivalence(schema))
     return (a, b) => a._tag === b._tag && same[a._tag]?.(a, b) === true
   })
 
@@ -104,6 +105,29 @@ export const Point = Schema.Struct({ x: Schema.Number, y: Schema.Number })
  * @since 0.1.0
  */
 export interface Point extends Schema.Schema.Type<typeof Point> {}
+
+/**
+ * A source rectangle in image pixels.
+ *
+ * @stability experimental
+ * @category shapes
+ * @since 0.1.0
+ */
+export const Crop = Schema.Struct({
+  x: Schema.Number,
+  y: Schema.Number,
+  width: Schema.Number,
+  height: Schema.Number
+})
+
+/**
+ * A source rectangle in image pixels.
+ *
+ * @stability experimental
+ * @category shapes
+ * @since 0.1.0
+ */
+export interface Crop extends Schema.Schema.Type<typeof Crop> {}
 
 /**
  * How the ends of a stroked open path look.
@@ -324,6 +348,42 @@ export const Text: typeof TextSchema & ((fields: Omit<Text, "_tag">) => Text) =
     tagged<Text>("Text")
   )
 
+const ImageSchema = Schema.TaggedStruct("Image", {
+  src: Schema.String,
+  x: Schema.Number,
+  y: Schema.Number,
+  width: Schema.optional(Schema.Number),
+  height: Schema.optional(Schema.Number),
+  crop: Schema.optional(Crop),
+  smoothing: Schema.optional(Schema.Boolean)
+})
+
+/**
+ * An image at `x` and `y`, optionally cropped from `crop` in image pixels,
+ * sized to `width` and `height` (defaulting to the crop or image size), and
+ * drawn with `smoothing` (`false` for crisp pixel art). Draws nothing until
+ * loaded.
+ *
+ * @stability experimental
+ * @category shapes
+ * @since 0.1.0
+ */
+export interface Image extends Schema.Schema.Type<typeof ImageSchema> {}
+
+/**
+ * An image's Schema, and its constructor, which doesn't validate.
+ *
+ * @stability experimental
+ * @category shapes
+ * @since 0.1.0
+ */
+export const Image:
+  & typeof ImageSchema
+  & ((fields: Omit<Image, "_tag">) => Image) = callable(
+    ImageSchema,
+    tagged<Image>("Image")
+  )
+
 /**
  * Shapes drawn together, moved by `translate`, then turned by `rotate` in
  * radians, then sized by `scale`, and faded by `opacity`. A group in a
@@ -371,7 +431,7 @@ export const Group:
  * @category shapes
  * @since 0.1.0
  */
-export type Shape = Rect | Circle | Path | Text | Group
+export type Shape = Rect | Circle | Path | Text | Image | Group
 
 /**
  * The Schema of any shape.
@@ -385,9 +445,10 @@ export const Shape: Schema.Codec<Shape> = Schema.Union([
   Circle,
   Path,
   Text,
+  Image,
   Group
 ]).pipe(
-  sameByTag({ Rect, Circle, Path, Text, Group })
+  sameByTag({ Rect, Circle, Path, Text, Image, Group })
 )
 
 /**
@@ -401,6 +462,19 @@ export type Context2D =
   | CanvasRenderingContext2D
   | OffscreenCanvasRenderingContext2D
 
+/**
+ * A decoded image source `paint` can draw.
+ *
+ * @stability experimental
+ * @category painting
+ * @since 0.1.0
+ */
+export type ImageSource =
+  | HTMLImageElement
+  | ImageBitmap
+  | HTMLCanvasElement
+  | OffscreenCanvas
+
 const strokeWith = (
   context: Context2D,
   stroke: string,
@@ -410,88 +484,128 @@ const strokeWith = (
   if (lineWidth !== undefined) context.lineWidth = lineWidth
 }
 
-const paintShape = (context: Context2D, shape: Shape): void => {
+const paintShape = (
+  context: Context2D,
+  shape: Shape,
+  images: ((src: string) => ImageSource | undefined) | undefined
+): void => {
   context.save()
-  switch (shape._tag) {
-    case "Rect": {
-      if (shape.fill !== undefined) {
-        context.fillStyle = shape.fill
-        context.fillRect(shape.x, shape.y, shape.width, shape.height)
-      }
-      if (shape.stroke !== undefined) {
-        strokeWith(context, shape.stroke, shape.lineWidth)
-        context.strokeRect(shape.x, shape.y, shape.width, shape.height)
-      }
-      break
-    }
-    case "Circle": {
-      context.beginPath()
-      context.arc(shape.x, shape.y, shape.radius, 0, Math.PI * 2)
-      fillAndStroke(context, shape)
-      break
-    }
-    case "Path": {
-      context.beginPath()
-      for (const command of shape.commands) {
-        switch (command._tag) {
-          case "MoveTo":
-            context.moveTo(command.x, command.y)
-            break
-          case "LineTo":
-            context.lineTo(command.x, command.y)
-            break
-          case "QuadTo":
-            context.quadraticCurveTo(
-              command.cpx,
-              command.cpy,
-              command.x,
-              command.y
-            )
-            break
-          case "BezierTo":
-            context.bezierCurveTo(
-              command.cp1x,
-              command.cp1y,
-              command.cp2x,
-              command.cp2y,
-              command.x,
-              command.y
-            )
-            break
-          case "Close":
-            context.closePath()
+  try {
+    switch (shape._tag) {
+      case "Rect": {
+        if (shape.fill !== undefined) {
+          context.fillStyle = shape.fill
+          context.fillRect(shape.x, shape.y, shape.width, shape.height)
         }
+        if (shape.stroke !== undefined) {
+          strokeWith(context, shape.stroke, shape.lineWidth)
+          context.strokeRect(shape.x, shape.y, shape.width, shape.height)
+        }
+        break
       }
-      if (shape.lineCap !== undefined) context.lineCap = shape.lineCap
-      if (shape.lineJoin !== undefined) context.lineJoin = shape.lineJoin
-      fillAndStroke(context, shape)
-      break
+      case "Circle": {
+        context.beginPath()
+        context.arc(shape.x, shape.y, shape.radius, 0, Math.PI * 2)
+        fillAndStroke(context, shape)
+        break
+      }
+      case "Path": {
+        context.beginPath()
+        for (const command of shape.commands) {
+          switch (command._tag) {
+            case "MoveTo":
+              context.moveTo(command.x, command.y)
+              break
+            case "LineTo":
+              context.lineTo(command.x, command.y)
+              break
+            case "QuadTo":
+              context.quadraticCurveTo(
+                command.cpx,
+                command.cpy,
+                command.x,
+                command.y
+              )
+              break
+            case "BezierTo":
+              context.bezierCurveTo(
+                command.cp1x,
+                command.cp1y,
+                command.cp2x,
+                command.cp2y,
+                command.x,
+                command.y
+              )
+              break
+            case "Close":
+              context.closePath()
+          }
+        }
+        if (shape.lineCap !== undefined) context.lineCap = shape.lineCap
+        if (shape.lineJoin !== undefined) context.lineJoin = shape.lineJoin
+        fillAndStroke(context, shape)
+        break
+      }
+      case "Text": {
+        if (shape.font !== undefined) context.font = shape.font
+        if (shape.align !== undefined) context.textAlign = shape.align
+        if (shape.baseline !== undefined) context.textBaseline = shape.baseline
+        if (shape.fill !== undefined) {
+          context.fillStyle = shape.fill
+          context.fillText(shape.content, shape.x, shape.y)
+        }
+        if (shape.stroke !== undefined) {
+          strokeWith(context, shape.stroke, shape.lineWidth)
+          context.strokeText(shape.content, shape.x, shape.y)
+        }
+        break
+      }
+      case "Image": {
+        const image = images?.(shape.src)
+        if (image === undefined) break
+        if (shape.smoothing !== undefined) {
+          context.imageSmoothingEnabled = shape.smoothing
+        }
+        if (shape.crop !== undefined) {
+          const { height, width, x, y } = shape.crop
+          context.drawImage(
+            image,
+            x,
+            y,
+            width,
+            height,
+            shape.x,
+            shape.y,
+            shape.width ?? width,
+            shape.height ?? height
+          )
+        } else if (shape.width === undefined && shape.height === undefined) {
+          context.drawImage(image, shape.x, shape.y)
+        } else {
+          // An `<img>`'s `width` is its layout size, so its source size is the natural one.
+          const width = shape.width ??
+            ("naturalWidth" in image ? image.naturalWidth : image.width)
+          const height = shape.height ??
+            ("naturalHeight" in image ? image.naturalHeight : image.height)
+          context.drawImage(image, shape.x, shape.y, width, height)
+        }
+        break
+      }
+      case "Group": {
+        if (shape.opacity !== undefined) context.globalAlpha *= shape.opacity
+        if (shape.translate !== undefined) {
+          context.translate(shape.translate.x, shape.translate.y)
+        }
+        if (shape.rotate !== undefined) context.rotate(shape.rotate)
+        if (shape.scale !== undefined) {
+          context.scale(shape.scale.x, shape.scale.y)
+        }
+        for (const child of shape.shapes) paintShape(context, child, images)
+      }
     }
-    case "Text": {
-      if (shape.font !== undefined) context.font = shape.font
-      if (shape.align !== undefined) context.textAlign = shape.align
-      if (shape.baseline !== undefined) context.textBaseline = shape.baseline
-      if (shape.fill !== undefined) {
-        context.fillStyle = shape.fill
-        context.fillText(shape.content, shape.x, shape.y)
-      }
-      if (shape.stroke !== undefined) {
-        strokeWith(context, shape.stroke, shape.lineWidth)
-        context.strokeText(shape.content, shape.x, shape.y)
-      }
-      break
-    }
-    case "Group": {
-      if (shape.opacity !== undefined) context.globalAlpha *= shape.opacity
-      if (shape.translate !== undefined) {
-        context.translate(shape.translate.x, shape.translate.y)
-      }
-      if (shape.rotate !== undefined) context.rotate(shape.rotate)
-      if (shape.scale !== undefined) context.scale(shape.scale.x, shape.scale.y)
-      for (const child of shape.shapes) paintShape(context, child)
-    }
+  } finally {
+    context.restore()
   }
-  context.restore()
 }
 
 const fillAndStroke = (context: Context2D, shape: Circle | Path) => {
@@ -518,7 +632,9 @@ const fillAndStroke = (context: Context2D, shape: Circle | Path) => {
  *
  * Each shape is drawn between `save` and `restore`, so its styles and a
  * group's transform don't reach the next one. The context's own transform
- * applies, which is how `Paint` scales a scene to its pixel ratio.
+ * applies, which is how `Paint` scales a scene to its pixel ratio. Pass
+ * `images` to resolve `Image` shapes by `src`; without it, or when it returns
+ * `undefined`, an `Image` draws nothing.
  *
  * **Example** (Drawing on an `OffscreenCanvas`)
  *
@@ -543,10 +659,11 @@ export const paint = (
     readonly width: number
     readonly height: number
     readonly shapes: ReadonlyArray<Shape>
-  }
+  },
+  images?: (src: string) => ImageSource | undefined
 ): void => {
   context.clearRect(0, 0, scene.width, scene.height)
-  for (const shape of scene.shapes) paintShape(context, shape)
+  for (const shape of scene.shapes) paintShape(context, shape, images)
 }
 
 /**
@@ -602,6 +719,26 @@ export const PixelRatio = Schema.Union([Schema.Number, Schema.Literal("auto")])
  */
 export type PixelRatio = typeof PixelRatio.Type
 
+const imageLoader = (
+  canvas: HTMLCanvasElement,
+  onLoad: () => void,
+  options?: AddEventListenerOptions
+) => {
+  const images = new Map<string, HTMLImageElement>()
+  return (src: string): HTMLImageElement | undefined => {
+    let image = images.get(src)
+    if (image === undefined) {
+      image = canvas.ownerDocument.createElement("img")
+      images.set(src, image)
+      image.src = src
+      if (!(image.complete && image.naturalWidth > 0)) {
+        image.addEventListener("load", onLoad, options)
+      }
+    }
+    return image.complete && image.naturalWidth > 0 ? image : undefined
+  }
+}
+
 const draw = (
   canvas: HTMLCanvasElement,
   args: {
@@ -609,7 +746,8 @@ const draw = (
     readonly height: number
     readonly shapes: ReadonlyArray<Shape>
     readonly pixelRatio: PixelRatio
-  }
+  },
+  images: (src: string) => ImageSource | undefined
 ): boolean => {
   const context = canvas.getContext("2d")
   if (context === null) return false
@@ -621,7 +759,7 @@ const draw = (
   if (canvas.width !== width) canvas.width = width
   if (canvas.height !== height) canvas.height = height
   context.setTransform(ratio, 0, 0, ratio, 0, 0)
-  paint(context, args)
+  paint(context, args, images)
   return true
 }
 
@@ -634,6 +772,8 @@ const draw = (
  *
  * - Args compare by the Schemas' equivalence, so a render that leaves the
  *   scene equal doesn't repaint.
+ * - `Image` shapes load per canvas, draw nothing until loaded, and repaint
+ *   when ready without sending a message.
  * - The backing store is `width` by `height` times the pixel ratio, and the
  *   context is scaled to match, so shapes stay in scene coordinates.
  *   `"auto"` reads `devicePixelRatio` as the mount paints.
@@ -664,7 +804,10 @@ export const Paint = Mount.makeStream(
       listen: Schema.Array(PointerEvent)
     },
     paint: (canvas: HTMLCanvasElement, args) => {
-      if (!draw(canvas, args)) throw new Error("no 2D context")
+      const images = imageLoader(canvas, () => {
+        if (canvas.isConnected) draw(canvas, args, images)
+      })
+      if (!draw(canvas, args, images)) throw new Error("no 2D context")
     }
   },
   (canvas: HTMLCanvasElement, initial, changes) =>
@@ -674,6 +817,9 @@ export const Paint = Mount.makeStream(
         const listening = new AbortController()
         const { signal } = listening
         yield* Effect.addFinalizer(() => Effect.sync(() => listening.abort()))
+        const images = imageLoader(canvas, () => draw(canvas, args, images), {
+          signal
+        })
         const report =
           (event: PointerEvent) => (from: globalThis.PointerEvent) => {
             if (!args.listen.includes(event)) return
@@ -712,7 +858,7 @@ export const Paint = Mount.makeStream(
         yield* Stream.runForEach(changes, (next) =>
           Effect.sync(() => {
             args = next
-            draw(canvas, next)
+            draw(canvas, next, images)
           })).pipe(Effect.forkScoped)
       })
     )
