@@ -1234,8 +1234,10 @@ export interface StreamService<
  * - The stream opens where a fetch would start: on the first watcher, `get`
  *   or `prefetch` of an entry with no open stream. The entry is `Initial`,
  *   or its last value, with `waiting` until the first element, which
- *   settles it as a fetch result does. Each later element is stored and
- *   emitted. Of a chunk, only the last element is stored.
+ *   settles it as a fetch result does. Each later element is stored. Of a
+ *   chunk, only the last element is stored.
+ * - Watchers see changes, as for any query: an element equal to the stored
+ *   value is stored but not emitted.
  * - An entry is fresh while its stream is open, and stale otherwise.
  * - The stream stays open while the entry exists: it closes when the entry
  *   is collected, `idleTimeToLive` after it was last watched or asked for.
@@ -1316,6 +1318,8 @@ export const StreamService: <Self>() => <
       readonly error?: Error | undefined
       readonly idleTimeToLive?: Duration.Input | undefined
       readonly tags?: ReadonlyArray<Tag> | undefined
+      readonly staleTime?: never
+      readonly refetchInterval?: never
     }
 ) => StreamService<
   Self,
@@ -1334,7 +1338,19 @@ export const StreamService: <Self>() => <
     readonly tags?: ReadonlyArray<Tag> | undefined
   }
 ): any =>
-  queryClass(makeDef(name, { ...options, staleTime: 0 }, undefined, liveOps))
+  queryClass(makeDef(
+    name,
+    {
+      args: options.args,
+      success: options.success,
+      error: options.error,
+      idleTimeToLive: options.idleTimeToLive,
+      tags: options.tags,
+      staleTime: 0
+    },
+    undefined,
+    liveOps
+  ))
 
 /**
  * A declared invalidation tag. A tag is a plain name, so two
@@ -4786,7 +4802,9 @@ const liveOps: LiveOps = {
           const value = chunk[chunk.length - 1]
           const result = AsyncResult.success(value, { timestamp: env.now() })
           if (entry.live === fetch) {
-            env.store(entry, result)
+            // Only a new stream's first element confirms held patches, and an invalidation stays owed.
+            entry.result = result
+            entry.settledAt = env.now()
             return env.emit(entry)
           }
           if (entry.fetch !== fetch) return
@@ -5019,7 +5037,8 @@ const buildCache = (
   const removeEntry = (entry: Entry): void => {
     if (entry.removed) return
     entry.removed = true
-    if (entry.live !== undefined) dropFetch(entry, entry.live)
+    const fetch = entry.fetch ?? entry.live
+    if (fetch !== undefined) dropFetch(entry, fetch)
     cancelIdle(entry)
     stopInterval(entry)
     const byKey = index.get(entry.def.name)
@@ -5196,11 +5215,12 @@ const buildCache = (
       entry.idle = undefined
     }
   }
-  // A live patch blocks collection. A patch held after success doesn't.
+  // A live patch blocks collection. A patch held after success doesn't. A stream still opening doesn't either.
   const idleEligible = (entry: Entry): boolean =>
     !entry.removed && entry.watchers.size === 0 && entry.waiters.size === 0 &&
     entry.moreWaiters.size === 0 &&
-    entry.fetch === undefined && !hasLive(entry)
+    (entry.fetch === undefined || entry.def.live !== undefined) &&
+    !hasLive(entry)
   const idleTtl = (entry: Entry): number => entry.def.idleMs ?? defaultIdleMs
   // Built like `RcMap`'s: an `expiresAt` a reset moves, and a sleep that goes round again.
   const startIdle = (entry: Entry): void => {
@@ -5228,7 +5248,9 @@ const buildCache = (
     // Called after the entry's emission, so a run's wait ends after its watchers have seen the settle.
     checkAwaits(entry)
     if (disposed || !idleEligible(entry)) return
-    if (entry.result === undefined) return removeEntry(entry)
+    if (entry.result === undefined && entry.fetch === undefined) {
+      return removeEntry(entry)
+    }
     if (entry.idle === undefined) startIdle(entry)
   }
   const resetIdle = (entry: Entry): void => {
@@ -5412,8 +5434,9 @@ const buildCache = (
     if (entry.live !== undefined) dropFetch(entry, entry.live)
     const fetch: FetchRec = { trigger, build, fiber: undefined, append }
     entry.fetch = fetch
-    cancelIdle(entry)
     const live = entry.def.live
+    // An opening stream keeps its entry's idle deadline.
+    if (live === undefined) cancelIdle(entry)
     let body: () => Effect.Effect<any, any> = live === undefined
       ? () => build.fetcher(entry.args)
       : () => live.body(cacheEnv(), entry, fetch, build)

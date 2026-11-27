@@ -51,17 +51,17 @@ interface NoteStream {
 
 const makeNotes = (options: {
   readonly idleTimeToLive?: Duration.Input
+  readonly refetchInterval?: Duration.Input
 } = {}) => {
   const streams: Array<NoteStream> = []
   class GetNote extends Query.StreamService<GetNote>()(
     "notes/GetNote",
+    // @ts-expect-error: a stream query doesn't poll, even through a variable
     {
       args: { id: Schema.String },
       success: Note,
       error: Schema.String,
-      ...(options.idleTimeToLive === undefined
-        ? undefined
-        : { idleTimeToLive: options.idleTimeToLive })
+      ...options
     }
   ) {
     static readonly layer = this.toLayer(({ id }) =>
@@ -114,6 +114,18 @@ const watch = Effect.fnUntraced(
 )
 
 describe("Stream queries", () => {
+  it.effect("an option variable can't make a stream query poll", () => {
+    const { GetNote, provide, streams } = makeNotes({
+      refetchInterval: "2 seconds"
+    })
+    return Effect.gen(function*() {
+      yield* watch(GetNote.changes({ id: "1" }))
+      streams[0].emit("v1")
+      yield* advance("2 seconds")
+      assert.strictEqual(streams.length, 1)
+    }).pipe(provide)
+  })
+
   it.effect("two watchers share one stream, stay Initial until the first element, get resolves on it, and edits reach both", () => {
     const { GetNote, provide, streams } = makeNotes()
     return Effect.gen(function*() {
@@ -170,6 +182,13 @@ describe("Stream queries", () => {
       idleTimeToLive: "10 seconds"
     })
     return Effect.gen(function*() {
+      // A stream that never emits closes on the same deadline.
+      const silent = yield* watch(GetNote.changes({ id: "silent" }))
+      yield* silent.stop
+      yield* advance("10 seconds")
+      assert.isTrue(streams[0].closed)
+      streams.shift()
+
       const a = yield* watch(GetNote.changes({ id: "1" }))
       streams[0].emit("v1")
       yield* flush
@@ -254,6 +273,55 @@ describe("Stream queries", () => {
       streams[2].emit("v4")
       yield* flush
       assert.strictEqual(seen.at(-1), "v4")
+    }).pipe(provide)
+  })
+
+  it.effect("a push from the old stream keeps a succeeded run's patch while another run holds the restart", () => {
+    const { GetNote, provide, streams } = makeNotes()
+    return Effect.gen(function*() {
+      const cache = Query.internals(yield* Query.Cache)
+      const fetcher = (yield* GetNote) as unknown as (
+        args: unknown
+      ) => Effect.Effect<any, any>
+      const seen: Array<string> = []
+      const handle = cache.watch(
+        Query.defOf(GetNote),
+        { id: "1" },
+        fetcher,
+        (result, patched) => seen.push(show(result, patched)),
+        undefined,
+        { patched: true }
+      )
+      yield* Effect.addFinalizer(() => Effect.sync(handle.unregister))
+      yield* flush
+      streams[0].emit("old")
+      yield* flush
+
+      const edit = (f: (title: string) => string) =>
+        cache.beginRun({
+          command: "Edit",
+          invalidates: [],
+          optimistic: [
+            GetNote.patch({ id: "1" }, (note) => ({
+              ...note,
+              title: f(note.title)
+            }))
+          ]
+        })
+      const a = edit(() => "new")
+      const b = edit((title) => title + "!")
+      yield* a.run(Effect.void)
+      streams[0].emit("older push")
+      yield* flush
+      assert.strictEqual(seen.at(-1), "new! patched")
+
+      // B ends: the restarted stream's first element confirms both.
+      yield* b.run(Effect.void)
+      yield* flush
+      assert.strictEqual(streams.length, 2)
+      streams[1].emit("new!")
+      yield* flush
+      assert.strictEqual(seen.at(-1), "new!")
     }).pipe(provide)
   })
 
