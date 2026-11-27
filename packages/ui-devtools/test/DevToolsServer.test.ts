@@ -3,6 +3,7 @@ import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer"
 import { Command, MessageLog, Query, UiSchema } from "@effect/ui"
 import { DevTools, Inspector } from "@effect/ui-devtools"
+import * as Control from "@effect/ui-devtools/internal/control"
 import * as Mcp from "@effect/ui-devtools/internal/mcp"
 import * as Remote from "@effect/ui-devtools/internal/remote"
 import * as Server from "@effect/ui-devtools/internal/server"
@@ -19,6 +20,7 @@ import * as Socket from "effect/socket/Socket"
 import { createServer, request } from "node:http"
 import type { AddressInfo } from "node:net"
 import { type Capture, play } from "./fixtures/TwoEditors.ts"
+import { playTwoWrites, secret } from "./fixtures/TwoWrites.ts"
 
 const wait = (ms: number) =>
   Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, ms)))
@@ -1139,6 +1141,52 @@ describe("DevToolsServer", { concurrent: false }, () => {
           seq: 5,
           reason: "evicted"
         }])
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
+    "filters list_entries by declared and ad-hoc payload fields across instances",
+    () =>
+      Effect.gen(function*() {
+        localStorage.clear()
+        const { agent, url } = yield* serve({
+          fields: ["commandId", "secret"]
+        })
+        const services = yield* Layer.build(DevTools.layer({ server: url }))
+        yield* playTwoWrites().pipe(Effect.provide(services))
+        yield* wait(150)
+        const list = (name: string, value: unknown) =>
+          agent.call("list_entries", { field: { name, value } })
+
+        const cmd1 = yield* list("commandId", "cmd-1")
+        assert.deepStrictEqual(
+          cmd1.rows.map((row: any) => [row.tag, row.path, row.fields]).sort(),
+          [
+            ["CommandEnded", "/Board", { commandId: "cmd-1" }],
+            ["CommandStarted", "/Board", { commandId: "cmd-1" }],
+            ["Update", "/Board/Feed[a]", { commandId: "cmd-1" }],
+            ["Update", "/Board/Feed[b]", { commandId: "cmd-1" }]
+          ]
+        )
+
+        const byAttempt = yield* list("attempt", 1)
+        assert.strictEqual(byAttempt.total, 4)
+        assert.strictEqual(byAttempt.rows[0].fields.attempt, 1)
+        assert.strictEqual((yield* list("attempt", "1")).total, 0)
+
+        assert.strictEqual((yield* list("secret", secret)).total, 0)
+        assert.notInclude(agent.results.join("\n"), secret)
+
+        const fields = ["owner's id", "a&b", "$&"]
+        const page = new DOMParser().parseFromString(
+          Control.metaTag({ fields }),
+          "text/html"
+        )
+        assert.deepStrictEqual(
+          JSON.parse(page.querySelector("meta")!.content).fields,
+          fields
+        )
       }).pipe(Effect.scoped),
     30_000
   )

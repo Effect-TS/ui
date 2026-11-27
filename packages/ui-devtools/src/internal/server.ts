@@ -18,6 +18,7 @@ export interface Options {
   readonly size: number
   readonly dispatch: boolean
   readonly keep: number
+  readonly fields?: ReadonlyArray<string> | undefined
   readonly timeout?: number | undefined
 }
 

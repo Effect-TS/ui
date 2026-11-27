@@ -81,9 +81,16 @@ export const decodeToServer = Schema.decodeUnknownOption(
 
 export const metaName = "effect-ui-devtools"
 
+// Escape JSON for a single-quoted HTML attribute.
+export const metaTag = (content: object): string =>
+  "<meta name=\"" + metaName + "\" content='" +
+  JSON.stringify(content).replace(/&/g, "&amp;").replace(/'/g, "&#39;") +
+  "'>"
+
 export const fromPage = (): {
   readonly url?: unknown
   readonly size?: unknown
+  readonly fields?: unknown
 } => {
   const content = document.querySelector<HTMLMetaElement>(
     "meta[name=\"" + metaName + "\"]"

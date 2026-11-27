@@ -7,11 +7,14 @@ import * as DevToolsServer from "../DevToolsServer.ts"
 
 const usage =
   `Usage: effect-ui-devtools [--port <n>] [--size <n>] [--keep <n>] [--dispatch]
+                          [--field <name>]...
 
 Runs the Effect UI DevTools MCP server. Pages connect with
 DevTools.layer({ server: "<url>" }), terminal apps with
 DevToolsHeadless.layer({ server: "<url>" }), agents with <url>/mcp.
-Open <url> in a browser to inspect the newest session.`
+Open <url> in a browser to inspect the newest session.
+Repeat --field to show top-level message or Command argument fields, such as
+commandId, in list_entries rows and the server's viewer.`
 
 const { values } = parseArgs({
   options: {
@@ -19,6 +22,7 @@ const { values } = parseArgs({
     size: { type: "string" },
     keep: { type: "string" },
     dispatch: { type: "boolean" },
+    field: { type: "string", multiple: true },
     help: { type: "boolean", short: "h" }
   }
 })
@@ -43,7 +47,8 @@ if (values.help === true) {
     port: number("port", values.port),
     size: number("size", values.size),
     keep: number("keep", values.keep),
-    dispatch: values.dispatch === true
+    dispatch: values.dispatch === true,
+    fields: values.field
   }
   const url = DevToolsServer.url(options)
   Layer.build(DevToolsServer.layer(options)).pipe(
