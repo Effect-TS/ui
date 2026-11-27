@@ -218,6 +218,16 @@ describe("Stream queries", () => {
       streams[1].emit("v2")
       yield* flush
       assert.deepStrictEqual(b.seen, ["v2"])
+
+      // A prefetch that reopens a closed stream renews the deadline too.
+      yield* b.stop
+      streams[1].end()
+      yield* advance("9 seconds")
+      yield* GetNote.prefetch({ id: "1" })
+      yield* advance("9 seconds")
+      assert.isFalse(streams[2].closed)
+      yield* advance("1 second")
+      assert.isTrue(streams[2].closed)
     }).pipe(provide)
   })
 
