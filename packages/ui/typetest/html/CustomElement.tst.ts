@@ -33,6 +33,25 @@ const Message = UiSchema.TaggedEnum({
   Cleared: {}
 })
 
+declare class TestQrCodeElement extends HTMLElement {
+  size: number
+  errorCorrection: "L" | "M" | "Q" | "H"
+  readonly version: number
+  data: null
+  onScan?: ((value: string) => void) | undefined
+}
+
+declare class TestBadgeElement extends HTMLElement {
+  size: "small" | "large"
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "test-qr-code": TestQrCodeElement
+    "test-badge": TestBadgeElement
+  }
+}
+
 describe("Html.customElement", () => {
   it("types the property methods and the primitives by the declared Schemas", () => {
     Html.component({ name: "App", model: Schema.String, message: Message })
@@ -126,5 +145,43 @@ describe("Html.customElement", () => {
       "nope",
       {}
     )
+  })
+
+  it("infers prop and ref types from HTMLElementTagNameMap", () => {
+    const h = {} as Html.H<typeof Message.Type>
+    const qr = Html.customElement({ tag: "test-qr-code" })(h)
+
+    expect(qr.prop).type.toBeCallableWith("errorCorrection", "H")
+    expect(qr.prop).type.not.toBeCallableWith("errorCorrection", "Z")
+    expect(qr.prop).type.not.toBeCallableWith("version", 1)
+    expect(qr.prop).type.toBeCallableWith("data", null)
+    expect(qr.prop).type.not.toBeCallableWith("onScan", () => {})
+    expect(qr.prop).type.not.toBeCallableWith("title", "qr")
+    expect(qr).type.not.toHaveProperty("errorCorrection")
+    expect(qr.ref).type.toBeCallableWith(Html.ref("Qr", "test-qr-code"))
+    expect(qr.ref).type.not.toBeCallableWith(Html.ref("Div", "div"))
+
+    const customQr = Html.customElement({
+      tag: "test-qr-code",
+      properties: { size: Schema.String }
+    })(h)
+    expect(customQr.prop).type.toBeCallableWith("size", "256")
+    expect(customQr.prop).type.toBeCallableWith("errorCorrection", "H")
+
+    expect(Html.customElement({ tag: "test-unregistered" })(h).prop).type.not
+      .toBeCallableWith("value", "x")
+
+    const tag = "test-qr-code" as "test-qr-code" | "test-badge"
+    expect(Html.customElement({ tag })(h).prop).type.not.toBeCallableWith(
+      "size",
+      256
+    )
+
+    expect<Html.CustomElementBuilder<never>>().type.toBeAssignableFrom<
+      Html.CustomElementBuilder<never, never, {}, {}, "test-unregistered">
+    >()
+    expect<Html.CustomElementBuilder<never>>().type.not.toBeAssignableFrom<
+      Html.CustomElementBuilder<never, never, {}, {}, "test-qr-code">
+    >()
   })
 })

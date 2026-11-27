@@ -145,6 +145,7 @@
  */
 import * as Context from "effect/Context"
 import * as Schema from "effect/Schema"
+import type * as Types from "effect/Types"
 import * as Component from "../Component.ts"
 import { handle } from "../internal/handler.ts"
 import * as Renderer from "../Renderer.ts"
@@ -1893,17 +1894,38 @@ type TypesOf<S> = {
   readonly [K in keyof S]: S[K] extends Schema.Top ? S[K]["Type"] : never
 }
 
+type ElementOf<Tag extends string> = Tag extends keyof HTMLElementTagNameMap
+  ? HTMLElementTagNameMap[Tag]
+  : HTMLElement
+
+type IsCallback<V> = [V] extends [null | undefined] ? false
+  : [V] extends [Function | null | undefined] ? true
+  : false
+
+type Properties<P, T> = Types.IsUnion<T> extends true ? P
+  :
+    & P
+    & {
+      readonly [
+        K in Exclude<
+          keyof T,
+          keyof HTMLElement | keyof P
+        > as IsCallback<T[K]> extends true ? never
+          : Types.EqualsWith<Pick<T, K>, Types.Mutable<Pick<T, K>>, K, never>
+      ]: T[K]
+    }
+
 /**
- * The builder under a custom element's property methods: an `Element` whose
- * `prop` takes only the declared properties, each typed by its Schema, and
- * whose `on` adds the declared events, each with its decoded `detail` as
- * the payload.
+ * A custom element builder with typed properties and events. Declared
+ * event handlers receive the decoded `detail` as their payload.
  *
  * **Details**
  *
  * `P` maps each declared property to its value type and `E` each declared
  * event to its `detail`. A declared event replaces an HTML event of the same
- * name. `CustomElement` adds a method per declared property.
+ * name. `Node` defaults to `HTMLElementTagNameMap[Tag]`, or `HTMLElement`
+ * for an unregistered tag, and types `ref` and `onMount`.
+ * `CustomElement` adds a method per declared property.
  *
  * @stability experimental
  * @category custom elements
@@ -1915,32 +1937,28 @@ export class CustomElementBuilder<
   out R = never,
   in out P = {},
   in out E = {},
-  out Tag extends string = string
-> extends Element<Msg, R, Omit<Events, keyof E> & E, HTMLElement, Tag> {
-  /**
-   * Writes the declared property `name` on the element as a JavaScript
-   * property, typed by its Schema. The browser host writes it when its value
-   * changes, and resets it when a render leaves it out.
-   *
-   * @since 0.1.0
-   */
-  override prop<K extends keyof P & string>(name: K, value: P[K]): this {
-    return super.prop(name, value)
-  }
+  out Tag extends string = string,
+  in out Node = ElementOf<Tag>
+> extends Element<Msg, R, Omit<Events, keyof E> & E, Node, Tag> {
   /**
    * Phantom: keeps the property methods through `View.WithRequirements`.
    *
    * @since 0.1.0
    */
-  declare readonly "~With"?: CustomElement<Msg, R | this["~Add"], P, E, Tag>
+  declare readonly "~With"?: CustomElement<
+    Msg,
+    R | this["~Add"],
+    P,
+    E,
+    Tag,
+    Node
+  >
 }
 
 type Undeclared<P, K extends string> = K extends keyof P ? never : unknown
 
 /**
- * The HTML methods a declared property can share a name with. Once a
- * declaration takes the name, the HTML method can't be called, so the
- * generated method is the only signature left.
+ * A declared property method replaces any HTML method of the same name.
  *
  * @stability experimental
  * @category custom elements
@@ -1951,8 +1969,20 @@ export interface CustomElementBuilder<
   out R = never,
   in out P = {},
   in out E = {},
-  out Tag extends string = string
+  out Tag extends string = string,
+  in out Node = ElementOf<Tag>
 > {
+  /**
+   * Writes the property `name` on the element as a JavaScript property,
+   * typed by its Schema or by the element's class. The browser host writes
+   * it when its value changes, and resets it when a render leaves it out.
+   *
+   * @since 0.1.0
+   */
+  prop<K extends keyof Properties<P, Node> & string>(
+    name: K,
+    value: Properties<P, Node>[K]
+  ): this
   disabled(
     this: Undeclared<P, "disabled">,
     disabled: boolean
@@ -1994,10 +2024,11 @@ export type CustomElement<
   R = never,
   P = {},
   E = {},
-  Tag extends string = string
+  Tag extends string = string,
+  Node = ElementOf<Tag>
 > =
   & PropertyMethods<P>
-  & CustomElementBuilder<Msg, R, P, E, Tag>
+  & CustomElementBuilder<Msg, R, P, E, Tag, Node>
 
 /**
  * What `customElement` takes: the element's `tag`, its JavaScript
@@ -2070,11 +2101,22 @@ export interface CustomElementBinding<Tag extends string, P, E> {
  * `Schema.Struct({})` declares an event without a payload. An event that
  * doesn't bubble reaches the element's own handler only.
  *
- * `prop` takes the same declarations, typed the same way, and sets a
- * property whose name has no method (see `CustomElementReserved`). The
- * HTML methods, such as `class`, `style` and `on("click", ...)`, work as
- * on any element. Registering the element with `customElements.define`, often by
- * importing its package, is still the app's job.
+ * `prop` accepts declared properties, including names without a method
+ * (see `CustomElementReserved`). For a single tag registered in
+ * `HTMLElementTagNameMap`, it also infers writable fields beyond
+ * `HTMLElement`, excluding methods and callbacks. Inferred values use
+ * the fields' read types; explicit schemas take precedence. The registered
+ * class also types `ref` and `onMount`.
+ *
+ * Declare schemas in `properties` for fluent property methods, callback
+ * properties, or accessors whose setters accept a different type from
+ * their getters' return types. Explicit schemas are also needed when the
+ * tag is absent from `HTMLElementTagNameMap` or has a union type.
+ *
+ * HTML methods such as `class`, `style` and `on("click", ...)` remain
+ * available unless a declared property replaces them. The app must still
+ * register the element with `customElements.define`, often by importing
+ * its package.
  *
  * Throws when `tag` isn't a custom element name, lowercase with a hyphen.
  *
@@ -2137,7 +2179,7 @@ export const customElement = <
       [event, schema]
     ) => [event, Schema.decodeUnknownExit(schema)])
   )
-  class Bound extends CustomElementBuilder<any, any, any, any, any> {
+  class Bound extends CustomElementBuilder<any, any, any, any, any, any> {
     override on(
       event: string,
       handler: View.Handler<unknown, unknown>,
