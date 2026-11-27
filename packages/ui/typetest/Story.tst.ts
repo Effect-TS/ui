@@ -485,3 +485,24 @@ describe("Story.explore", () => {
     })
   })
 })
+
+describe("transition", () => {
+  it("gives the rule the component's Model and Message in check and explore", () => {
+    type Model = Component.Model<typeof SearchBox>
+    type Message = Component.Message<typeof SearchBox>
+    Story.check(SearchBox, {}, {
+      transition: (transition) => {
+        expect(transition).type.toBe<Story.Transition<Model, Message>>()
+      }
+    })
+    Story.explore(SearchBox, {}, {
+      messages: [SearchMessage.Start()],
+      depth: 1,
+      transition: ({ after, before, message }) => {
+        expect(before).type.toBe<Model>()
+        expect(message).type.toBe<Message>()
+        expect(after).type.toBe<Model>()
+      }
+    })
+  })
+})
