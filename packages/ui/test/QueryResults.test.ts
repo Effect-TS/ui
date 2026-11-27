@@ -13,6 +13,7 @@ const makeApp = (options?: {
   readonly interval?: boolean
   readonly debounce?: "300 millis"
   readonly dropPrevious?: boolean
+  readonly interruptPrevious?: boolean
 }) => {
   const db = {
     calls: 0,
@@ -90,6 +91,7 @@ const makeApp = (options?: {
         query: GetUser,
         debounce: options?.debounce,
         dropPrevious: options?.dropPrevious,
+        interruptPrevious: options?.interruptPrevious,
         args: userArgs,
         // The result is written by the runtime: the message only lets update see the change.
         onChange: (result) => CardMessage.UserChanged({ state: result._tag })
@@ -372,6 +374,55 @@ describe("Query results", () => {
         assert.deepStrictEqual(app.db.interrupted, ["1"])
         assert.strictEqual(other.text(), "c=idled=Ann")
         assert.strictEqual(app.db.calls, 3)
+      })
+    )
+  })
+
+  /** a moves from 1 to 2 mid-fetch. Returns the fetches started before the clock moves on. */
+  const supersede = (app: ReturnType<typeof makeApp>) =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(app.List, { cards: ["a:1"] })
+      yield* TestHost.settle
+      yield* TestClock.adjust("5 millis")
+      root.send(app.ListMessage.Set({ cards: ["a:2"] }))
+      yield* TestHost.settle
+      const started = root.fetches().map((fetch) => fetch.logKey)
+      yield* load
+      assert.strictEqual(root.text(), "a=Bea")
+      return { root, started }
+    })
+
+  it.effect("changed args leave the old args' fetch running, and its result fills the cache", () => {
+    const app = makeApp()
+    return run(
+      app.layer,
+      Effect.gen(function*() {
+        const { root } = yield* supersede(app)
+        assert.deepStrictEqual(app.db.interrupted, [])
+        assert.isTrue(
+          AsyncResult.isSuccess(root.entry(app.GetUser, { id: "1" })!.stored)
+        )
+      })
+    )
+  })
+
+  it.effect("interruptPrevious: changed args interrupt the old args' fetch and fetch at once, unless another watcher still needs it", () => {
+    const app = makeApp({ interruptPrevious: true })
+    return run(
+      app.layer,
+      Effect.gen(function*() {
+        const { root, started } = yield* supersede(app)
+        assert.deepStrictEqual(started, ["{\"id\":\"1\"}", "{\"id\":\"2\"}"])
+        assert.deepStrictEqual(app.db.interrupted, ["1"])
+        assert.isUndefined(root.entry(app.GetUser, { id: "1" }))
+        // c leaves 1 mid-fetch while d still watches it: the fetch runs on.
+        const other = yield* TestHost.mount(app.List, { cards: ["c:1", "d:1"] })
+        yield* TestHost.settle
+        yield* TestClock.adjust("5 millis")
+        other.send(app.ListMessage.Set({ cards: ["c:", "d:1"] }))
+        yield* load
+        assert.deepStrictEqual(app.db.interrupted, ["1"])
+        assert.strictEqual(other.text(), "c=idled=Ann")
       })
     )
   })
