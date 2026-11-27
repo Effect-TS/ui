@@ -43,9 +43,14 @@ declare class TestQrCodeElement extends HTMLElement {
   generate(): void
 }
 
+declare class TestBadgeElement extends HTMLElement {
+  size: "small" | "large"
+}
+
 declare global {
   interface HTMLElementTagNameMap {
     "test-qr-code": TestQrCodeElement
+    "test-badge": TestBadgeElement
   }
 }
 
@@ -180,5 +185,18 @@ describe("Html.customElement", () => {
 
     const Plain = Html.customElement({ tag: "test-unregistered" })
     expect(Plain(h).prop).type.not.toBeCallableWith("value", "x")
+
+    const tag = "test-qr-code" as "test-qr-code" | "test-badge"
+    expect(Html.customElement({ tag })(h).prop).type.not.toBeCallableWith(
+      "size",
+      256
+    )
+
+    expect<Html.CustomElementBuilder<never>>().type.toBeAssignableFrom<
+      Html.CustomElementBuilder<never, never, {}, {}, "test-unregistered">
+    >()
+    expect<Html.CustomElementBuilder<never>>().type.not.toBeAssignableFrom<
+      Html.CustomElementBuilder<never, never, {}, {}, "test-qr-code">
+    >()
   })
 })

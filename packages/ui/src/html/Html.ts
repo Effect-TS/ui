@@ -1896,17 +1896,18 @@ type IsCallback<V> = [V] extends [null | undefined] ? false
   : [V] extends [Function | null | undefined] ? true
   : false
 
-type Properties<P, T> =
-  & P
-  & {
-    readonly [
-      K in Exclude<
-        keyof T,
-        keyof HTMLElement | keyof P
-      > as IsCallback<T[K]> extends true ? never
-        : Types.EqualsWith<Pick<T, K>, Types.Mutable<Pick<T, K>>, K, never>
-    ]: T[K]
-  }
+type Properties<P, T> = Types.IsUnion<T> extends true ? P
+  :
+    & P
+    & {
+      readonly [
+        K in Exclude<
+          keyof T,
+          keyof HTMLElement | keyof P
+        > as IsCallback<T[K]> extends true ? never
+          : Types.EqualsWith<Pick<T, K>, Types.Mutable<Pick<T, K>>, K, never>
+      ]: T[K]
+    }
 
 /**
  * The builder under a custom element's property methods: an `Element` whose
@@ -1918,11 +1919,12 @@ type Properties<P, T> =
  *
  * `P` maps each declared property to its value type and `E` each declared
  * event to its `detail`. A declared event replaces an HTML event of the same
- * name. When `Tag` is in `HTMLElementTagNameMap`, its element class types
- * `ref` and `onMount`, and `prop` also takes its writable fields that
- * `HTMLElement` lacks, minus methods and callbacks, each typed as it
- * reads. A declared property wins over a field of the same name.
- * `CustomElement` adds a method per declared property.
+ * name. `Node` defaults to `HTMLElementTagNameMap[Tag]`, or `HTMLElement`
+ * for an unregistered tag, and types `ref` and `onMount`. `prop` also
+ * takes its writable fields that `HTMLElement` lacks, minus methods and
+ * callbacks, each typed as it reads, unless `Tag` is a union. A declared
+ * property wins over a field of the same name. `CustomElement` adds a
+ * method per declared property.
  *
  * @stability experimental
  * @category custom elements
@@ -1934,14 +1936,22 @@ export class CustomElementBuilder<
   out R = never,
   in out P = {},
   in out E = {},
-  in out Tag extends string = string
-> extends Element<Msg, R, Omit<Events, keyof E> & E, ElementOf<Tag>, Tag> {
+  out Tag extends string = string,
+  in out Node = ElementOf<Tag>
+> extends Element<Msg, R, Omit<Events, keyof E> & E, Node, Tag> {
   /**
    * Phantom: keeps the property methods through `View.WithRequirements`.
    *
    * @since 0.1.0
    */
-  declare readonly "~With"?: CustomElement<Msg, R | this["~Add"], P, E, Tag>
+  declare readonly "~With"?: CustomElement<
+    Msg,
+    R | this["~Add"],
+    P,
+    E,
+    Tag,
+    Node
+  >
 }
 
 type Undeclared<P, K extends string> = K extends keyof P ? never : unknown
@@ -1960,7 +1970,8 @@ export interface CustomElementBuilder<
   out R = never,
   in out P = {},
   in out E = {},
-  in out Tag extends string = string
+  out Tag extends string = string,
+  in out Node = ElementOf<Tag>
 > {
   /**
    * Writes the property `name` on the element as a JavaScript property,
@@ -1969,9 +1980,9 @@ export interface CustomElementBuilder<
    *
    * @since 0.1.0
    */
-  prop<K extends keyof Properties<P, ElementOf<Tag>> & string>(
+  prop<K extends keyof Properties<P, Node> & string>(
     name: K,
-    value: Properties<P, ElementOf<Tag>>[K]
+    value: Properties<P, Node>[K]
   ): this
   disabled(
     this: Undeclared<P, "disabled">,
@@ -2014,10 +2025,11 @@ export type CustomElement<
   R = never,
   P = {},
   E = {},
-  Tag extends string = string
+  Tag extends string = string,
+  Node = ElementOf<Tag>
 > =
   & PropertyMethods<P>
-  & CustomElementBuilder<Msg, R, P, E, Tag>
+  & CustomElementBuilder<Msg, R, P, E, Tag, Node>
 
 /**
  * What `customElement` takes: the element's `tag`, its JavaScript
@@ -2096,7 +2108,7 @@ export interface CustomElementBinding<Tag extends string, P, E> {
  * Lit, Stencil and Shoelace do, `prop` also takes the class's writable
  * fields, typed as they read, and that class types `ref` and `onMount`.
  * Declare a property in `properties` for a method, for an element with no
- * types, for a callback, which isn't inferred, or for an accessor whose
+ * types, for a union `tag`, for a callback, which isn't inferred, or for an accessor whose
  * setter takes another type than its getter returns, such as `currentTime`
  * on Shoelace's `sl-animation`. The HTML methods, such as `class`, `style`
  * and `on("click", ...)`, work as on any element. Registering the element
@@ -2164,7 +2176,7 @@ export const customElement = <
       [event, schema]
     ) => [event, Schema.decodeUnknownExit(schema)])
   )
-  class Bound extends CustomElementBuilder<any, any, any, any, any> {
+  class Bound extends CustomElementBuilder<any, any, any, any, any, any> {
     override on(
       event: string,
       handler: View.Handler<unknown, unknown>,
