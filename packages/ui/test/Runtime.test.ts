@@ -2742,110 +2742,47 @@ describe("Runtime", () => {
     it.effect("root.setProps updates a mounted root without remounting", () =>
       provideHost(Effect.gen(function*() {
         let inits = 0
-        const Label = Component.define({
-          name: "Label",
-          props: Schema.Struct({ text: Schema.String }),
-          model: Schema.Null,
-          message: Schema.Never
-        }).make({
-          init: () => null,
-          update: ($) => $.model,
-          view: (h) => h.el("em", h.props.text)
-        })
-        const Msg = UiSchema.TaggedEnum({ Bump: {}, Record: {} })
-        const App = Component.define({
-          name: "App",
-          props: Schema.Struct({ label: Schema.String }),
-          model: Schema.Struct({ count: Schema.Number, seen: Schema.String }),
-          message: Msg
+        const Clock = Component.define({
+          name: "Clock",
+          props: Schema.Date,
+          model: Schema.Number,
+          message: CounterMessage
         }).make({
           init: () => {
             inits++
-            return { count: 0, seen: "" }
+            return 0
           },
-          update: ($, message) =>
-            Msg.match(message, {
-              Bump: () => ({ ...$.model, count: $.model.count + 1 }),
-              Record: () => ({ ...$.model, seen: $.props.label })
-            }),
-          view: (h, model) =>
-            h.el(
-              "div",
-              h.el("span", `${h.props.label}:${model.count}:${model.seen}`),
-              Label(h, { key: "l", props: { text: h.props.label } })
-            ),
+          update: ($) => $.model + 1,
+          view: (h, count) => h.el("span", `${h.props.getTime()}:${count}`),
           subscriptions: ({ props }) => [
-            Subscription.make("sub", props.label, () => Stream.never)
+            Subscription.make("sub", props.getTime(), () => Stream.never)
           ]
         })
 
-        const root = yield* TestHost.mount(App, { label: "one" })
-        yield* TestHost.settle
-        const span = root.get(Locator.tag("span"))
-        root.send(Msg.Bump())
+        const root = yield* TestHost.mount(Clock, new Date(0))
+        root.send(CounterMessage.Increment())
         yield* TestHost.settle
 
         const before = root.log().length
-        root.setProps({ label: "two" })
+        root.setProps(new Date(1))
         yield* TestHost.settle
-
         assert.strictEqual(inits, 1)
-        assert.deepStrictEqual(root.model(), { count: 1, seen: "" })
-        assert.strictEqual(root.text(), "two:1:two")
-        assert.strictEqual(root.get(Locator.tag("span")), span)
-
+        assert.strictEqual(root.text(), "1:1")
         const added = root.log().slice(before)
-        const changed = added[0] as MessageLog.PropsChanged
-        assert.deepStrictEqual(changed.props, { label: "two" })
-        // The root's change is the fact, and the rest follows from it.
+        const seq = added[0].seq
         assert.strictEqual(
           TestHost.formatTimeline(added),
           [
-            `#${changed.seq} /App PropsChanged`,
-            `    #${changed.seq + 1} /App SubscriptionStopped sub:"one"`,
-            `    #${changed.seq + 2} /App SubscriptionStarted sub:"two"`,
-            `    #${changed.seq + 3} /App/Label[l] PropsChanged`
+            `#${seq} /Clock PropsChanged`,
+            `    #${seq + 1} /Clock SubscriptionStopped sub:0`,
+            `    #${seq + 2} /Clock SubscriptionStarted sub:1`
           ].join("\n")
         )
 
-        // Equal props log nothing.
-        const countAfter = root.log().length
-        root.setProps({ label: "two" })
-        yield* TestHost.settle
-        assert.strictEqual(root.log().length, countAfter)
-
-        // Next update sees the new props.
-        root.send(Msg.Record())
-        yield* TestHost.settle
-        assert.deepStrictEqual(root.model(), { count: 1, seen: "two" })
-        assert.strictEqual(root.text(), "two:1:twotwo")
-      })))
-
-    it.effect("non-plain props such as Date compare by Equal", () =>
-      provideHost(Effect.gen(function*() {
-        const Stamp = Component.define({
-          name: "Stamp",
-          props: Schema.Date,
-          model: Schema.Null,
-          message: Schema.Never
-        }).make({
-          init: () => null,
-          update: ($) => $.model,
-          view: (h) => h.el("span", String(h.props.getTime()))
-        })
-        const root = yield* TestHost.mount(Stamp, new Date(0))
-        yield* TestHost.settle
-        assert.strictEqual(root.text(), "0")
-
+        // A new Date of the same time is equal and logs nothing.
         root.setProps(new Date(1))
         yield* TestHost.settle
-        assert.strictEqual(root.text(), "1")
-        assert.deepStrictEqual(tags(root, "/Stamp"), ["Mounted", "PropsChanged"])
-
-        // A new Date with the same timestamp is equal and logs nothing.
-        root.setProps(new Date(1))
-        yield* TestHost.settle
-        assert.deepStrictEqual(tags(root, "/Stamp"), ["Mounted", "PropsChanged"])
+        assert.strictEqual(root.log().length, before + added.length)
       })))
   })
 

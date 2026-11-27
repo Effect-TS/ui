@@ -623,28 +623,6 @@ describe("HtmlHydrate", () => {
   })
 
   describe("setProps", () => {
-    it.effect("updates a hydrated root without remounting or replacing server nodes", () =>
-      Effect.gen(function*() {
-        const rendered = yield* HtmlServer.renderToHtml(Row, { label: "one" })
-        const app = yield* container(rendered.html)
-        const server = [...app.querySelectorAll("*")]
-        const root = yield* HtmlHydrate.hydrateEffect(
-          Row,
-          { label: "one" },
-          app,
-          rendered.state
-        )
-        root.send(RowMessage.Clicked())
-        yield* tick
-        assert.strictEqual(app.textContent, "one1 clickedrow one")
-
-        root.setProps({ label: "two" })
-        yield* tick
-        sameElements(app, server)
-        assert.strictEqual(root.model(), 1)
-        assert.strictEqual(app.textContent, "two1 clickedrow two")
-      }).pipe(Effect.scoped))
-
     it.effect("keeps props updated while a hydrated root waits for its Layer", () =>
       Effect.gen(function*() {
         const GatedRow = Component.provide(

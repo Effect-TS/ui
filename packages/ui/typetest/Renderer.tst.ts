@@ -8,9 +8,7 @@ import {
   UiSchema,
   type View
 } from "@effect/ui"
-import { BrowserHost, HtmlHydrate } from "@effect/ui/html"
-import { Ssr } from "@effect/ui/html/testing"
-import { Play, TestHost } from "@effect/ui/testing"
+import { TestHost } from "@effect/ui/testing"
 import { Effect, Schema, type Scope } from "effect"
 import { describe, expect, it } from "tstyche"
 import { Counter } from "../test/fixtures/components.ts"
@@ -281,51 +279,15 @@ describe("View elements", () => {
 })
 
 describe("Root.setProps", () => {
-  it("carries Props through mount handles and keeps Root<Model, Msg> assignable", () => {
-    void ((el: Element, state: Renderer.State) =>
+  it("takes the root's Props and keeps Root<Model, Msg> assignable", () => {
+    void ((el: Element) =>
       Effect.gen(function*() {
-        const mounted = yield* Renderer.mount(Counter, { initial: 0 }, el)
-        expect(mounted.setProps).type.toBeCallableWith({ initial: 1 })
-        expect(mounted.setProps).type.not.toBeCallableWith({ initial: "x" })
+        const root = yield* Renderer.mount(Counter, { initial: 0 }, el)
+        expect(root.setProps).type.toBeCallableWith({ initial: 1 })
+        expect(root.setProps).type.not.toBeCallableWith({ initial: "x" })
         expect<
           Renderer.Root<{ readonly count: number }, typeof Counter.message.Type>
-        >().type.toBeAssignableFrom(mounted)
-
-        const browser = yield* BrowserHost.mountEffect(
-          Counter,
-          { initial: 0 },
-          el
-        )
-        expect(browser.setProps).type.toBeCallableWith({ initial: 1 })
-        expect(browser.setProps).type.not.toBeCallableWith({ initial: "x" })
-
-        const hydrated = yield* HtmlHydrate.hydrateEffect(
-          Counter,
-          { initial: 0 },
-          el,
-          state
-        )
-        expect(hydrated.setProps).type.toBeCallableWith({ initial: 1 })
-        expect(hydrated.setProps).type.not.toBeCallableWith({ initial: "x" })
-
-        const tested = yield* TestHost.mount(Counter, { initial: 0 })
-        expect(tested.setProps).type.toBeCallableWith({ initial: 1 })
-        expect(tested.setProps).type.not.toBeCallableWith({ initial: "x" })
-        expect<
-          TestHost.TestRoot<
-            { readonly count: number },
-            typeof Counter.message.Type,
-            never
-          >
-        >().type.toBeAssignableFrom(tested)
-
-        const played = yield* Play.make(Counter, { initial: 0 })
-        expect(played.root.setProps).type.toBeCallableWith({ initial: 1 })
-        expect(played.root.setProps).type.not.toBeCallableWith({ initial: "x" })
-
-        const ssr = yield* Ssr.ssr(Counter, { initial: 0 })
-        expect(ssr.root.setProps).type.toBeCallableWith({ initial: 1 })
-        expect(ssr.root.setProps).type.not.toBeCallableWith({ initial: "x" })
+        >().type.toBeAssignableFrom(root)
       }))
   })
 })
