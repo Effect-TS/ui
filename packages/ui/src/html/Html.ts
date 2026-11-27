@@ -871,10 +871,10 @@ export class VoidElement<
    *
    * **Details**
    *
-   * The remaining tokens are joined with one space after any classes already on
-   * the builder, as `classNames` does. When no classes remain, the attribute is
-   * omitted instead of rendering `class=""`. Use `attr("class", value)` to
-   * replace or `attr("class", undefined)` to clear.
+   * The remaining tokens are joined with one space, as `classNames` does, and
+   * added after the classes the builder already has. When no classes remain,
+   * the attribute is omitted instead of rendering `class=""`. Use
+   * `attr("class", value)` to replace or `attr("class", undefined)` to clear.
    *
    * **Example** (Adding classes conditionally)
    *
