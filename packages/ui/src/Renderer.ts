@@ -592,9 +592,9 @@ export type HostOf<V> = [V] extends [never] ? never
  * something else owns, the head is computed and the Router still reads its
  * title, but the host is never given it.
  *
- * `key` sets the root's path to `/<name>[<key>]` instead of `/<name>`, so
- * mounting the same root component more than once gives each mount distinct
- * paths and generated element ids.
+ * `key` changes the root's path from `/<name>` to `/<name>[<key>]`.
+ * Use distinct keys when mounting the same root component more than once
+ * in one document to avoid generated element id collisions.
  *
  * **Gotchas**
  *
@@ -683,8 +683,8 @@ export interface QueryOptions {
  * `elements` lists the vocabularies the server renders, by name, as a host's
  * `elements` does.
  *
- * `key` sets the root's path to `/<name>[<key>]` and writes `~key` into the
- * state so hydration adopts the root under the same path.
+ * Use distinct `key` options for repeated roots in one document. The key
+ * sets the root's path to `/<name>[<key>]` and is saved in state for hydration.
  *
  * `props` may be an Effect, as with `mount`: it is run once, before `init`,
  * and its requirements are added to the render's. The client resolves its

@@ -158,10 +158,9 @@ const serverHtmlHost: Context.Service.Shape<typeof Html.Host> = {
  * `RouteMismatch`. The default is HTML rendered per request, whose entries
  * hydrate fresh.
  *
- * `key` sets the root's path to `/<name>[<key>]` and writes `~key` into
- * `state`, so `HtmlHydrate.hydrate` adopts the root at the same path without
- * needing the key again. Use distinct keys when one document renders the same
- * root component more than once.
+ * Use distinct `key` options when rendering the same root component more than
+ * once in one document. Each key sets the root's path to `/<name>[<key>]`
+ * and is saved in `state` for `HtmlHydrate.hydrate` to reuse automatically.
  *
  * **Gotchas**
  *

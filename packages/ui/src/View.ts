@@ -2147,10 +2147,9 @@ export interface HelperBase<Msg, Props> {
     ...group: Command.GroupArg<Args, G>
   ): boolean
   /**
-   * An id for an element of this instance, derived from the instance's path:
-   * the same on the server and the client, and different for every instance
-   * under a distinct root path (pass a distinct `key` when mounting the same
-   * root component more than once on one document).
+   * An element id derived from the instance's path, matching server and client.
+   * Use distinct mount `key` options for repeated roots in one document to
+   * avoid collisions.
    */
   id(name: string, key?: string | number | undefined): string
   /**

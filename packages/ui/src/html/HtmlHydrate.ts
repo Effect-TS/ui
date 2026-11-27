@@ -726,10 +726,9 @@ export const hydrateEffect = <
  * Pass the `state` from `HtmlServer.renderToHtml`, with the server's HTML
  * already in `container` and the same props, to adopt the server's nodes
  * instead of building them. `Router.props` gives the same props on both
- * sides when both Routers are at the same URL. If the server rendered with a
- * `key`, `hydrate` reads it from `state` automatically, so `key` is not an
- * option here. Everything else, the remaining options included, is as
- * `BrowserHost.mount`.
+ * sides when both Routers are at the same URL. Options are as in
+ * `BrowserHost.mount`, except `key`: hydration reads the server's key from
+ * `state` automatically.
  *
  * Each instance adopts its server Model and replays `init` only to recover
  * its Commands, so the events `init` emits are dropped; server Commands the

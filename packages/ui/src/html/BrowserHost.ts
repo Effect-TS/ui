@@ -423,9 +423,8 @@ export interface MountOptions<
    */
   readonly head?: boolean | undefined
   /**
-   * Distinguishes multiple mounts of the same root component on one document:
-   * the root's path becomes `/<name>[<key>]`, giving each mount unique
-   * generated element ids.
+   * Sets the root's path to `/<name>[<key>]`. Use distinct keys for repeated
+   * mounts of the same component in one document to avoid element id collisions.
    */
   readonly key?: string | undefined
 }
@@ -465,9 +464,9 @@ export interface MountOptions<
  * tags and the `<html>` and `<body>` attributes. A mount embedded in a page that another mount, or the
  * server, owns passes `head: false`: it still computes its head, and its
  * Router announces the title, but it leaves the document alone. With two
- * mounts on one document, only the one that owns the head writes it; if they
- * mount the same root component, pass a distinct `key` to each so their paths
- * and generated element ids don't collide.
+ * mounts on one document, only the one that owns the head writes it.
+ * For repeated mounts of the same component, also pass distinct `key` options
+ * to avoid generated element id collisions.
  *
  * **Example** (Launching an app)
  *
