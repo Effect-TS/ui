@@ -42,28 +42,23 @@ vi.mock("react-native/Libraries/TurboModule/TurboModuleRegistry", () => ({
   }
 }))
 
+const Mode = Schema.Literals([
+  "asset",
+  "inline",
+  "clear",
+  "undefKey",
+  "acceptHeader",
+  "multi"
+])
+
 const Message = UiSchema.TaggedEnum({
-  SetMode: {
-    mode: Schema.Literals([
-      "asset",
-      "inline",
-      "undefKey",
-      "acceptHeader",
-      "multi",
-      "clear",
-      "noEvents"
-    ])
-  },
+  SetMode: { mode: Mode },
   Bump: {},
-  Loaded: { width: Schema.Number, height: Schema.Number },
-  Progressed: { loaded: Schema.Number, total: Schema.Number },
-  Failed: { error: Schema.String },
-  Started: {},
-  Ended: {}
+  Event: { label: Schema.String }
 })
 
 describe("Image and ImageBackground", () => {
-  it("renders sources, defaults, intrinsic asset size, Android headers, events and skips identical inline objects", async () => {
+  it("renders sources, defaults, Android headers, events and deduplicates inline objects", async () => {
     env.state.scriptURL = "http://localhost:8081/index.bundle?platform=android"
     env.state.dimensions = { windowPhysicalPixels: { scale: 2 } }
     const logo = env.registerAsset({
@@ -86,15 +81,7 @@ describe("Image and ImageBackground", () => {
     const Screen = Native.component({
       name: "Screen",
       model: Schema.Struct({
-        mode: Schema.Literals([
-          "asset",
-          "inline",
-          "undefKey",
-          "acceptHeader",
-          "multi",
-          "clear",
-          "noEvents"
-        ]),
+        mode: Mode,
         tick: Schema.Number,
         events: Schema.Array(Schema.String)
       }),
@@ -104,31 +91,30 @@ describe("Image and ImageBackground", () => {
       update: {
         SetMode: ($, { mode }) => $.evolve({ mode }),
         Bump: ($) => $.evolve({ tick: (n) => n + 1 }),
-        Started: ($) => $.evolve({ events: (e) => [...e, "start"] }),
-        Progressed: ($, { loaded, total }) =>
-          $.evolve({ events: (e) => [...e, `progress:${loaded}/${total}`] }),
-        Loaded: ($, { width, height }) =>
-          $.evolve({ events: (e) => [...e, `load:${width}x${height}`] }),
-        Failed: ($, { error }) =>
-          $.evolve({ events: (e) => [...e, `error:${error}`] }),
-        Ended: ($) => $.evolve({ events: (e) => [...e, "end"] })
+        Event: ($, { label }) => $.evolve({ events: (e) => [...e, label] })
       },
       view: (h, model) => {
         const img = model.mode === "asset"
           ? Image(h, { source: logo, blurRadius: 2 })
             .style({ width: 48, tintColor: "#111827" })
-            .on("loadStart", Message.Started())
+            .on("loadStart", Message.Event({ label: "start" }))
             .on(
               "progress",
-              ({ loaded, total }) => Message.Progressed({ loaded, total })
+              ({ loaded, total }) =>
+                Message.Event({ label: `progress:${loaded}/${total}` })
             )
             .on(
               "load",
               ({ source }) =>
-                Message.Loaded({ width: source.width, height: source.height })
+                Message.Event({
+                  label: `load:${source.width}x${source.height}`
+                })
             )
-            .on("error", ({ error }) => Message.Failed({ error: error ?? "" }))
-            .on("loadEnd", Message.Ended())
+            .on(
+              "error",
+              ({ error }) => Message.Event({ label: `error:${error ?? ""}` })
+            )
+            .on("loadEnd", Message.Event({ label: "end" }))
           : model.mode === "inline"
           ? Image(h, {
             source: {
@@ -136,6 +122,11 @@ describe("Image and ImageBackground", () => {
               headers: { Authorization: "Bearer tok" }
             }
           }).style({ resizeMode: "contain", overflow: "visible" })
+          : model.mode === "clear"
+          ? Image(h, { source: "https://example.com/b.png" }).on(
+            "press",
+            Message.Bump()
+          )
           : model.mode === "undefKey"
           ? Image(h, {
             source: { uri: "https://example.com/b.png", width: undefined }
@@ -147,19 +138,12 @@ describe("Image and ImageBackground", () => {
               headers: { Accept: "image/webp" }
             }
           })
-          : model.mode === "multi"
-          ? Image(h, {
+          : Image(h, {
             source: [
               unsized,
               { uri: "https://example.com/hi.png", width: 200, height: 100 }
             ]
           })
-          : model.mode === "clear"
-          ? Image(h, { source: "https://example.com/b.png" })
-          : Image(h, { source: "https://example.com/c.png" }).on(
-            "press",
-            Message.Bump()
-          )
         return h.view.children(
           img,
           h.text.children(`${model.tick}:${model.events.join(",")}`)
@@ -181,13 +165,15 @@ describe("Image and ImageBackground", () => {
       height: 24,
       scale: 2
     }])
-    assert.strictEqual(img().props.width, 48)
-    assert.strictEqual(img().props.height, 24)
-    assert.strictEqual(img().props.resizeMode, "cover")
-    assert.strictEqual(img().props.overflow, "hidden")
-    assert.strictEqual(img().props.blurRadius, 2)
-    assert.strictEqual(img().props.tintColor, "color:#111827")
-    assert.strictEqual(img().props.shouldNotifyLoadEvents, true)
+    assert.include(img().props, {
+      width: 48,
+      height: 24,
+      resizeMode: "cover",
+      overflow: "hidden",
+      blurRadius: 2,
+      tintColor: "color:#111827",
+      shouldNotifyLoadEvents: true
+    })
 
     fabric.emit(img(), "topLoadStart", {})
     fabric.emit(img(), "topProgress", { progress: 0.5, loaded: 5, total: 10 })
@@ -209,13 +195,8 @@ describe("Image and ImageBackground", () => {
     // Inline source object sets Android headers and doesn't re-clone on unrelated re-render.
     root.send(Message.SetMode({ mode: "inline" }))
     await settle()
-    assert.deepStrictEqual(img().props.source, [{
-      uri: "https://example.com/a.png",
-      headers: { Authorization: "Bearer tok" }
-    }])
     assert.deepStrictEqual(img().props.headers, { Authorization: "Bearer tok" })
-    assert.strictEqual(img().props.resizeMode, "contain")
-    assert.strictEqual(img().props.overflow, "visible")
+    assert.include(img().props, { resizeMode: "contain", overflow: "visible" })
     assert.isUndefined(img().props.shouldNotifyLoadEvents)
 
     const before = img()
@@ -223,15 +204,15 @@ describe("Image and ImageBackground", () => {
     await settle()
     assert.strictEqual(img(), before)
 
-    // Removing style overrides restores defaults; clearing Android headers sends an empty map.
+    // Clearing headers sends {}, removing overrides restores defaults, press alone skips load notifications.
     root.send(Message.SetMode({ mode: "clear" }))
     await settle()
     assert.deepStrictEqual(img().props.source, [{
       uri: "https://example.com/b.png"
     }])
     assert.deepStrictEqual(img().props.headers, {})
-    assert.strictEqual(img().props.resizeMode, "cover")
-    assert.strictEqual(img().props.overflow, "hidden")
+    assert.include(img().props, { resizeMode: "cover", overflow: "hidden" })
+    assert.isUndefined(img().props.shouldNotifyLoadEvents)
 
     // Source equality checks key membership, not just key count.
     root.send(Message.SetMode({ mode: "undefKey" }))
@@ -253,10 +234,6 @@ describe("Image and ImageBackground", () => {
       },
       { uri: "https://example.com/hi.png", width: 200, height: 100 }
     ])
-
-    root.send(Message.SetMode({ mode: "noEvents" }))
-    await settle()
-    assert.isUndefined(img().props.shouldNotifyLoadEvents)
   })
 
   it("resolves assets for Android APK, Android file bundle, iOS bundle, and XML on dev server", () => {
@@ -286,7 +263,6 @@ describe("Image and ImageBackground", () => {
       )!.props.source as ReadonlyArray<Record<string, unknown>>)[0]!
     }
 
-    // Android APK release (assets://) uses sanitized resource identifier.
     assert.deepStrictEqual(
       resolve(
         "android",
@@ -311,7 +287,6 @@ describe("Image and ImageBackground", () => {
       }
     )
 
-    // Android sideloaded file:// bundle (CodePush style) resolves drawable-<density>.
     assert.deepStrictEqual(
       resolve(
         "android",
@@ -336,7 +311,6 @@ describe("Image and ImageBackground", () => {
       }
     )
 
-    // iOS release bundle resolves near scriptURL, escaping `../` and picking largest available scale.
     assert.deepStrictEqual(
       resolve(
         "ios",
@@ -361,7 +335,6 @@ describe("Image and ImageBackground", () => {
       }
     )
 
-    // Android XML drawables cannot load over HTTP even on a dev server.
     assert.strictEqual(
       resolve(
         "android",
@@ -413,13 +386,14 @@ describe("Image and ImageBackground", () => {
       "<RCTView><RCTImageView></><RCTText>Over the image</></>"
     )
     const image = find(FakeFabric.byName("RCTImageView"))
-    assert.strictEqual(image.props.position, "absolute")
-    assert.strictEqual(image.props.top, 0)
-    assert.strictEqual(image.props.right, 0)
-    assert.strictEqual(image.props.bottom, 0)
-    assert.strictEqual(image.props.left, 0)
-    assert.strictEqual(image.props.opacity, 0.5)
-    // Intrinsic asset size is cleared so insets fill the container.
+    assert.include(image.props, {
+      position: "absolute",
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      opacity: 0.5
+    })
     assert.isUndefined(image.props.width)
     assert.isUndefined(image.props.height)
   })

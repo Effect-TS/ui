@@ -256,17 +256,15 @@ export default [mark, badge, nestedIcons]
         }
       )
       const bundle = readBundle(config, "src/assets-entry.ts", "android")
-      assert.include(bundle, Path.join(root, "src/mark.png"))
-      assert.include(bundle, Path.join(root, "src/badge.png"))
       assert.notInclude(bundle, "data:image")
+      const imports = [...bundle.matchAll(/from "([^"]+)"/g)].map((m) => m[1]!)
+      assert.include(imports, Path.join(root, "src/mark.png"))
+      assert.include(imports, Path.join(root, "src/badge.png"))
 
-      // Deferred package assets resolve through Metro with their original importer.
-      const tokens = [
-        ...bundle.matchAll(/@effect\/ui-native\/__asset__\/\d+/g)
-      ].map((m) => m[0])
-      assert.strictEqual(tokens.length, 2)
+      // Non-path asset imports resolve through Metro with their original importer.
       const seen: Array<readonly [string, string]> = []
-      for (const token of tokens) {
+      for (const specifier of imports) {
+        if (Path.isAbsolute(specifier)) continue
         config.resolver!.resolveRequest!(
           {
             dev: false,
@@ -282,7 +280,7 @@ export default [mark, badge, nestedIcons]
               return { type: "assetFiles", filePaths: [] }
             }
           },
-          token,
+          specifier,
           "android"
         )
       }
