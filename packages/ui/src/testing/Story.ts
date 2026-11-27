@@ -66,6 +66,7 @@ import type * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
 import type * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
+import * as search from "../internal/explore.ts"
 import * as replay from "../internal/replay.ts"
 import * as cursor from "../internal/steps.ts"
 import * as engine from "../internal/story.ts"
@@ -498,6 +499,230 @@ export const check = <
     component as unknown as Component.Any,
     () => start(component, props) as any,
     options as runner.Options | undefined
+  )
+
+// ---------------------------------------------------------------------------
+// Exploring
+// ---------------------------------------------------------------------------
+
+/**
+ * The results `explore` settles a running Command with. A function takes
+ * the Command's args. Empty or missing lists never settle it.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface ExploreResults<D> {
+  readonly success?:
+    | ReadonlyArray<Command.Result<D>>
+    | ((args: Command.Definition.Args<D>) => ReadonlyArray<Command.Result<D>>)
+    | undefined
+  readonly error?:
+    | ReadonlyArray<Command.Failure<D>>
+    | ((args: Command.Definition.Args<D>) => ReadonlyArray<Command.Failure<D>>)
+    | undefined
+}
+
+/**
+ * A pending Command as `explore`'s invariant sees it: its name and args,
+ * not the work it runs.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface ExploredPending<Msg>
+  extends Omit<Shared.Pending<Msg>, "command">
+{
+  readonly command: Pick<Shared.Pending<Msg>["command"], "name" | "args">
+}
+
+/**
+ * A Story record without interruption history or pending Command internals,
+ * which the search omits when comparing records. Each pending Command
+ * exposes only its name and args.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type ExploredRecord<C extends AnyComponent> =
+  & Omit<Steps<C>["current"], "interrupted" | "pending">
+  & { readonly pending: ReadonlyArray<ExploredPending<Component.Message<C>>> }
+
+/**
+ * A non-stream Command that `explore` can settle.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type ExploredCommand = Command.Definition<any, any, false, any, any>
+
+/**
+ * The options of `explore`: the moves it tries, what it checks, and its
+ * bounds.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface ExploreOptions<
+  C extends AnyComponent,
+  O extends ReadonlyArray<ExploredCommand> = []
+> {
+  /** The messages to send at each record. A function takes the Model. */
+  readonly messages:
+    | ReadonlyArray<Component.Message<C>>
+    | ((model: Component.Model<C>) => ReadonlyArray<Component.Message<C>>)
+  /** Results by Command: `[[Search, { success: ({ text }) => [...] }]]`. */
+  readonly commands?:
+    | {
+      readonly [K in keyof O]: readonly [
+        command: O[K],
+        results: ExploreResults<O[K]>
+      ]
+    }
+    | undefined
+  /**
+   * Checked after `init` and every move, before events and sends are
+   * acknowledged. Receives an `ExploredRecord` and fails by returning
+   * `false` or throwing.
+   */
+  readonly invariant?:
+    | ((current: ExploredRecord<C>) => boolean | void)
+    | undefined
+  /** Maximum moves per story. Must be a nonnegative safe integer. */
+  readonly depth: number
+  /** Maximum distinct records before throwing. Must be a positive safe integer. Defaults to 10,000. */
+  readonly states?: number | undefined
+}
+
+/**
+ * What a passing `explore` searched: the distinct records it reached, and
+ * whether they are every record reachable at any depth.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Explored {
+  readonly states: number
+  /** No move from a record reached leads to a new one, so no story of any length fails. */
+  readonly closed: boolean
+}
+
+/**
+ * Explores stories up to `depth` moves using the supplied component, props,
+ * messages and Command results. Returns `{ states, closed }` on success,
+ * or throws with a shortest failing path as Story steps.
+ *
+ * **Details**
+ *
+ * A move sends one of `messages`, or settles a running Command with one of
+ * its listed results: `resolve` for each `success`, `fail` for each
+ * `error`. An `afterRefetch` wait ends with `waitExpired`. Before sending
+ * a message, the search calls `keepPending` for blocking Commands and
+ * unloaded queries, allowing messages to arrive while Commands run. As in
+ * a written Story, only the oldest run with the same name and args settles.
+ *
+ * After `init` and every move, the Model is checked against its Schema,
+ * then `invariant` runs, then events and sends are checked against their
+ * Schemas and acknowledged. A move that throws fails too.
+ *
+ * Moves run breadth first, messages as listed, then pending Commands oldest
+ * first. With deterministic inputs and component logic, the first failure
+ * is a shortest one and is the same on every run.
+ * Two records that agree on the Model, the query results and the pending
+ * Commands, each with the messages its results deliver, share the rest of
+ * the search. Plain objects and arrays match their copies, with the same own
+ * properties in the same order and the same sharing of references. This
+ * merging applies only to records without opaque objects, functions or
+ * accessors. A record containing a `Date`, an `Option` or a class instance
+ * merges only with one containing the same objects, which may use more of
+ * the state budget. Comparing plain data with an external constant by
+ * reference can hide a failing path; avoid such comparisons in components
+ * tested with `explore`.
+ *
+ * Running out of the `states` budget throws, so a pass covers the whole
+ * depth bound. `closed: true` means no further moves reach new records;
+ * `closed: false` means the search reached its depth limit without closure.
+ *
+ * **Gotchas**
+ *
+ * A Command with no `commands` entry fails the search naming it, unless it
+ * is a silent `Command.Service`, which settles with `Component.noop`.
+ * A stream Command fails the search when it is issued. Queries stay
+ * unloaded, and props, subscriptions and `shared` don't change.
+ *
+ * **Example** (Results match the query)
+ *
+ * ```ts import.meta.vitest
+ * import { Command, Component, UiSchema } from "@effect/ui"
+ * import { Story } from "@effect/ui/testing"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Message = UiSchema.TaggedEnum({
+ *   Typed: { text: Schema.String },
+ *   GotResults: { query: Schema.String }
+ * })
+ *
+ * const Search = Command.make(
+ *   "search/Search",
+ *   { args: { text: Schema.String }, mode: "switch" },
+ *   ({ text }) => Effect.succeed(Message.GotResults({ query: text }))
+ * )
+ *
+ * const SearchBox = Component.define({
+ *   name: "SearchBox",
+ *   model: Schema.Struct({
+ *     query: Schema.String,
+ *     results: Schema.NullOr(Schema.String)
+ *   }),
+ *   message: Message
+ * }).make({
+ *   init: () => ({ query: "", results: null }),
+ *   update: ($, message) =>
+ *     Message.match(message, {
+ *       Typed: ({ text }) =>
+ *         $.set({ ...$.model, query: text }).run(Search.make({ text })),
+ *       GotResults: ({ query }) => ({ ...$.model, results: query })
+ *     }),
+ *   view: (h, model) => h.el("p").children(model.query)
+ * })
+ *
+ * const explored = Story.explore(SearchBox, {}, {
+ *   messages: [Message.Typed({ text: "a" }), Message.Typed({ text: "ab" })],
+ *   commands: [[Search, {
+ *     success: ({ text }) => [Message.GotResults({ query: text })]
+ *   }]],
+ *   invariant: (story) =>
+ *     story.pending.length > 0 || story.model.results === null ||
+ *     story.model.results === story.model.query,
+ *   depth: 6
+ * })
+ * console.log(explored.closed) // true
+ * ```
+ *
+ * @stability experimental
+ * @category exploring
+ * @since 0.1.0
+ */
+export const explore = <
+  C extends AnyComponent,
+  const O extends ReadonlyArray<ExploredCommand> = []
+>(
+  component: C,
+  props: Component.Props<C>,
+  options: ExploreOptions<C, O>
+): Explored =>
+  search.explore(
+    explore,
+    (state) => new StepsImpl("Story", state),
+    component as unknown as Component.Any,
+    props,
+    options
   )
 
 /**

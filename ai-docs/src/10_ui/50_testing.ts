@@ -96,6 +96,32 @@ describe("NoteEditor", () => {
       // pending or an event isn't acknowledged.
     }))
 
+  it("story: every order of edits, saves and results within four steps", () => {
+    // Messages can arrive while saves run. Explore tries their settlement
+    // orders and throws a shortest failing path as Story steps.
+    const { closed } = Story.explore(NoteEditor, { note }, {
+      messages: [
+        NoteEditorMessage.UpdatedBody({ body: edited.body }),
+        NoteEditorMessage.RequestedSave()
+      ],
+      // A function takes the Command's args. A Command issued with no entry
+      // fails the search, unless it is a silent `Command.Service`.
+      commands: [[SaveNote, {
+        success: ({ note }) => [
+          NoteEditorMessage.SucceededSaveNote({ note }),
+          NoteEditorMessage.FailedSaveNote({ reason: "offline" })
+        ]
+      }]],
+      // Checked after every move, before its events are acknowledged.
+      invariant: (story) =>
+        story.emitted.every((event) => event.note.body === story.model.saved),
+      depth: 4
+    })
+    // `closed` says no move leads to a record not seen yet, so the rule holds
+    // at any length. `edits` counts every keystroke, so this one never closes.
+    assert.isFalse(closed)
+  })
+
   it.effect("scene: saves the draft and tells its parent", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(NoteEditor, { note })
