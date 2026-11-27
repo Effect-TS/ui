@@ -29,6 +29,7 @@ import * as Layer from "effect/Layer"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Scope from "effect/Scope"
 import RCTDeviceEventEmitter from "react-native/Libraries/EventEmitter/RCTDeviceEventEmitter"
+import NativeDeviceEventManager from "react-native/Libraries/NativeModules/specs/NativeDeviceEventManager"
 import processColor from "react-native/Libraries/StyleSheet/processColor"
 import Platform from "react-native/Libraries/Utilities/Platform"
 import * as Native from "./Native.ts"
@@ -178,6 +179,14 @@ const install = () => {
       ;(level === "error" || level === "fatal" ? console.error : console.log)(
         ...args
       )
+    }
+  })
+  // Android sends Back to JS first, and runs the activity's default action,
+  // closing it, only when asked to. React Native's BackHandler asks when no
+  // handler consumes the press, so this asks only while it isn't loaded.
+  RCTDeviceEventEmitter.addListener("hardwareBackPress", () => {
+    if (RCTDeviceEventEmitter.listenerCount("hardwareBackPress") === 1) {
+      NativeDeviceEventManager?.invokeDefaultBackPressHandler()
     }
   })
   dev.install(register)

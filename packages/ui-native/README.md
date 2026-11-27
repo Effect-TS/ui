@@ -40,10 +40,14 @@ export default NativeMetro.withEffectUi(
 
 A release build (`NODE_ENV=production`, as `expo export` and Gradle's release tasks set it) is pre-bundled with Vite, which tree-shakes `effect` and `@effect/ui`, and Metro bundles the result with React Native. Packages with native code or assets are left to Metro: `react-native`, `expo`, and their scoped and prefixed packages by default, and any others named in the `external` option.
 
+Each platform in the `platforms` option (`["android", "ios"]` by default) gets its own pre-bundle, resolved the way Metro resolves modules: `title.android.ts` or `title.ios.ts` first, then `title.native.ts`, then `title.ts`, with Metro's `sourceExts` and `resolverMainFields`. Other platforms, such as web, get the sources.
+
 In development Metro serves the sources. Editing a module that exports only components swaps them in place and keeps their state; editing any other module reloads the app.
+
+On Android, Back closes the app when nothing handles it. An app that adds handlers with React Native's `BackHandler` takes over that default, as it does in a React app.
 
 React Native doesn't load the `expo` package itself: an app that doesn't import it saves about 1 MB of Hermes bytecode.
 
 ## Example
 
-See `examples/native`, an Expo app with a counter, a controlled input, nested text, and a scrolling list. Its `babel.config.cjs` runs TypeScript's type stripper before Expo's, because Metro compiles the workspace's TypeScript sources there and Flow's stripper rejects `declare` class fields.
+See `examples/native` and its README, which covers the development client, release builds and measuring the bundle. It is an Expo app with a counter, a controlled input, nested text, and a scrolling list. Its `babel.config.cjs` runs TypeScript's type stripper before Expo's, because Metro compiles the workspace's TypeScript sources there and Flow's stripper rejects `declare` class fields.

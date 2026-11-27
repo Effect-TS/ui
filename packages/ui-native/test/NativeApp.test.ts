@@ -7,9 +7,30 @@ import * as FakeFabric from "./utils/FakeFabric.ts"
 
 // React Native ships Flow sources, so the modules NativeApp reaches into
 // are stood in for.
+const native = vi.hoisted(() => {
+  const listeners = new Map<string, Array<() => void>>()
+  return {
+    backPresses: 0,
+    emitter: {
+      addListener(type: string, listener: () => void) {
+        listeners.set(type, [...(listeners.get(type) ?? []), listener])
+      },
+      listenerCount: (type: string) => listeners.get(type)?.length ?? 0,
+      emit(type: string) {
+        for (const listener of listeners.get(type) ?? []) listener()
+      }
+    }
+  }
+})
 vi.mock(
   "react-native/Libraries/EventEmitter/RCTDeviceEventEmitter",
-  () => ({ default: { emit() {} } })
+  () => ({ default: native.emitter })
+)
+vi.mock(
+  "react-native/Libraries/NativeModules/specs/NativeDeviceEventManager",
+  () => ({
+    default: { invokeDefaultBackPressHandler: () => native.backPresses++ }
+  })
 )
 vi.mock(
   "react-native/Libraries/StyleSheet/processColor",
@@ -96,5 +117,13 @@ describe("NativeApp", () => {
     global.RN$stopSurface(11)
     await settle()
     assert.strictEqual(FakeFabric.print(fabric.committed()), "")
+  })
+
+  it("runs Android's default Back action unless React Native's BackHandler handles it", () => {
+    native.emitter.emit("hardwareBackPress")
+    assert.strictEqual(native.backPresses, 1)
+    native.emitter.addListener("hardwareBackPress", () => {})
+    native.emitter.emit("hardwareBackPress")
+    assert.strictEqual(native.backPresses, 1)
   })
 })

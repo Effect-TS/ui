@@ -34,6 +34,8 @@ export interface MetroConfig {
   readonly projectRoot: string
   readonly resolver?: {
     readonly unstable_conditionNames?: ReadonlyArray<string> | undefined
+    readonly sourceExts?: ReadonlyArray<string> | undefined
+    readonly resolverMainFields?: ReadonlyArray<string> | undefined
     readonly [key: string]: unknown
   } | undefined
   readonly transformer?: {
@@ -64,6 +66,8 @@ export interface Options {
    * `false`, Metro bundles the sources.
    */
   readonly prebundle?: boolean | undefined
+  /** The platforms a release build is pre-bundled for. `["android", "ios"]` by default. */
+  readonly platforms?: ReadonlyArray<string> | undefined
   /**
    * Modules the pre-bundle leaves to Metro, besides `react-native`, `expo`
    * and their scoped and prefixed packages. Leave out any package with
@@ -111,28 +115,42 @@ const mainOf = (root: string): string => {
 }
 
 /**
- * Pre-bundles `entry` with Vite into {@link prebundleDirectory}, as a
- * release build does, and returns the file written.
+ * Pre-bundles `entry` with Vite for `platform` into
+ * {@link prebundleDirectory}, as a release build does, and returns the file
+ * written. Modules resolve as Metro resolves them for the platform: an
+ * import of `./title` picks `title.android.ts` over `title.native.ts` over
+ * `title.ts` on Android, trying the config's `sourceExts` in order.
  *
  * @stability experimental
  * @category constructors
  * @since 0.1.0
  */
 export const prebundle = async (
-  root: string,
-  entry: string,
-  external: ReadonlyArray<string | RegExp> = []
+  config: MetroConfig,
+  platform: string,
+  options?: Pick<Options, "entry" | "external"> | undefined
 ): Promise<string> => {
   const { build } = await import("vite")
+  const root = config.projectRoot
   const outDir = Path.join(root, prebundleDirectory)
+  const file = `main.${platform}.js`
+  const sourceExts = config.resolver?.sourceExts ??
+    ["js", "jsx", "json", "ts", "tsx"]
   await build({
     configFile: false,
     root,
     mode: "production",
     logLevel: "warn",
-    // `production` drops the development checks of `@effect/ui`.
     resolve: {
+      // `production` drops the development checks of `@effect/ui`.
       conditions: ["react-native", "production", "import", "module", "default"],
+      mainFields: [
+        ...(config.resolver?.resolverMainFields ??
+          ["react-native", "browser", "main"])
+      ],
+      extensions: sourceExts.flatMap((
+        ext
+      ) => [`.${platform}.${ext}`, `.native.${ext}`, `.${ext}`]),
       tsconfigPaths: true
     },
     define: { "process.env.NODE_ENV": "\"production\"" },
@@ -144,16 +162,16 @@ export const prebundle = async (
       target: "es2020",
       sourcemap: true,
       lib: {
-        entry: Path.resolve(root, entry),
+        entry: Path.resolve(root, options?.entry ?? mainOf(root)),
         // Metro's Babel turns the imports of React Native into requires, with
         // its interop, as it does for the rest of the app.
         formats: ["es"],
-        fileName: () => "main.js"
+        fileName: () => file
       },
-      rollupOptions: { external: isExternal(external) }
+      rollupOptions: { external: isExternal(options?.external ?? []) }
     }
   })
-  return Path.join(outDir, "main.js")
+  return Path.join(outDir, file)
 }
 
 /**
@@ -196,7 +214,16 @@ export const withEffectUi = async <Config extends MetroConfig>(
     }
     if (options?.prebundle === false) return out
     const entry = Path.resolve(root, options?.entry ?? mainOf(root))
-    const bundle = await prebundle(root, entry, options?.external)
+    // Metro reads its files when it starts, so every platform is built now.
+    const platforms = options?.platforms ?? ["android", "ios"]
+    const files = await Promise.all(
+      platforms.map((platform) =>
+        prebundle(resolved, platform, { entry, external: options?.external })
+      )
+    )
+    const bundles = Object.fromEntries(
+      platforms.map((platform, i) => [platform, files[i]])
+    )
     const upstream = resolved.transformer?.babelTransformerPath
     if (upstream === undefined) {
       throw new Error(
@@ -206,7 +233,7 @@ export const withEffectUi = async <Config extends MetroConfig>(
     // Metro's workers start after the config loads, and inherit these.
     process.env.EFFECT_UI_NATIVE_PREBUNDLE = JSON.stringify({
       entry,
-      bundle,
+      bundles,
       upstream
     })
     return {

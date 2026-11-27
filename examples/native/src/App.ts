@@ -34,7 +34,7 @@ export const App = Native.component({
   update: {
     ClickedDecrement: ($) => $.evolve({ count: (count) => count - 1 }),
     ClickedIncrement: ($) => $.evolve({ count: (count) => count + 1 }),
-    ClickedReset: ($) => $.evolve({ count: 0 }),
+    ClickedReset: ($) => $.evolve({ count: 0, name: "" }),
     ChangedName: ($, { value }) => $.evolve({ name: value }),
     ClickedAdd: ($) =>
       $.evolve({

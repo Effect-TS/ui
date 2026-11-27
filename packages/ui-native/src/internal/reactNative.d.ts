@@ -11,8 +11,21 @@ declare module "react-native/Libraries/Utilities/Platform" {
 }
 
 declare module "react-native/Libraries/EventEmitter/RCTDeviceEventEmitter" {
-  const RCTDeviceEventEmitter: object
+  const RCTDeviceEventEmitter: {
+    readonly addListener: (
+      type: string,
+      listener: (...args: ReadonlyArray<any>) => void
+    ) => { readonly remove: () => void }
+    readonly listenerCount: (type: string) => number
+  }
   export default RCTDeviceEventEmitter
+}
+
+declare module "react-native/Libraries/NativeModules/specs/NativeDeviceEventManager" {
+  const NativeDeviceEventManager: {
+    readonly invokeDefaultBackPressHandler: () => void
+  } | null
+  export default NativeDeviceEventManager
 }
 
 declare module "react-native/Libraries/WebSocket/WebSocket" {

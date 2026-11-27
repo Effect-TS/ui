@@ -28,7 +28,7 @@ const Counter = Native.component({
 }).make({
   init: () => ({ count: 0, name: "", on: false, y: 0 }),
   update: {
-    Pressed: ($) => $.evolve({ count: (count) => count + 1 }),
+    Pressed: ($) => $.evolve({ count: (count) => count + 1, name: () => "" }),
     // Keeps the name upper case, so an edit in lower case is replaced.
     Typed: ($, { value }) => $.evolve({ name: value.toUpperCase() }),
     Scrolled: ($, { y }) => $.evolve({ y }),
@@ -144,6 +144,13 @@ describe("NativeHost", () => {
     assert.include(printed(), "<RCTVirtualText>TIMO</>")
     // Native shows "TIMO" already, so the field isn't cloned.
     assert.strictEqual(input(), before)
+
+    touch(fabric, find(FakeFabric.byText("Count 0")))
+    await settle()
+    assert.deepStrictEqual(fabric.commands, [
+      [input().tag, "setTextAndSelection", [1, "TIM", -1, -1]],
+      [input().tag, "setTextAndSelection", [2, "", -1, -1]]
+    ])
   })
 
   it("clones only the changed path", async () => {

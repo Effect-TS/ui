@@ -1,5 +1,5 @@
 // Wraps the project's Babel transformer so that, in a release build, the
-// entry module is replaced by a require of the Vite pre-bundle. The entry's
+// entry module is replaced by a require of the platform's Vite pre-bundle. The entry's
 // output never changes, and the pre-bundle is a file of its own, so Metro's
 // cache stays correct for both.
 import { createRequire } from "node:module"
@@ -9,7 +9,11 @@ interface Transformer {
   readonly transform: (args: {
     readonly filename: string
     readonly src: string
-    readonly options: { readonly dev: boolean; readonly projectRoot: string }
+    readonly options: {
+      readonly dev: boolean
+      readonly platform?: string | null | undefined
+      readonly projectRoot: string
+    }
     readonly [key: string]: unknown
   }) => unknown
   readonly getCacheKey?: ((...args: ReadonlyArray<any>) => string) | undefined
@@ -18,7 +22,7 @@ interface Transformer {
 
 const setup: {
   readonly entry: string
-  readonly bundle: string
+  readonly bundles: Readonly<Record<string, string>>
   readonly upstream: string
 } = JSON.parse(
   process.env.EFFECT_UI_NATIVE_PREBUNDLE!
@@ -27,11 +31,15 @@ const setup: {
 const upstream: Transformer = createRequire(import.meta.url)(setup.upstream)
 
 export const transform: Transformer["transform"] = (args) => {
+  // A platform with no pre-bundle, such as web, gets the sources.
+  const bundle = args.options.platform == null
+    ? undefined
+    : setup.bundles[args.options.platform]
   if (
-    !args.options.dev &&
+    !args.options.dev && bundle !== undefined &&
     Path.resolve(args.options.projectRoot, args.filename) === setup.entry
   ) {
-    const relative = Path.relative(Path.dirname(setup.entry), setup.bundle)
+    const relative = Path.relative(Path.dirname(setup.entry), bundle)
       .split(Path.sep).join("/")
     args = {
       ...args,

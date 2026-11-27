@@ -300,6 +300,18 @@ export const make = (options: Options): {
           if (n.props.text === value) return
           setNative(n, "mostRecentEventCount", n.eventCount)
           setNative(n, "text", value)
+          // Fabric updates the field only when the tree's text changes, and
+          // the tree's can equal the new value after edits, as when a field
+          // is reset to its first text. React Native's TextInput sends the
+          // text by command too.
+          if (n.shadow !== undefined) {
+            ui.dispatchCommand(n.shadow, "setTextAndSelection", [
+              n.eventCount,
+              value,
+              -1,
+              -1
+            ])
+          }
           return
         }
         case "horizontal": {
