@@ -199,10 +199,6 @@ const keyAnd = <A>(
 // mounts
 // ---------------------------------------------------------------------------
 
-/** A node as its siblings match it: an expanded headless child by the outermost child it was. */
-const asSibling = (node: View.Node<any, any>): View.Node<any, any> =>
-  engine.expansionOf.get(node)?.[0]?.child ?? node
-
 /**
  * Whether `node` patches `old` once matched, as the runtime decides. A child that
  * switches from its view to its fallback is new: the runtime creates the fallback.
@@ -227,28 +223,12 @@ const childrenOf = (
   (node as { readonly children?: ReadonlyArray<View.Node<any, any>> })
     .children ?? []
 
-/** A slotted child's `children` by slot, else the one list. */
-const groups = (
-  node: View.Node<any, any>
-): Map<string, ReadonlyArray<View.Node<any, any>>> => {
-  const children = childrenOf(node)
-  const lengths = engine.slotLengths.get(node)
-  if (lengths === undefined) return new Map([["", children]])
-  const out = new Map<string, ReadonlyArray<View.Node<any, any>>>()
-  let at = 0
-  for (const [name, length] of lengths) {
-    out.set(name, children.slice(at, at + length))
-    at += length
-  }
-  return out
-}
-
 const nodePath = (
   root: View.Node<any, any>,
   target: View.Node<any, any>
 ): ReadonlyArray<readonly [slot: string, index: number]> | undefined => {
   if (root === target) return []
-  for (const [name, list] of groups(root)) {
+  for (const [name, list] of engine.slotGroups(root)) {
     for (let index = 0; index < list.length; index++) {
       const rest = nodePath(list[index]!, target)
       if (rest !== undefined) return [[name, index], ...rest]
@@ -269,11 +249,11 @@ export const followNode = (
   let oldAt = oldRoot
   let newAt = newRoot
   for (const [slot, oldIndex] of path) {
-    const olds = groups(oldAt).get(slot) ?? []
-    const news = groups(newAt).get(slot) ?? []
+    const olds = engine.slotGroups(oldAt).get(slot) ?? []
+    const news = engine.slotGroups(newAt).get(slot) ?? []
     const paired = match.matchSiblings(
-      olds.map(asSibling),
-      news.map(asSibling)
+      olds.map(engine.asSibling),
+      news.map(engine.asSibling)
     )
     const newIndex = paired.indexOf(oldIndex)
     if (newIndex < 0) return undefined
@@ -350,12 +330,12 @@ const followMounts = (
       for (const child of childrenOf(node)) walk(undefined, child, below)
       return
     }
-    const oldGroups = groups(old)
-    for (const [name, news] of groups(node)) {
+    const oldGroups = engine.slotGroups(old)
+    for (const [name, news] of engine.slotGroups(node)) {
       const olds: ReadonlyArray<View.Node<any, any>> = oldGroups.get(name) ?? []
       const paired = match.matchSiblings(
-        olds.map(asSibling),
-        news.map(asSibling)
+        olds.map(engine.asSibling),
+        news.map(engine.asSibling)
       )
       news.forEach((child, index) => {
         const was = paired[index]! < 0 ? undefined : olds[paired[index]!]

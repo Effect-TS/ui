@@ -349,6 +349,58 @@ describe("headless components in a story", () => {
       scene.click("Remount").expect(count).toHaveText("10")
     }))
 
+  it.effect("a child at the same path that the runtime would create again starts from init", () =>
+    Effect.gen(function*() {
+      const CounterMessage = UiSchema.TaggedEnum({ Inc: {} })
+      const counter = (init: number) =>
+        Html.component({
+          name: "Counter",
+          model: Schema.Number,
+          message: CounterMessage
+        }).make({
+          init: () => init,
+          update: ($) => $.model + 1,
+          parts: (p, count) => ({
+            count,
+            button: p.part("button", (b) => b.on("click", CounterMessage.Inc()))
+          })
+        })
+      const Zero = counter(0)
+      const Ten = counter(10)
+      const Message = UiSchema.TaggedEnum({ Wrap: {}, Swap: {} })
+      const Panel = Html.component({
+        name: "Panel",
+        model: Schema.Struct({ wrap: Schema.Boolean, swap: Schema.Boolean }),
+        message: Message
+      }).make({
+        init: () => ({ wrap: false, swap: false }),
+        update: ($, message) =>
+          message._tag === "Wrap"
+            ? { ...$.model, wrap: true }
+            : { ...$.model, swap: true },
+        view: (h, model) => {
+          const shown = (model.swap ? Ten : Zero)(h, {
+            key: "counter",
+            view: (counter) =>
+              counter.button(h.button.attr("id", "count")).children(
+                String(counter.count)
+              )
+          })
+          return h.div(
+            h.button.on("click", Message.Wrap()).children("Wrap"),
+            h.button.on("click", Message.Swap()).children("Swap"),
+            model.wrap ? h.section(shown) : h.div(shown)
+          )
+        }
+      })
+      const count = Locator.attr("id", "count")
+      const scene = yield* HtmlScene.make(Panel, {})
+      // A new element around it, then another component with its name and key: each a new instance.
+      scene.click(count).expect(count).toHaveText("1")
+        .click("Wrap").expect(count).toHaveText("0")
+        .click(count).click("Swap").expect(count).toHaveText("10")
+    }))
+
   it.effect("an author's story renders with the vocabulary it's given", () =>
     Effect.gen(function*() {
       const Neutral = Component.define({

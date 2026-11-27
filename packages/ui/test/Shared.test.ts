@@ -300,7 +300,7 @@ describe("shared state in a Scene", () => {
     }))
 
   // A scene with no steps keeps the view it expanded, where the owner placing the slot is already gone.
-  it.effect("gives slot content the owner that places it", () =>
+  it.effect("gives slot content the owners above its slot, not one the receiver's view wraps it in", () =>
     Effect.gen(function*() {
       const Frame = Component.define({
         name: "Frame",
@@ -317,15 +317,49 @@ describe("shared state in a Scene", () => {
             view: () => h.slots.body
           })
       })
+      const Label = Component.define({
+        name: "Label",
+        model: Schema.Null,
+        message: TipMessage,
+        reads: { provider: { owner: TipsProvider, optional: true } }
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        parts: (p) => ({ label: p.reads.provider?.label ?? "none" })
+      })
+      const App = Component.define({
+        name: "App",
+        model: Schema.Null,
+        message: TipMessage
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          Frame(h, {
+            slots: {
+              body: Label(h, {
+                key: "l",
+                view: (label) => h.el("i", label.label)
+              })
+            }
+          })
+      })
+      // The runtime mounts the content at /App/Frame[]/[body]/Label[l], outside the provider.
+      const root = yield* provideHost(Effect.gen(function*() {
+        const root = yield* TestHost.mount(App, {})
+        yield* TestHost.settle
+        return root.text()
+      }))
+      assert.strictEqual(root, "none")
       const scene = yield* Scene.make(Frame, {}, {
         slots: (h) => ({
-          body: Trigger(h, {
-            key: "t",
-            view: (trigger) => h.el("i", trigger.label)
+          body: Label(h, {
+            key: "l",
+            view: (label) => h.el("i", label.label)
           })
         })
       })
-      assert.strictEqual(Locator.textOf(scene.root), "placed")
+      assert.strictEqual(Locator.textOf(scene.root), "none")
     }))
 
   it.effect("delivers an expanded reader's send to the nearest owner the scene expanded or is, and drops one to an owner above it", () =>

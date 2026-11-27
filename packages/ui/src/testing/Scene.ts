@@ -360,9 +360,9 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never>
    *
    * The Model is for the instance the step found, at its path: a child at
    * another path keeps its own, even one with the same component and key in
-   * another closure, or one a later step renders. Once a render no longer
-   * places the child, its Model is gone, and a child placed there again
-   * starts from `init`, as in the runtime.
+   * another closure, or one a later step renders. The Model lasts as long as
+   * the runtime would keep the instance: once a render no longer places the
+   * child, or replaces it with a new one, the child starts from `init`.
    */
   givenChild(child: Component.Headless.Any, model: unknown): this
   /**

@@ -31,6 +31,7 @@ import * as View from "../View.ts"
 import * as childOf from "./child.ts"
 import { sharedEqual } from "./equal.ts"
 import { handle } from "./handler.ts"
+import * as match from "./match.ts"
 import { isNoop } from "./noop.ts"
 import {
   checkAuthorPlacements,
@@ -164,6 +165,8 @@ export type Fields<Props, Model, Msg, Events> =
   >
   & {
     readonly childModels?: ReadonlyMap<string, unknown> | undefined
+    /** The expanded view `childModels` were placed in. With none, a child takes the Model at its path. */
+    readonly childTree?: View.Node<any, any> | undefined
     readonly childStatus?: ReadonlyMap<string, SlotResult> | undefined
     /**
      * What every feature slot reads that the component's view declares, its slot content included, when
@@ -192,6 +195,7 @@ const emptyText: View.Node<never, never> = { _tag: "Text", text: "" }
  * @internal
  */
 export const childModels = new WeakMap<object, ReadonlyMap<string, unknown>>()
+const childTrees = new WeakMap<object, View.Node<any, any>>()
 
 /**
  * The slots `childPending` and `childFailure` recorded, by the child's path: each shows its `fallback` of
@@ -273,6 +277,65 @@ export const slotLengths = new WeakMap<
   object,
   ReadonlyArray<readonly [string, number]>
 >()
+
+/**
+ * A slotted child's `children` by slot, else the one list.
+ *
+ * @internal
+ */
+export const slotGroups = (
+  node: View.Node<any, any>
+): Map<string, ReadonlyArray<View.Node<any, any>>> => {
+  const children =
+    (node as { readonly children?: ReadonlyArray<View.Node<any, any>> })
+      .children ?? []
+  const lengths = slotLengths.get(node)
+  if (lengths === undefined) return new Map([["", children]])
+  const out = new Map<string, ReadonlyArray<View.Node<any, any>>>()
+  let at = 0
+  for (const [name, length] of lengths) {
+    out.set(name, children.slice(at, at + length))
+    at += length
+  }
+  return out
+}
+
+/**
+ * A node as its siblings match it: an expanded headless child by the outermost child it was.
+ *
+ * @internal
+ */
+export const asSibling = (node: View.Node<any, any>): View.Node<any, any> =>
+  expansionOf.get(node)?.[0]?.child ?? node
+
+// The node of the render before that a node takes over, as the runtime patches it, with the headless
+// children that node still stands for, outermost first.
+interface Prev {
+  readonly node: View.Node<any, any>
+  readonly chain: ReadonlyArray<Expansion>
+}
+const prevOf = (node: View.Node<any, any>): Prev => ({
+  node,
+  chain: expansionOf.get(node) ?? []
+})
+// For each of `news`, the node of `olds` it takes over, if any.
+const paired = (
+  olds: ReadonlyArray<View.Node<any, any>> | undefined,
+  news: ReadonlyArray<View.Node<any, any>>
+): ReadonlyArray<Prev | undefined> =>
+  olds === undefined ? [] : match.matchSiblings(olds.map(asSibling), news)
+    .map((index) => index < 0 ? undefined : prevOf(olds[index]!))
+// `prev` as the node the closure or fallback of its outermost child shows.
+const inside = (prev: Prev): Prev => ({ ...prev, chain: prev.chain.slice(1) })
+// `prev` when it's `node`'s kind of node, keyed alike: an element, text, an outlet or a slotted child.
+const plain = (
+  prev: Prev | undefined,
+  node: View.Node<any, any>
+): View.Node<any, any> | undefined =>
+  prev !== undefined && prev.chain.length === 0 &&
+    match.patches(prev.node, node)
+    ? prev.node
+    : undefined
 
 // A copy per render: a closure may return a node it cached, and the identities are this render's.
 const standsFor = (
@@ -534,6 +597,7 @@ const expandRoot = <Msg>(
   view: View.Node<Msg, any>,
   name: string,
   given: ReadonlyMap<string, unknown> | undefined,
+  previous: View.Node<any, any> | undefined,
   filled: Readonly<Record<string, View.Input<never, any>>> | undefined,
   shared: Owners | undefined,
   root: Owners,
@@ -557,14 +621,16 @@ const expandRoot = <Msg>(
     depth: number,
     own: boolean,
     owners: Owners,
-    reads: SlotResult | undefined
+    reads: SlotResult | undefined,
+    olds: ReadonlyArray<View.Node<any, any>> | undefined
   ) => {
     const nodes = View.children([input])
     const paths = checkContentPaths(path, nodes)
     if (own) written.push(paths)
     const scope = (label: string) => checkContentPaths(label, nodes)
-    return nodes.map((child) =>
-      expand(child, path, depth, own, owners, scope, reads)
+    const prevs = paired(olds, nodes)
+    return nodes.map((child, index) =>
+      expand(child, path, depth, own, owners, scope, reads, prevs[index])
     )
   }
   const expand = (
@@ -574,15 +640,19 @@ const expandRoot = <Msg>(
     own: boolean,
     owners: Owners,
     scope: (label: string) => ChildPaths,
-    reads: SlotResult | undefined
+    reads: SlotResult | undefined,
+    // What `node` takes over in the render before, as the runtime patches it.
+    prev: Prev | undefined
   ): View.Node<any, any> => {
     switch (node._tag) {
       case "Text":
         return node
       case "Outlet": {
         // The story's component placing a slot: it shows what the story passed.
+        // It's mounted under the slot, so it reads the owners above the story, not those around the outlet.
         const input = filled?.[node.name]
         if (input === undefined) return node
+        const outletOld = plain(prev, node)
         return {
           ...node,
           children: content(
@@ -590,8 +660,9 @@ const expandRoot = <Msg>(
             "/" + name + "/" + slotSegment(node.name),
             1,
             false,
-            owners,
-            undefined
+            root,
+            undefined,
+            outletOld === undefined ? undefined : slotGroups(outletOld).get("")
           )
         } as View.Node<
           any,
@@ -600,8 +671,21 @@ const expandRoot = <Msg>(
       }
       case "Element": {
         let changed = false
-        const children = node.children.map((child) => {
-          const next = expand(child, path, depth, own, owners, scope, reads)
+        const prevs = paired(
+          (plain(prev, node) as View.Element<any, any> | undefined)?.children,
+          node.children
+        )
+        const children = node.children.map((child, index) => {
+          const next = expand(
+            child,
+            path,
+            depth,
+            own,
+            owners,
+            scope,
+            reads,
+            prevs[index]
+          )
           if (next !== child) changed = true
           return next
         })
@@ -620,6 +704,11 @@ const expandRoot = <Msg>(
           })
         ) return emptyText
         placed.push({ child: node, path: childPath, scope })
+        // The outermost child `prev` stands for, when the runtime patches it with `node`.
+        const was = prev?.chain[0] !== undefined &&
+            match.patches(prev.chain[0].child, node)
+          ? prev.chain[0]
+          : undefined
         const result = status?.get(childPath) ??
           (reads !== undefined && Feature.isService(node.component)
             ? reads
@@ -634,13 +723,24 @@ const expandRoot = <Msg>(
           return standsFor(
             node,
             true,
-            expand(shown, path, depth, own, owners, scope, undefined)
+            expand(
+              shown,
+              path,
+              depth,
+              own,
+              owners,
+              scope,
+              undefined,
+              was?.fallback === true ? inside(prev!) : undefined
+            )
           )
         }
         if (node.slots !== undefined) {
           // A child's view isn't run, but what the parent passed for its slots is the parent's.
           const shown: Array<View.Node<any, any>> = []
           const lengths: Array<readonly [string, number]> = []
+          const old = plain(prev, node)
+          const olds = old === undefined ? undefined : slotGroups(old)
           for (const slot in node.slots) {
             const placed = content(
               node.slots[slot],
@@ -648,7 +748,8 @@ const expandRoot = <Msg>(
               depth + 1,
               own,
               owners,
-              reads
+              reads,
+              olds === undefined ? undefined : olds.get(slot) ?? []
             )
             shown.push(...placed)
             lengths.push([slot, placed.length])
@@ -661,7 +762,10 @@ const expandRoot = <Msg>(
           return node
         }
         replaced.push(node)
-        const model = given?.has(childPath)
+        // The runtime keeps an instance only where it patches the one before: one it creates starts from
+        // `init`, though it has the path of the one it replaced.
+        const kept = previous === undefined || was?.fallback === false
+        const model = kept && given?.has(childPath)
           ? given.get(childPath)
           : component.init(node.props).model
         const lookup = sharedLookup(shared, owners)
@@ -681,7 +785,8 @@ const expandRoot = <Msg>(
           own,
           ownersBelow(shared, owners, component, model, node.props),
           (label) => checkChildPaths(label, tree),
-          reads
+          reads,
+          was?.fallback === false ? inside(prev!) : undefined
         )
         return standsFor(node, false, inner)
       }
@@ -694,7 +799,8 @@ const expandRoot = <Msg>(
     true,
     root,
     (label) => checkChildPaths(label, view),
-    slotStatus
+    slotStatus,
+    previous === undefined ? undefined : prevOf(previous)
   )
   checkAuthorPlacements("/" + name, written)
   checkAuthorWrites("/" + name, written)
@@ -728,6 +834,7 @@ export const record = <Props, Model, Msg, Events>(
           story,
           new Map(Array.from(ran ?? [], ([path, child]) => [path, child.model]))
         )
+        childTrees.set(story, rendered)
       }
     }
     return rendered
@@ -798,6 +905,7 @@ export const record = <Props, Model, Msg, Events>(
   if (fields.childModels !== undefined) {
     childModels.set(story, fields.childModels)
   }
+  if (fields.childTree !== undefined) childTrees.set(story, fields.childTree)
   if (fields.childStatus !== undefined) {
     childStatuses.set(story, fields.childStatus)
   }
@@ -825,14 +933,14 @@ export const update = <Props, Model, Msg, Events>(
     defaultPrevented: story.defaultPrevented,
     ack: story.ack,
     childModels: childModels.get(story),
+    childTree: childTrees.get(story),
     childStatus: childStatuses.get(story),
     shared: sharedGiven.get(story),
     collected: collectedLast.get(story),
     ...patch
   }
   // A defect in `view` fails the step that changed the Model, the query results, the props or what's pending.
-  // An unchanged view is kept as expanded: expanding it again would rebuild slot content without the
-  // owners whose nodes the first expansion replaced.
+  // An unchanged view is kept as expanded.
   const view =
     fields.model === story.model && fields.results === story.results &&
       fields.props === story.props &&
@@ -858,6 +966,7 @@ export const expandedView = (
     viewOfFields(fields, rootShared(fields.shared)),
     fields.component.definition.name,
     fields.childModels,
+    fields.childTree,
     storySlots.get(fields.component),
     fields.shared,
     ownersBelow(
