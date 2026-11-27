@@ -43,9 +43,10 @@
  * neither is merged.
  *
  * For a non-root Vite `base`, pass `import.meta.env.BASE_URL` as `base`
- * to `layerHttp` and `BrowserRouter.layer`. The server receives URLs with
- * the base prefix. Prerender paths are app-relative: with `base: "/docs/"`,
- * `"/about"` is requested as `"/docs/about"` but written to `about.html`.
+ * to `layerHttp` and `BrowserRouter.layer`. The dev server and the
+ * `serverOutDir` handler receive URLs with the base prefix. Prerender
+ * paths are app-relative: with `base: "/docs/"`, `"/about"` is requested
+ * as `"/docs/about"` but written to `about.html`.
  * Prerender paths are read before the entry's Layer sets the routes' base.
  *
  * Relative bases keep routes at the root. Full-URL bases do too in builds,
@@ -307,10 +308,13 @@ export const plugin = (options: Options): Plugin => {
           `import { withLoggerDisabled } from "effect/http/HttpMiddleware"`,
           `import { toWebHandler } from "effect/http/HttpRouter"`,
           `const Prerender = Context.Reference("@effect/ui/html/HtmlServerVite/Prerender", { defaultValue: () => false })`,
-          `export const { handler, dispose } = toWebHandler(entry.default, {`,
+          // Built on the first request, so `prerender` is evaluated before the entry's Layer sets a base.
+          `let web`,
+          `export const handler = (request, context) => (web ??= toWebHandler(entry.default, {`,
           `  disableLogger: ${devServer !== undefined},`,
           `  middleware: (app) => flatMap(Prerender, (prerendering) => prerendering ? withLoggerDisabled(app) : app)`,
-          `})`,
+          `})).handler(request, context)`,
+          `export const dispose = async () => web?.dispose()`,
           `export const prerender = async () => isEffect(entry.prerender) ? runPromise(entry.prerender) : entry.prerender ?? []`,
           `export const prerenderContext = Context.add(Static.context(true), Prerender, true)`
         ].join("\n")

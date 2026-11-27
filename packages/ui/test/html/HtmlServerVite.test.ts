@@ -283,14 +283,18 @@ describe("HtmlServerVite.plugin", () => {
   )
 
   it(
-    "prerenders app-relative routes under a non-root Vite base into the root of outDir",
+    "prerenders app-relative routes into outDir and emits a handler for base URLs under a non-root Vite base",
     async () => {
-      const outDir = await fs.mkdtemp(
-        path.join(os.tmpdir(), "html-server-vite-base-")
-      )
+      const dir = await fs.mkdtemp(path.join(fixtureRoot, ".out-"))
+      const outDir = path.join(dir, "client")
+      const serverOutDir = path.join(dir, "server")
       try {
         const builder = await createBuilder(
-          config({ base: "/docs", build: { outDir, emptyOutDir: true } })
+          config({
+            base: "/docs",
+            build: { outDir, emptyOutDir: true },
+            plugins: [plugin({ entry: "/src/entry.server.ts", serverOutDir })]
+          })
         )
         await builder.buildApp()
         const page = (file: string) =>
@@ -300,8 +304,27 @@ describe("HtmlServerVite.plugin", () => {
         expect(home).toContain("href=\"/docs/people/1\"")
         expect(home).toMatch(/src="\/docs\/assets\/[^"]+\.js"/)
         expect(await page("people/1.html")).toContain("href=\"/docs\"")
+
+        // The emitted handler gets the browser URL, base included.
+        const server = (await import(
+          pathToFileURL(path.join(serverOutDir, "index.js")).href
+        )) as {
+          readonly handler: (request: Request) => Promise<Response>
+          readonly dispose: () => Promise<void>
+        }
+        try {
+          const live = await server.handler(
+            new Request("http://localhost/docs/people/1")
+          )
+          expect(live.status).toBe(200)
+          const html = await live.text()
+          expect(html).toContain("href=\"/docs/people/1\"")
+          expect(html).toMatch(/src="\/docs\/assets\/[^"]+\.js"/)
+        } finally {
+          await server.dispose()
+        }
       } finally {
-        await fs.rm(outDir, { recursive: true, force: true })
+        await fs.rm(dir, { recursive: true, force: true })
       }
     },
     60_000
