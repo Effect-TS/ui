@@ -24,15 +24,12 @@
  * for a path ending in `/`, and a 404 to `404.html`. Any other status
  * fails the build. The server build isn't kept.
  *
- * When another renderer builds the page shell, keep `index.html` as a
- * skeleton with Vite's asset tags and a bare `<!--app-html-->` in `<body>`,
- * without a `<div id="app">` wrapper, so the shell owns the container the
- * client hydrates. Vite still transforms `index.html` in dev and hashes its
- * assets in a build, so the page keeps every tag Vite and other plugins
- * emit. Wrap `rendered` when calling `document` to pass the shell's body and
- * head through while preserving `state`, `htmlAttributes` and
- * `bodyAttributes`; a shell that sets its own `<html>` or `<body>`
- * attributes appends them (space-separated) to those two fields.
+ * When another renderer builds the page shell, reduce `index.html` to its
+ * asset tags and a `<!--app-html-->` marker directly in `<body>`, so the
+ * shell renders the container the client hydrates. `document` inserts
+ * `html` and `head` as given, so pass the shell's markup there and spread
+ * the rest of `rendered`. Append the shell's own `<html>` or `<body>`
+ * attributes to `htmlAttributes` or `bodyAttributes`, after a space.
  *
  * **Gotchas**
  *
@@ -63,7 +60,7 @@
  * import type { HtmlServer } from "@effect/ui/html"
  * import { document } from "virtual:@effect/ui/document"
  *
- * // index.html keeps only the asset tags and a bare <!--app-html--> in <body>.
+ * // src/entry.server.ts: pass `page` to `layerHttp` as `document`.
  * const page = (rendered: HtmlServer.Rendered<unknown>): string => {
  *   const shell = renderShell(rendered.html) // the other renderer
  *   return document({
