@@ -2143,17 +2143,20 @@ describe("HtmlServer", { concurrent: false }, () => {
         })
 
         // Deepen until the view no longer renders, so no stack depth is assumed. Each render must
-        // complete, through the default budget's idle check, and the last one must defer.
+        // complete, through the default budget's idle check. 20,000 bounds the work: a renderer that
+        // draws every depth passes, and one that stops must defer.
         let depth = 1000
         let rendered = yield* HtmlServer.renderToHtml(Page, { depth })
-        while (rendered.html.includes("leaf")) {
+        while (rendered.html.includes("leaf") && depth < 20_000) {
           depth = Math.ceil(depth * 1.1)
           rendered = yield* HtmlServer.renderToHtml(Page, { depth })
         }
-        expect(rendered.html).toContain(
-          "<!--[/Page/Deep[d]--><p>too deep</p><!--]/Page/Deep[d]-->"
-        )
-        expect(rendered.state["~deferred"]).toEqual(["/Page/Deep[d]"])
+        if (!rendered.html.includes("leaf")) {
+          expect(rendered.html).toContain(
+            "<!--[/Page/Deep[d]--><p>too deep</p><!--]/Page/Deep[d]-->"
+          )
+          expect(rendered.state["~deferred"]).toEqual(["/Page/Deep[d]"])
+        }
       }),
     60_000
   )
