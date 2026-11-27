@@ -1027,19 +1027,23 @@ const pictures: Record<Module, Picture> = {
         )
     }),
   SortableList: (h, on) => {
-    const order = on
-      ? [sortableRows[1], sortableRows[0], sortableRows[2]]
-      : sortableRows
+    const items = on ? ["b", "a", "c"] : ["a", "b", "c"]
     return SortableList(h, {
       key: "SortableList",
-      props: { items: order.map(({ id }) => id) },
+      props: { items },
       onEmit: none,
+      // The rows keep their place in the DOM and slide to their slot in
+      // `items`, so the swap animates instead of jumping.
       view: (sortableList) =>
         h.div.class("kit-sortable-wrap").children(
           sortableList.list(h.ul.class("kit-sortable")).children(
-            order.map(({ accent, id, width }) =>
+            sortableRows.map(({ accent, id, width }, index) =>
               sortableList.item({
-                element: h.li.class("kit-sortable-item"),
+                element: h.li.class("kit-sortable-item").style({
+                  transform: `translateY(calc(${
+                    items.indexOf(id) - index
+                  } * (100% + 0.25rem)))`
+                }),
                 id
               }).children(
                 sortableList.handle({

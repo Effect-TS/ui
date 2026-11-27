@@ -973,7 +973,16 @@
   }
 
   .kit-sortable-item {
-    @apply flex items-center gap-1.5 rounded-[3px] border border-border bg-background px-1 py-[3px];
+    @apply flex items-center gap-1.5 rounded-[3px] border border-border bg-background px-1 py-px;
+    transition-property: transform, box-shadow;
+
+    &:has(.kit-bar-accent) {
+      @apply z-1;
+
+      [data-playing] & {
+        box-shadow: 0 3px 8px -4px rgb(0 0 0 / 0.4);
+      }
+    }
 
     .kit-bar {
       @apply h-1;
