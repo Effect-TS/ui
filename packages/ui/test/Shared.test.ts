@@ -299,7 +299,6 @@ describe("shared state in a Scene", () => {
       assert.strictEqual(Locator.textOf(scene.root), "a")
     }))
 
-  // A scene with no steps keeps the view it expanded, where the owner placing the slot is already gone.
   it.effect("gives slot content the owners above its slot, not one the receiver's view wraps it in", () =>
     Effect.gen(function*() {
       const Frame = Component.define({

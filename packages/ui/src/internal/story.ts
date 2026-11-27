@@ -188,9 +188,8 @@ export type Fields<Props, Model, Msg, Events> =
 const emptyText: View.Node<never, never> = { _tag: "Text", text: "" }
 
 // -- headless children ------------------------------------------------------
-// A story shows a headless child expanded: the closure it was declared with, run against the parts of the
-// child's `init` Model, or of the Model `givenChild` set or its `update` returned. A scene runs the
-// child's `update` for its parts' handlers and its owner's messages, and drops its Commands and mounts.
+// A story shows a headless child expanded: the closure it was declared with, run against the parts of its
+// current Model. A scene runs the child's `update` and drops its Commands and mounts.
 /**
  * The Models of the expanded headless children, by path: what `givenChild` set or `update` returned.
  *
@@ -245,7 +244,7 @@ interface Ran {
   readonly child: View.Child<any, any>
   readonly model: unknown
   readonly shared: Component.SharedLookup
-  // The same object for as long as the runtime keeps the instance.
+  // The same object for as long as the runtime would keep the instance.
   readonly instance: object
 }
 // The children an expansion replaced, by the expanded root: `childEmit` and `childFailure` still find them.
@@ -651,15 +650,14 @@ const expandRoot = <Msg>(
     owners: Owners,
     scope: (label: string) => ChildPaths,
     reads: SlotResult | undefined,
-    // What `node` takes over in the render before, as the runtime patches it.
     prev: Prev | undefined
   ): View.Node<any, any> => {
     switch (node._tag) {
       case "Text":
         return node
       case "Outlet": {
-        // The story's component placing a slot: it shows what the story passed.
-        // It's mounted under the slot, so it reads the owners above the story, not those around the outlet.
+        // The story's component placing a slot: it shows what the story passed. Mounted under the slot,
+        // the content reads the owners above the story, not those around the outlet.
         const input = filled?.[node.name]
         if (input === undefined) return node
         const outletOld = plain(prev, node)
@@ -714,7 +712,6 @@ const expandRoot = <Msg>(
           })
         ) return emptyText
         placed.push({ child: node, path: childPath, scope })
-        // The outermost child `prev` stands for, when the runtime patches it with `node`.
         const was = prev?.chain[0] !== undefined &&
             match.patches(prev.chain[0].child, node)
           ? prev.chain[0]
@@ -772,8 +769,8 @@ const expandRoot = <Msg>(
           return node
         }
         replaced.push(node)
-        // The runtime keeps an instance only where it patches the one before: one it creates starts from
-        // `init`, though it has the path of the one it replaced.
+        // The runtime keeps an instance only where it patches the one before: a new one starts from
+        // `init`, even at the old one's path.
         const kept = previous === undefined || was?.fallback === false
         const model = kept && given?.has(childPath)
           ? given.get(childPath)
@@ -843,7 +840,7 @@ export const record = <Props, Model, Msg, Events>(
   const view = () => {
     if (rendered === undefined) {
       rendered = render()
-      // A render that fails places nothing, so the next one starts from the Models this one started from.
+      // Only a render that succeeds records Models: one that fails places nothing.
       const ran = ranChildren.get(rendered)
       if (ran !== undefined || fields.childModels?.size) {
         childModels.set(
@@ -958,7 +955,6 @@ export const update = <Props, Model, Msg, Events>(
     ...patch
   }
   // A defect in `view` fails the step that changed the Model, the query results, the props or what's pending.
-  // An unchanged view is kept as expanded.
   const view =
     fields.model === story.model && fields.results === story.results &&
       fields.props === story.props &&
@@ -1987,9 +1983,8 @@ export const deliver = <Props, Model, Msg, Events>(
     ? dispatch(story, message as Msg)
     : dispatchChild(story, path, message, instance)
 
-// As the runtime does, a closed instance takes nothing, even when a new one has its path, and a child's
-// sends go before its events. Its Commands don't run, and a send to an owner above the story is dropped
-// with them.
+// As in the runtime, a closed instance takes nothing, even when a new one has its path, and a child's
+// sends go before its events. Its Commands don't run, and a send to an owner above the story is dropped.
 const dispatchChild = <Props, Model, Msg, Events>(
   story: State<Props, Model, Msg, Events>,
   path: string,
@@ -2020,8 +2015,7 @@ const dispatchChild = <Props, Model, Msg, Events>(
       childModels: new Map(childModels.get(out)).set(path, next.model)
     })
   }
-  // Each message is for its target as it was when this update ran: one an earlier message replaced
-  // takes nothing.
+  // Bind each message to its target as this update saw it, so one an earlier message replaced takes nothing.
   const at = (target: string | undefined) =>
     target === undefined ? undefined : children!.get(target)?.instance
   for (const send of next.sends ?? []) {
@@ -2177,10 +2171,9 @@ export const tryFireNode = <Props, Model, Msg, Events>(
   let handled = false
   let captured: Locator.Node | undefined
   let out = story
-  // The instances the event reached: a layer's message is for its owner as it was then.
+  // Bind each layer's message to its owner as the event found it: an earlier layer may replace it.
   const reached = ranChildren.get(story.view())
-  // Each layer runs once: its message decides whether its own `preventDefault: true` cancels, then it's
-  // sent to the layer's owner.
+  // Each layer's own message decides whether its `preventDefault: true` cancels.
   for (const layer of layers) {
     if (!Object.hasOwn(layer.handlers, event)) continue
     const message = handle(layer.handlers[event]!, payload)
