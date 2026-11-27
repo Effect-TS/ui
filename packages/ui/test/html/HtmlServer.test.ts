@@ -2119,7 +2119,7 @@ describe("HtmlServer", { concurrent: false }, () => {
           init: () => ({}),
           update: ($) => $.model,
           view: (h) => {
-            let node = h.span("leaf")
+            let node: View.Content<never> = h.span("leaf")
             for (let i = 0; i < h.props.depth; i++) node = h.div(node)
             return node
           }

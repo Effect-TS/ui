@@ -22,37 +22,37 @@ type Encoded = Exit.Exit<Page, SchemaIssue.Issue>
 
 type Status = "Pending" | "Failed" | undefined
 
-interface ElementSnap extends Array<Snap | View.Element<any, any>> {
-  0: View.Element<any, any>
+interface InstanceSnap {
+  readonly inst: Kernel.Instance
+  readonly encoded:
+    | Encoded
+    | Fiber.Fiber<Page, SchemaIssue.Issue>
+    | undefined
+  readonly status: Status
+  readonly bare: boolean
 }
 
-type Snap =
-  | string
-  | ElementSnap
-  | {
-    readonly _tag: "Instance"
-    readonly inst: Kernel.Instance
-    readonly encoded:
-      | Encoded
-      | Fiber.Fiber<Page, SchemaIssue.Issue>
-      | undefined
-    readonly status: Status
-    readonly bare: boolean
-    readonly kid: Snap | undefined
-    readonly kept: ReadonlyArray<Snap>
-  }
-  | {
-    readonly _tag: "Range"
-    readonly path: string
-    readonly kids: ReadonlyArray<Snap>
-  }
-  | {
-    readonly _tag: "Fallback"
-    readonly path: string
-    readonly failedChild: boolean
-    readonly status: Status
-    readonly kids: ReadonlyArray<Snap>
-  }
+interface FallbackSnap {
+  readonly path: string
+  readonly failedChild: boolean
+  readonly status: Status
+}
+
+// Tape opcodes. Each is followed by one value.
+const Text = 0
+const Open = 1
+const Close = 2
+const Enter = 3
+const Leave = 4
+/** A `FallbackSnap`, closed by `FallbackEnd` with its path. */
+const Fallback = 5
+const FallbackEnd = 6
+/** An `InstanceSnap`, then its content, `Kept`, its kept children, and `End`. */
+const Instance = 7
+/** The instance's path when it has kept children, each after an `Into` with its path. */
+const Kept = 8
+const Into = 9
+const End = 10
 
 const statusOf = (env: Kernel.Env): Status =>
   env.ctx !== undefined
@@ -61,31 +61,43 @@ const statusOf = (env: Kernel.Env): Status =>
     ? "Failed"
     : "Pending"
 
-const noKids: ReadonlyArray<Snap> = []
-
 interface Snapshot {
-  readonly root: Snap
+  readonly tape: ReadonlyArray<any>
   readonly late: ReadonlyArray<Fiber.Fiber<Page, SchemaIssue.Issue>>
 }
 
-/** @internal */
+/**
+ * Records the tree as a tape. Neither this nor `write` recurses, so a tree the kernel could draw is
+ * written however deep it nests.
+ *
+ * @internal
+ */
 export const snapshot = (
   root: Kernel.Instance,
   deferred: ReadonlySet<Kernel.Instance>,
   shippedQuery?: queryCore.ShippedContext | undefined
 ): Snapshot => {
+  const tape: Array<unknown> = []
   const late: Array<Fiber.Fiber<Page, SchemaIssue.Issue>> = []
-  const instance = (inst: Kernel.Instance): Snap => {
-    const component = inst.component as unknown as Component.Any
-    const shipped = inst.failure === undefined && !deferred.has(inst)
-    const rendered = inst.rendered
-    let kept: Array<Snap> | undefined
-    for (const entry of inst.kept?.children() ?? []) {
-      if (entry.rec === undefined && !entry.inst.closed) {
-        ;(kept ??= []).push(instance(entry.inst))
-      }
+  /**
+   * What is left to record, last first, in threes: a Rec after its owner and base, an instance, or
+   * `undefined` after a tape entry to add as it is.
+   */
+  const todo: Array<any> = [undefined, undefined, root]
+  const kidsOf = (
+    owner: Kernel.Instance,
+    kids: ReadonlyArray<Kernel.Rec> | undefined,
+    base: string
+  ): void => {
+    if (kids === undefined) return
+    for (let index = kids.length - 1; index >= 0; index--) {
+      todo.push(owner, base, kids[index])
     }
-    const encoded = shipped
+  }
+  const instance = (inst: Kernel.Instance): void => {
+    const component = inst.component as unknown as Component.Any
+    const rendered = inst.rendered
+    const encoded = inst.failure === undefined && !deferred.has(inst)
       ? runCodec(
         Effect.provideService(
           encodePage(component, inst.model, inst.results, inst.owning),
@@ -95,72 +107,94 @@ export const snapshot = (
       )
       : undefined
     if (encoded !== undefined && !Exit.isExit(encoded)) late.push(encoded)
-    return {
-      _tag: "Instance",
-      inst,
-      encoded,
-      status: component.layer === undefined ? undefined : statusOf(inst.env),
-      bare: inst.parent !== undefined && component.layer === undefined &&
-        (inst.at!.v as View.Child<any, any>).alive === undefined &&
-        rendered?.v._tag === "Element",
-      kid: inst.failure === undefined && rendered !== undefined
-        ? rec(inst, rendered, inst.path)
-        : undefined,
-      kept: kept ?? noKids
+    tape.push(
+      Instance,
+      {
+        inst,
+        encoded,
+        status: component.layer === undefined ? undefined : statusOf(inst.env),
+        bare: inst.parent !== undefined && component.layer === undefined &&
+          (inst.at!.v as View.Child<any, any>).alive === undefined &&
+          rendered?.v._tag === "Element"
+      } satisfies InstanceSnap
+    )
+    todo.push(End, undefined, undefined)
+    let kept: string | undefined
+    const entries = inst.kept?.children()
+    if (entries !== undefined) {
+      for (let index = entries.length - 1; index >= 0; index--) {
+        const entry = entries[index]!
+        if (entry.rec === undefined && !entry.inst.closed) {
+          kept = inst.path
+          todo.push(
+            undefined,
+            undefined,
+            entry.inst,
+            Into,
+            entry.inst.path,
+            undefined
+          )
+        }
+      }
+    }
+    todo.push(Kept, kept, undefined)
+    if (inst.failure === undefined && rendered !== undefined) {
+      todo.push(inst, inst.path, rendered)
     }
   }
-  const kidsOf = (
-    owner: Kernel.Instance,
-    kids: ReadonlyArray<Kernel.Rec> | undefined,
-    base: string
-  ): ReadonlyArray<Snap> => {
-    if (kids === undefined) return noKids
-    const out: Array<Snap> = new Array(kids.length)
-    for (let index = 0; index < kids.length; index++) {
-      out[index] = rec(owner, kids[index]!, base)
+  while (todo.length > 0) {
+    const at: Kernel.Rec | Kernel.Instance | undefined = todo.pop()
+    const base = todo.pop()
+    const owner = todo.pop()
+    if (at === undefined) {
+      tape.push(owner, base)
+      continue
     }
-    return out
-  }
-  const rec = (owner: Kernel.Instance, at: Kernel.Rec, base: string): Snap => {
+    if (at instanceof Kernel.Instance) {
+      instance(at)
+      continue
+    }
     const view = at.v
     switch (view._tag) {
       case "Text":
-        return view.text
-      case "Element": {
-        const kids = at.kids
-        if (kids === undefined) return [view]
-        const out = new Array(kids.length + 1) as ElementSnap
-        out[0] = view
-        for (let index = 0; index < kids.length; index++) {
-          out[index + 1] = rec(owner, kids[index]!, base)
-        }
-        return out
-      }
+        tape.push(Text, view.text)
+        break
+      case "Element":
+        tape.push(Open, view)
+        todo.push(Close, view.tag, undefined)
+        kidsOf(owner, at.kids, base)
+        break
       case "Outlet": {
         const path = at.inst.path + "/" + slotSegment(view.name)
-        return {
-          _tag: "Range",
-          path,
-          kids: kidsOf(at.inst.parent!, at.kids, path)
-        }
+        tape.push(Enter, path)
+        todo.push(Leave, path, undefined)
+        kidsOf(at.inst.parent!, at.kids, path)
+        break
       }
       case "Child": {
-        if (at.kids === undefined) return instance(at.inst)
+        if (at.kids === undefined) {
+          instance(at.inst)
+          break
+        }
         // The author also holds fallbacks drawn in a headless child's closure.
         const failedChild = at.inst !== Kernel.authorOf(owner)
-        return {
-          _tag: "Fallback",
-          path: failedChild
-            ? at.inst.path
-            : base + "/" + segment(view as View.Child<any, any>),
-          failedChild,
-          status: failedChild ? undefined : statusOf(owner.env),
-          kids: kidsOf(owner, at.kids, base)
-        }
+        const path = failedChild
+          ? at.inst.path
+          : base + "/" + segment(view as View.Child<any, any>)
+        tape.push(
+          Fallback,
+          {
+            path,
+            failedChild,
+            status: failedChild ? undefined : statusOf(owner.env)
+          } satisfies FallbackSnap
+        )
+        todo.push(FallbackEnd, path, undefined)
+        kidsOf(owner, at.kids, base)
       }
     }
   }
-  return { root: instance(root), late }
+  return { tape, late }
 }
 
 const awaitEncoded = (
@@ -171,9 +205,7 @@ const awaitEncoded = (
     () => Fiber.interruptAll(late)
   )
 
-const encodedOf = (
-  snap: Extract<Snap, { readonly _tag: "Instance" }>
-): Encoded | undefined => {
+const encodedOf = (snap: InstanceSnap): Encoded | undefined => {
   const encoded = snap.encoded
   if (encoded === undefined || Exit.isExit(encoded)) return encoded
   return encoded.pollUnsafe() as Encoded | undefined
@@ -200,7 +232,7 @@ const mute: services.ServerSink = {
 
 /** @internal */
 export const write = (
-  { late, root }: Snapshot,
+  { late, tape }: Snapshot,
   query: unknown,
   ctx: Context.Context<any>,
   isStatic: boolean,
@@ -211,41 +243,57 @@ export const write = (
     const kept: Record<string, unknown> = {}
     let into = state
     let sink = to
+    /** Whether an instance above ships no state, so nothing below it does. */
+    let under = false
+    /** The kept children of the innermost instance that has some, by path. */
+    let byChild: Record<string, unknown> | undefined
+    /** What each open `Fallback` and `Instance` restores at its end. */
+    const outer: Array<any> = []
     const deferredPaths: Array<string> = []
     const statuses: Record<string, string> = {}
     const collected: Record<string, unknown> = {}
     const ship = (path: string, status: Status) => {
       if (status !== undefined) statuses[path] = status
     }
-    const visit = (snap: Snap, under: boolean): void => {
-      if (typeof snap === "string") return sink.text(snap)
-      if (Array.isArray(snap)) {
-        const view = snap[0]
-        sink.open(view.tag, view.attrs, view.props)
-        for (let index = 1; index < snap.length; index++) {
-          visit(snap[index] as Snap, under)
-        }
-        return sink.close(view.tag)
-      }
-      switch (snap._tag) {
-        case "Range": {
-          sink.enter(snap.path)
-          for (const kid of snap.kids) visit(kid, under)
-          return sink.leave(snap.path)
-        }
-        case "Fallback": {
+    for (let at = 0; at < tape.length;) {
+      const op = tape[at++]
+      const value = tape[at++]
+      switch (op) {
+        case Text:
+          sink.text(value)
+          break
+        case Open:
+          sink.open(value.tag, value.attrs, value.props)
+          break
+        case Close:
+          sink.close(value)
+          break
+        case Enter:
+          sink.enter(value)
+          break
+        case Leave:
+          sink.leave(value)
+          break
+        case Fallback: {
+          const snap: FallbackSnap = value
           if (!under) {
             if (snap.failedChild) deferredPaths.push(snap.path)
             else ship(snap.path, snap.status)
           }
           sink.enter(snap.path)
-          for (const kid of snap.kids) visit(kid, true)
-          return sink.leave(snap.path)
+          outer.push(under)
+          under = true
+          break
         }
-        case "Instance": {
+        case FallbackEnd:
+          sink.leave(value)
+          under = outer.pop()
+          break
+        case Instance: {
+          const snap: InstanceSnap = value
           const inst = snap.inst
           const path = inst.path
-          let inner = under
+          outer.push(under)
           if (!under) {
             const exit = encodedOf(snap)
             if (exit === undefined || Exit.isFailure(exit)) {
@@ -257,7 +305,7 @@ export const write = (
                 warnUnencoded(inst, ctx, exit.cause)
               }
               if (into === state) deferredPaths.push(path)
-              inner = true
+              under = true
             } else {
               into[path] = exit.value.state
               if (exit.value.reported !== undefined) {
@@ -266,29 +314,35 @@ export const write = (
               ship(path, snap.status)
             }
           }
-          const bare = !inner && snap.bare
-          if (!bare) {
-            sink.enter(path)
-          }
-          if (snap.kid !== undefined) visit(snap.kid, inner)
-          if (!bare) sink.leave(path)
-          if (snap.kept.length === 0) return
-          const was = into
-          const byChild: Record<string, unknown> = {}
-          ;(was === state
-            ? kept
-            : (was["~kept"] ??= {}) as Record<string, unknown>)[path] = byChild
-          sink = mute
-          for (const kid of snap.kept) {
-            into = byChild[(kid as typeof snap).inst.path] = {}
-            visit(kid, inner)
-          }
-          into = was
-          if (was === state) sink = to
+          const bare = !under && snap.bare
+          if (!bare) sink.enter(path)
+          outer.push(bare ? undefined : path)
+          break
         }
+        case Kept: {
+          const path = outer.pop()
+          if (path !== undefined) sink.leave(path)
+          outer.push(into, byChild)
+          if (value !== undefined) {
+            ;(into === state
+              ? kept
+              : (into["~kept"] ??= {}) as Record<string, unknown>)[value] =
+              byChild =
+                {}
+            sink = mute
+          }
+          break
+        }
+        case Into:
+          into = byChild![value] = {}
+          break
+        case End:
+          byChild = outer.pop()
+          into = outer.pop()
+          under = outer.pop()
+          if (into === state) sink = to
       }
     }
-    visit(root, false)
     const add = (key: string, value: unknown) =>
       Object.defineProperty(state, key, {
         value,
