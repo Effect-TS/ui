@@ -24,8 +24,6 @@ Not reading all that? Copy a prompt to explore Effect UI with an AI agent.
 
 Frontend apps get hard for the same reasons everywhere: tangled state, race conditions in async work and side effects scattered across callbacks. Effect UI puts every state transition in one pure function and handles async work, cancellation and errors with Effect. If you also use Effect on the server, the same programming model carries across the whole stack.
 
-Implicit render cycles and hidden side effects make agent-driven frontend development slower, more error-prone and harder to debug. Pure updates, Schema-typed inputs, an inspectable Message log and tests that run against in-memory services give both humans and agents concrete structure to aid review and verification.
-
 Like Effect itself, Effect UI and Effect UI Kit have zero third-party runtime dependencies. Typed routing, a query cache, shared state, server rendering, DevTools, testing harnesses and 51 headless UI modules all come built in, so you don't have to assemble a frontend stack out of half a dozen packages.
 
 ## Components
