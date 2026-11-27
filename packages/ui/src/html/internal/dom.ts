@@ -849,7 +849,9 @@ export const makeHost = (
     runsMounts: true,
     commit() {
       for (const dialog of shown) {
-        if (!dialog.open || !dialog.isConnected) shown.delete(dialog)
+        if (dialog.open && dialog.isConnected) continue
+        unmodal(dialog)
+        shown.delete(dialog)
       }
       if (modalWanted.size > 0) {
         for (const dialog of inOrder([...modalWanted])) {
