@@ -24,68 +24,97 @@ const padding = (element: Element, side: "start" | "end") =>
 const rect = (top: number, height: number, width = 300) =>
   DOMRect.fromRect({ x: 0, y: top, width, height })
 
-const layout = Effect.acquireRelease(
-  Effect.sync(() => {
-    const original = Element.prototype.getBoundingClientRect
-    let stored = 0
-    const scroller = () => document.querySelector<HTMLElement>(".viewport")!
-    const list = () => document.querySelector<HTMLElement>(".list")!
-    const listHeight = () =>
-      padding(list(), "start") +
-      list().querySelectorAll(".item").length * itemSize +
-      padding(list(), "end")
-    const top =
-      () => (stored = Math.max(0, Math.min(stored, listHeight() - 100)))
-    Element.prototype.getBoundingClientRect = function(this: Element) {
-      if (this.classList.contains("viewport")) return rect(0, 100)
-      if (this.classList.contains("list")) return rect(-top(), listHeight())
-      if (this.classList.contains("item")) {
-        return rect(
-          -top() + Number(this.getAttribute("data-index")) * itemSize,
-          itemSize
-        )
+const layout = (page = false, listTop = 0) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const original = Element.prototype.getBoundingClientRect
+      const windowScrollTo = window.scrollTo
+      const height = page ? window.innerHeight : 100
+      let stored = 0
+      const scroller = () =>
+        page
+          ? document.documentElement
+          : document.querySelector<HTMLElement>(".viewport")!
+      const target = () => page ? window : scroller()
+      const list = () => document.querySelector<HTMLElement>(".list")!
+      const listHeight = () =>
+        padding(list(), "start") +
+        list().querySelectorAll(".item").length * itemSize +
+        padding(list(), "end")
+      const top = () => (stored = Math.max(
+        0,
+        Math.min(stored, listTop + listHeight() - height)
+      ))
+      Element.prototype.getBoundingClientRect = function(this: Element) {
+        if (this.classList.contains("viewport")) return rect(0, 100)
+        if (this.classList.contains("list")) {
+          return rect(listTop - top(), listHeight())
+        }
+        if (this.classList.contains("item")) {
+          return rect(
+            listTop - top() +
+              Number(this.getAttribute("data-index")) * itemSize,
+            itemSize
+          )
+        }
+        return original.call(this)
       }
-      return original.call(this)
-    }
-    const install = () => {
-      const element = scroller()
-      Object.defineProperty(element, "clientHeight", {
-        configurable: true,
-        value: 100
-      })
-      Object.defineProperty(element, "scrollHeight", {
-        configurable: true,
-        get: listHeight
-      })
-      Object.defineProperty(element, "scrollTop", {
-        configurable: true,
-        get: top,
-        set: (value: number) => {
-          stored = value
-          top()
+      const relayout = () => target().dispatchEvent(new Event("scroll"))
+      const install = () => {
+        const element = scroller()
+        Object.defineProperty(element, "clientHeight", {
+          configurable: true,
+          value: height
+        })
+        Object.defineProperty(element, "scrollHeight", {
+          configurable: true,
+          get: () => listTop + listHeight()
+        })
+        Object.defineProperty(element, "scrollTop", {
+          configurable: true,
+          get: top,
+          set: (value: number) => {
+            stored = value
+            top()
+          }
+        })
+        target().scrollTo = ((options: ScrollToOptions) => {
+          element.scrollTop = options.top ?? top()
+          setTimeout(relayout, 0)
+        }) as typeof window.scrollTo
+      }
+      const scrollTo = (top: number) => {
+        scroller().scrollTop = top
+        relayout()
+      }
+      return {
+        install,
+        scrollTo,
+        relayout,
+        scrollTop: top,
+        original,
+        windowScrollTo
+      }
+    }),
+    ({ original, windowScrollTo }) =>
+      Effect.sync(() => {
+        Element.prototype.getBoundingClientRect = original
+        window.scrollTo = windowScrollTo
+        for (const key of ["clientHeight", "scrollHeight", "scrollTop"]) {
+          Reflect.deleteProperty(document.documentElement, key)
         }
       })
-      element.scrollTo = ((options: ScrollToOptions) => {
-        element.scrollTop = options.top ?? top()
-        setTimeout(() => element.dispatchEvent(new Event("scroll")), 0)
-      }) as typeof element.scrollTo
-    }
-    const scrollTo = (top: number) => {
-      scroller().scrollTop = top
-      scroller().dispatchEvent(new Event("scroll"))
-    }
-    const relayout = () => scroller().dispatchEvent(new Event("scroll"))
-    return { install, scrollTo, relayout, scrollTop: top, original }
-  }),
-  ({ original }) =>
-    Effect.sync(() => (Element.prototype.getBoundingClientRect = original))
-)
+  )
 
 const Steps = Effect.fnUntraced(function*(
   steps: ReadonlyArray<Partial<VirtualListProps>>,
-  { ownViewport = false }: { readonly ownViewport?: boolean } = {}
+  { listTop = 0, ownViewport = false, page = false }: {
+    readonly listTop?: number
+    readonly ownViewport?: boolean
+    readonly page?: boolean
+  } = {}
 ) {
-  const geometry = yield* layout
+  const geometry = yield* layout(page, listTop)
   const events: Array<VirtualListEvents> = []
   const Message = UiSchema.TaggedEnum({ Advanced: {} })
   const Demo = Html.component({
@@ -105,7 +134,7 @@ const Steps = Effect.fnUntraced(function*(
             return undefined
           },
           view: (virtualList) =>
-            (ownViewport
+            (ownViewport || page
               ? h.div.class("viewport").attr("style", "overflow-y:visible")
               : virtualList.viewport(h.div.class("viewport"))).children(
                 virtualList.list(h.ul.class("list")).children(
@@ -364,19 +393,62 @@ describe("VirtualList in a document", { concurrent: false }, () => {
       const added = (
         count: number
       ) => [...Array.from({ length: count }, (_, i) => "n" + i), ...keys]
-      const { next, scrollTo, scrollTop } = yield* Steps([
-        { keys, scrollTo: toKey("k100") },
-        { count: 1010, keys: added(10), scrollTo: toKey("k100") },
-        { count: 1020, keys: added(20), scrollTo: toKey("k100") }
-      ])
-      assert.strictEqual(scrollTop(), 100 * itemSize)
-      yield* next
-      assert.strictEqual(scrollTop(), 110 * itemSize)
+      yield* Effect.scoped(
+        Effect.gen(function*() {
+          const { next, scrollTo, scrollTop } = yield* Steps([
+            { keys, scrollTo: toKey("k100") },
+            { count: 1010, keys: added(10), scrollTo: toKey("k100") },
+            { count: 1020, keys: added(20), scrollTo: toKey("k100") }
+          ])
+          assert.strictEqual(scrollTop(), 100 * itemSize)
+          yield* next
+          assert.strictEqual(scrollTop(), 110 * itemSize)
 
-      scrollTo(4000)
+          scrollTo(4000)
+          yield* tick
+          yield* next
+          assert.strictEqual(scrollTop(), 4200)
+        })
+      )
+
+      const withHeader = yield* Steps([
+        { keys },
+        { keys: added(10) }
+      ], { listTop: 40 })
+      yield* withHeader.next
+      assert.strictEqual(withHeader.scrollTop(), 10 * itemSize)
+    }))
+
+  it.effect("preserves page position above the list and anchors by key within it", () =>
+    Effect.gen(function*() {
+      const keys = Array.from({ length: 200 }, (_, i) => "k" + i)
+      const reversed = [...keys].reverse()
+      const prepended = [
+        ...Array.from({ length: 50 }, (_, i) => "n" + i),
+        ...reversed
+      ]
+      const { indices, next, scrollTo, scrollTop } = yield* Steps([
+        { keys },
+        { keys: reversed },
+        { keys: prepended },
+        { keys: [...prepended].reverse() }
+      ], { page: true, listTop: 2 })
+      yield* next
+      assert.strictEqual(scrollTop(), 0)
+      assert.strictEqual(indices()[0], 0)
+
+      scrollTo(2)
       yield* tick
       yield* next
-      assert.strictEqual(scrollTop(), 4200)
+      assert.strictEqual(scrollTop(), 2 + 50 * itemSize)
+
+      scrollTo(2)
+      yield* tick
+      scrollTo(0)
+      yield* tick
+      yield* next
+      assert.strictEqual(scrollTop(), 0)
+      assert.strictEqual(indices()[0], 0)
     }))
 
   it.effect("reports a list that grows without a scroll once with trackScroll, and not without it", () =>
