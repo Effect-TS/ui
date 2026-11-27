@@ -1,17 +1,16 @@
 /**
- * Insets its children past the status bar, navigation bar, display cutouts and
- * home indicator on both iOS and Android.
+ * Insets children past system bars, display cutouts, and the home indicator on
+ * iOS and Android.
  *
  * **Details**
  *
- * Renders Fabric's `RCTSafeAreaView` on both platforms. Native insets replace
- * `padding*` on `SafeArea` itself on every side, including sides with zero
- * inset, so put content padding on a child view instead.
+ * Renders `RCTSafeAreaView` on both platforms. Native insets overwrite
+ * `padding*` on `SafeArea` itself on every side, so put content padding on a
+ * child view.
  *
- * On Android, insets arrive asynchronously after mount: children lay out once
- * without insets and again once `WindowInsets` are applied. React Native marks
- * `SafeAreaView` deprecated, while `RCTSafeAreaView` remains registered in
- * React Native 0.88.
+ * On Android, insets arrive asynchronously after mount (one layout pass before
+ * `WindowInsets` apply). React Native marks `SafeAreaView` deprecated, while
+ * `RCTSafeAreaView` remains registered in React Native 0.88.
  *
  * **Example** (A screen inset from system bars)
  *
@@ -37,8 +36,7 @@ const element = Native.defineView(() => new Native.ViewElement("safeArea"), {
 })
 
 /**
- * A container that applies native safe-area insets as padding. Call it with the
- * caller's `h`, then chain `style`, `on` and `children`.
+ * Container that applies native safe-area insets as padding.
  *
  * @stability experimental
  * @category components

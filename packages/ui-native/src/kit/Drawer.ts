@@ -3,20 +3,16 @@
  *
  * **Details**
  *
- * Android only: on other platforms it renders a plain `RCTView` showing the
- * main content with the drawer panel hidden. Pass the drawer content in
- * `options.drawer` and the main content in `.children(...)`; `Drawer` builds
- * the two non-collapsable wrapper views `AndroidDrawerLayout` requires.
+ * Android only: other platforms render a plain `RCTView` with the drawer panel
+ * hidden. Pass drawer content in `options.drawer` and main content in
+ * `.children(...)`.
  *
- * Open and close the drawer programmatically from a Command using a ref on the
- * `Drawer` and `Native.Host`:
+ * Open or close programmatically via a ref and `Native.Host`:
  * `host.command(node, "openDrawer")` / `host.command(node, "closeDrawer")`.
  *
- * Pressing Android Back while the drawer is open does not close it —
- * `hardwareBackPress` runs normally (closing the activity under `NativeApp`'s
- * default fallback unless handled with `BackHandler`). React Native marks
- * `DrawerLayoutAndroid` deprecated, while `AndroidDrawerLayout` remains
- * registered in React Native 0.88.
+ * Android Back does not close an open drawer (`hardwareBackPress` runs
+ * normally). React Native marks `DrawerLayoutAndroid` deprecated, while
+ * `AndroidDrawerLayout` remains registered in React Native 0.88.
  *
  * **Example** (A left navigation drawer with open/close events)
  *
@@ -118,15 +114,15 @@ export interface DrawerEvents {
  * @since 0.1.0
  */
 export interface DrawerOptions<Msg, RD = never> {
-  /** Content rendered inside the sliding drawer panel. */
+  /** Sliding drawer panel content. */
   readonly drawer: Native.NoTextInput<Msg, RD>
-  /** Width of the drawer panel, in points. Required so Android and Fabric layout agree on panel bounds. */
+  /** Panel width in points; required so Android and Fabric bounds match. */
   readonly drawerWidth: number
-  /** Edge the drawer slides from. Defaults to `"left"`. */
+  /** Defaults to `"left"`. */
   readonly drawerPosition?: DrawerPosition | undefined
-  /** Gesture lock mode. Defaults to `"unlocked"`. */
+  /** Defaults to `"unlocked"`. */
   readonly drawerLockMode?: DrawerLockMode | undefined
-  /** Background colour of the drawer panel. Defaults to `"white"`. */
+  /** Defaults to `"white"`. */
   readonly drawerBackgroundColor?: Native.Color | undefined
 }
 
@@ -186,8 +182,8 @@ const panel = Native.defineView(
 )
 
 /**
- * Renders an Android drawer layout. Pass the drawer panel content in
- * `options.drawer` and the main content via `.children(...)`.
+ * Renders an Android drawer layout. Pass drawer content in `options.drawer`
+ * and main content via `.children(...)`.
  *
  * @stability experimental
  * @category components
@@ -201,8 +197,7 @@ export const Drawer = <Msg, RD = never>(
     element as Native.ViewElement<Msg, never, DrawerEvents, "drawer">,
     { props: { ...props, drawerBackgroundColor } }
   ).forward((built) => {
-    // The layout takes two children: the main content, then the panel. The
-    // panel follows the props as chained, so it stays where native draws it.
+    // Two children required: main first, panel second, following final host props.
     const node = View.build(built, [])
     return {
       ...node,

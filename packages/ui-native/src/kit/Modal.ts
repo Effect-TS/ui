@@ -3,21 +3,17 @@
  *
  * **Details**
  *
- * `Modal` is controlled by mounting and unmounting: include the element in the
- * view while open and omit it to close. It has no `dismiss` event because
- * Android's `RCTModalHostView` ignores `visible` and shows whenever mounted,
- * and on iOS `onDismiss` only fires when `visible` flips to `false` while the
- * view stays mounted (unmounting recycles the native view before the dismissal
- * animation finishes).
+ * Controlled by mounting and unmounting. There is no `dismiss` event: Android's
+ * `RCTModalHostView` ignores `visible` and shows whenever mounted, and iOS only
+ * emits `onDismiss` when `visible` flips to `false` while mounted (unmounting
+ * recycles the view before dismissal completes).
  *
- * `onRequestClose` is required so Android's Back button cannot silently trap
- * the user in the modal. On Android the modal runs in a separate `Dialog`
- * window, so Back fires `requestClose` and never reaches `NativeApp`'s
- * `hardwareBackPress` fallback.
+ * `onRequestClose` is required so Android Back cannot silently trap the user.
+ * Android runs the modal in a separate `Dialog` window, so Back fires
+ * `requestClose` and never triggers `NativeApp`'s `hardwareBackPress` fallback.
  *
- * `RCTModalHostView` paints nothing itself: put content inside a child
- * `h.view.style({ flex: 1, backgroundColor: ... })`, and wrap with `SafeArea`
- * on edge-to-edge apps so content clears the system bars.
+ * `RCTModalHostView` paints nothing itself: put content in a child view with
+ * `flex: 1` and a background, wrapped in `SafeArea` on edge-to-edge apps.
  *
  * **Example** (A modal opened and closed from the Model)
  *
@@ -118,16 +114,15 @@ export interface ModalEvents {
  */
 export interface ModalOptions<Msg> {
   /**
-   * Called on Android Back, Apple TV Menu, or iOS swipe dismissal (with
-   * `allowSwipeDismissal`). Required so Back cannot silently trap the user.
-   * Returning `undefined` keeps the modal open on Android Back; with
-   * `allowSwipeDismissal: true` on iOS, UIKit has already dismissed the sheet
-   * before this fires, so unmount the modal to keep the Model in sync.
+   * Fires on Android Back, Apple TV Menu, or iOS swipe dismissal (with
+   * `allowSwipeDismissal`). Returning `undefined` keeps the modal open on
+   * Android Back; with `allowSwipeDismissal: true` on iOS, UIKit has already
+   * dismissed the sheet, so unmount the modal to keep the Model in sync.
    */
   readonly onRequestClose: View.Handler<Msg, {}>
   /** Defaults to `"none"`. */
   readonly animationType?: ModalAnimationType | undefined
-  /** Renders over a transparent window. Defaults to `false`. */
+  /** Defaults to `false`. */
   readonly transparent?: boolean | undefined
   /** iOS only. Defaults to `"fullScreen"`, or `"overFullScreen"` when `transparent` is `true`. */
   readonly presentationStyle?: ModalPresentationStyle | undefined
@@ -135,13 +130,13 @@ export interface ModalOptions<Msg> {
   readonly supportedOrientations?:
     | ReadonlyArray<ModalSupportedOrientation>
     | undefined
-  /** iOS only. Allows dismissing a sheet modal by swiping down, firing `onRequestClose`. */
+  /** iOS only. Allows swipe-to-dismiss on sheets, firing `onRequestClose`. */
   readonly allowSwipeDismissal?: boolean | undefined
-  /** Android only. Forces hardware acceleration for the dialog window. */
+  /** Android only. */
   readonly hardwareAccelerated?: boolean | undefined
-  /** Android only. Lets the modal draw under the system status bar. */
+  /** Android only. Draws under the status bar. */
   readonly statusBarTranslucent?: boolean | undefined
-  /** Android only. Lets the modal draw under the system navigation bar. */
+  /** Android only. Draws under the navigation bar. */
   readonly navigationBarTranslucent?: boolean | undefined
 }
 
@@ -166,7 +161,7 @@ export class ModalElement<
   declare readonly "~With"?: ModalElement<Msg, R | this["~Add"], E, Tag>
 
   /**
-   * Adds the modal's content. Text is rejected: wrap it in `h.text(...)`.
+   * Adds modal content. Wrap text in `h.text(...)`.
    *
    * @since 0.1.0
    */
@@ -186,15 +181,13 @@ const element = Native.defineView(
   () => new ModalElement<any, never, ModalEvents, "modal">("modal"),
   {
     viewName: "RCTModalHostView",
-    // `visible: true` is required by iOS (ignored on Android); `position: "absolute"`
-    // keeps the empty host placeholder out of its parent's flex flow.
+    // iOS needs `visible: true`; `position: "absolute"` keeps the host out of flex flow.
     defaults: { visible: true, position: "absolute" }
   }
 )
 
 /**
- * Renders a native modal while mounted. Call with the caller's `h` and options,
- * then chain `.on("show" | "orientationChange", ...)` and `.children(...)`.
+ * Renders a native modal while mounted.
  *
  * @stability experimental
  * @category components
