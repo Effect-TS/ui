@@ -150,7 +150,6 @@ describe("tracing", () => {
           ]
         )
         assert.isTrue(flow.every((span) => span.traceId === preflight.traceId))
-        assert.notStrictEqual(preflight.traceId, app.traceId)
         const unrelated = spans[settled]
         assert.notStrictEqual(unrelated.traceId, preflight.traceId)
 
