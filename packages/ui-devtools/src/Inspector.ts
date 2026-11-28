@@ -437,8 +437,9 @@ export interface Exclusion {
  * the latest since the last shown entry of any instance is kept, so the next
  * shown entry is still compared with the latest excluded state. An excluded
  * `Unmounted` is kept too, unless the instance mounted since the last shown
- * entry. Other excluded entries update the instance's records and are not
- * kept. Links to an entry not kept resolve to `Outside`.
+ * entry. So is one that ends a run an entry still held started. Other
+ * excluded entries update the instance's records and are not kept. Links to
+ * an entry not kept resolve to `Outside`.
  *
  * `exclude` is not a way to hide sensitive data: later entries still carry
  * whatever an excluded message changed in the Model. Use `Schema.Redacted`

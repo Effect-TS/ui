@@ -600,19 +600,25 @@ describe("DevTools overlay", { concurrent: false }, () => {
       yield* press("Tick wall", 3)
       assert.lengthOf(rows(/ClickedCounter/), 1)
       assert.lengthOf(rows(/TickedCounter/), 1)
+      // The props rows the stopped tick caused stay hidden after it's evicted.
+      yield* press("Click", 2)
+      yield* click(
+        HtmlLocator.getByRole(root, "button", { name: "Everything" })
+      )
+      assert.lengthOf(rows(/Tile/), 0)
       yield* click(
         HtmlLocator.getByRole(root, "button", {
           name: "Start recording Ticked in Wall"
         })
       )
-      assert.lengthOf(rows(/TickedWall/), 1)
+      assert.lengthOf(rows(/Tile/), 2)
 
-      yield* select(/TickedWall/)
+      yield* select(/Tile/)
       yield* stopRecording(root, "Wall[w] and below")
       assert.lengthOf(rows(/Wall|Tile/), 0)
       yield* press("Tick wall", 2)
       yield* press("Click")
-      assert.lengthOf(rows(/ClickedCounter/), 2)
+      assert.lengthOf(rows(/ClickedCounter/), 4)
       assert.lengthOf(rows(/Wall|Tile/), 0)
 
       // Time travel paints the wall as it was at an entry from before the stop.

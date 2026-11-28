@@ -291,6 +291,11 @@ const makeSession = (
     if (run !== undefined && run.end === undefined) close(run, seq, reason)
   }
 
+  const endsHeld = (seq: number) =>
+    ended.get(seq)?.some((record) =>
+      entries.has(record.issued?.seq ?? -1) || entries.has(record.start ?? -1)
+    ) === true
+
   const linkSource = (inst: InstanceState, from: number, source: Source) => {
     switch (source._tag) {
       case "Command":
@@ -625,6 +630,8 @@ const makeSession = (
         else if (fleeting) coalesced.delete(instance)
         // An unmount stays, without a slot, so a late viewer replays it. The
         // rest only changes the instance's records: apply it, keep nothing.
+        // But for the end of a run a held entry opened, which a late viewer
+        // replays too.
         transient = fleeting || !(state || gone)
       } else {
         // Any shown entry, a fetch too, ends the interval stopped ones coalesce in.
@@ -637,7 +644,7 @@ const makeSession = (
       }
       if (entry._tag === "SessionStarted") app = entry.app
       else if (entry._tag !== "FetchStarted") track(entry)
-      if (transient) return evict(entry.seq, entry)
+      if (transient && !endsHeld(entry.seq)) return evict(entry.seq, entry)
       for (const [seq, oldest] of entries) {
         if (entries.size - hidden.size <= size) break
         evict(seq, oldest)

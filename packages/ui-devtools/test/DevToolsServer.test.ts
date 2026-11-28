@@ -607,12 +607,36 @@ describe("DevToolsServer", { concurrent: false }, () => {
               path: "/App/Child",
               instance: 2,
               seq: 11
+            },
+            // A run that started while shown ends for a late viewer too.
+            {
+              _tag: "CommandStarted",
+              ...at,
+              path: "/App/Other",
+              instance: 3,
+              seq: 12,
+              name: "Load",
+              issued: { seq: 12, index: 0 },
+              spanId: "a",
+              traceId: "b"
+            },
+            {
+              _tag: "CommandEnded",
+              ...stopped,
+              path: "/App/Other",
+              instance: 3,
+              seq: 13,
+              name: "Load",
+              issued: { seq: 12, index: 0 },
+              spanId: "a",
+              traceId: "b",
+              silent: false
             }
           ]
         ) socket.send(JSON.stringify(frame))
 
         const state = yield* agent.call<any>("get_state", { instance: 1 }).pipe(
-          Effect.filterOrFail((state) => state.at === 11),
+          Effect.filterOrFail((state) => state.at === 13),
           Effect.retry(Schedule.spaced("10 millis")),
           Effect.timeout("5 seconds")
         )
@@ -627,11 +651,12 @@ describe("DevToolsServer", { concurrent: false }, () => {
           const frame = JSON.parse(String(event.data))
           if (frame._tag !== "Held") frames.push(frame)
         })
-        yield* until(() => frames.some((frame) => frame.seq === 11))
+        yield* until(() => frames.some((frame) => frame.seq === 13))
         const viewer = Inspector.make()
         viewer.ingest(frames)
         assert.strictEqual(viewer.sessions()[0]!.summary(1)?.unmounted, 8)
         assert.strictEqual(viewer.sessions()[0]!.summary(2)?.unmounted, 11)
+        assert.strictEqual(viewer.sessions()[0]!.summary(3)?.running, 0)
       }).pipe(Effect.scoped),
     30_000
   )

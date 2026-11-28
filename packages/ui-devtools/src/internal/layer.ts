@@ -237,8 +237,15 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         }
       }
       let rules = Array.from(stopped.values())
+      // A held props row still matches by its cause once that is evicted.
       const isStopped = (entry: Rules.Entry) =>
-        rules.length > 0 && Rules.excludes(rules, entry, history.entry)
+        rules.length > 0 &&
+        Rules.excludes(
+          rules,
+          entry,
+          (session, seq) =>
+            history.entry(session, seq) ?? history.cause(session, entry.seq)
+        )
       const notRecording = () => rules
       const setRecording = (rule: Control.Rule, recording: boolean) => {
         choose(rule, recording)

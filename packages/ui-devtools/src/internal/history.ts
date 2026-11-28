@@ -20,6 +20,11 @@ export interface History {
   readonly holds: (session: string, seq: number) => boolean
   /** An entry held, shown or excluded. */
   readonly entry: (session: string, seq: number) => Entry | undefined
+  /**
+   * The entry a shown `PropsChanged` at `seq` was caused by, while the
+   * `PropsChanged` is held, even once the cause is evicted.
+   */
+  readonly cause: (session: string, seq: number) => Entry | undefined
   /** The last seq recorded, excluded entries included. */
   readonly latest: (session: string) => number | undefined
   /**
@@ -138,6 +143,7 @@ const makeSession = (size: number) => {
   // Every entry held by seq, oldest first, and which of them are shown.
   const entries = new Map<number, Entry>()
   const shown = new Set<number>()
+  const causes = new Map<number, Entry>()
   // Excluded entries since the last shown one, by instance: only the latest
   // state, props and result of each query matter to the next shown entry.
   const coalesced = new Map<number, Map<string, Entry>>()
@@ -154,6 +160,7 @@ const makeSession = (size: number) => {
     entries.delete(oldest.seq)
     floor = oldest.seq
     shown.delete(oldest.seq)
+    causes.delete(oldest.seq)
     const kept = "instance" in oldest
       ? coalesced.get(oldest.instance)
       : undefined
@@ -226,6 +233,11 @@ const makeSession = (size: number) => {
       shownSeq = entry.seq
       entries.set(entry.seq, entry)
       shown.add(entry.seq)
+      const cause =
+        entry._tag === "PropsChanged" && entry.causedBy !== undefined
+          ? entries.get(entry.causedBy)
+          : undefined
+      if (cause !== undefined) causes.set(entry.seq, cause)
       for (const oldest of entries.values()) {
         if (shown.size <= size) break
         drop(oldest)
@@ -239,6 +251,7 @@ const makeSession = (size: number) => {
     },
     holds: (seq: number) => shown.has(seq),
     entry: (seq: number) => entries.get(seq),
+    cause: (seq: number) => causes.get(seq),
     latest: () => last,
     missing: (seq: number) =>
       seq <= floor
@@ -307,6 +320,7 @@ export const make = (size: number): History => {
     },
     holds: (session, seq) => sessions.get(session)?.holds(seq) ?? false,
     entry: (session, seq) => sessions.get(session)?.entry(seq),
+    cause: (session, seq) => sessions.get(session)?.cause(seq),
     latest: (session) => sessions.get(session)?.latest(),
     missing: (session, seq) => sessions.get(session)?.missing(seq) ?? "evicted",
     at: (session, seq) => {
