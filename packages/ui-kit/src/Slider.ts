@@ -732,15 +732,14 @@ const TrackPointer = Mount.makeStream(
             Queue.offerUnsafe(queue, SliderMessage.FoundDirection({ rtl }))
         )
         const release = () => {
-          const stop = stopDrag
-          if (stop === null) return
+          if (stopDrag === null) return
+          stopDrag()
           stopDrag = null
-          stop()
           Queue.offerUnsafe(queue, SliderMessage.ReleasedPointer())
         }
         const onMove = (event: PointerEvent) => {
-          // Another element took the pointer's release.
-          if (event.buttons === 0) return release()
+          // Another element took the pointer's release, which ends the drag.
+          if (event.buttons === 0) return
           Queue.offerUnsafe(
             queue,
             SliderMessage.MovedPointer({ fraction: fractionAt(event) })

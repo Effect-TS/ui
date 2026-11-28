@@ -389,13 +389,11 @@ const endedAt = (
     : -1
 }
 
+const released = SortableListMessage.ReleasedPointer()
 const releasedPointer = [
-  HtmlSubscription.onDocument("mouseup", SortableListMessage.ReleasedPointer()),
-  HtmlSubscription.onDocument(
-    "pointercancel",
-    SortableListMessage.ReleasedPointer()
-  ),
-  HtmlSubscription.onWindow("blur", SortableListMessage.ReleasedPointer())
+  HtmlSubscription.onDocument("mouseup", released),
+  HtmlSubscription.onDocument("pointercancel", released),
+  HtmlSubscription.onWindow("blur", released)
 ]
 
 const outdated = (

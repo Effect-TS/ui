@@ -851,25 +851,21 @@ const TrackStepper = Mount.makeStream(
             NumberFieldMessage.HeldStepper({ direction, ...modifiers })
           )
         const end = () => {
+          const holding = release !== undefined
           release?.abort()
           release = undefined
           pressed = false
           touching = false
           stop()
-          Queue.offerUnsafe(
-            queue,
-            NumberFieldMessage.ReleasedStepper({ direction })
-          )
+          if (holding) {
+            Queue.offerUnsafe(
+              queue,
+              NumberFieldMessage.ReleasedStepper({ direction })
+            )
+          }
         }
         const finish = (event: PointerEvent) => {
           if (event.pointerId === pointerId) end()
-        }
-        const interrupt = () => {
-          if (release !== undefined) return end()
-          if (!pressed && !touching) return
-          pressed = false
-          touching = false
-          stop()
         }
         const start = (first: boolean, focus: boolean) => {
           stop()
@@ -927,9 +923,6 @@ const TrackStepper = Mount.makeStream(
           if (touchLike(event.pointerType)) {
             pressed = false
           }
-        }
-        const onPointerCancel = (event: PointerEvent) => {
-          if (event.pointerId === pointerId) interrupt()
         }
         const onPointerMove = (event: PointerEvent) => {
           if (disabled || !touchLike(event.pointerType) || !pressed) {
@@ -992,8 +985,8 @@ const TrackStepper = Mount.makeStream(
               passive: true,
               signal
             })
-            view.addEventListener("pointercancel", onPointerCancel, { signal })
-            view.addEventListener("blur", interrupt, { signal })
+            view.addEventListener("pointercancel", finish, { signal })
+            view.addEventListener("blur", end, { signal })
             node.addEventListener("pointerdown", onPointerDown, { signal })
             node.addEventListener("pointerup", onPointerUp, { signal })
             node.addEventListener("pointermove", onPointerMove, { signal })
@@ -1211,7 +1204,7 @@ const TrackScrub = Mount.makeStream(
         view.addEventListener("pointerup", onUp, options)
         view.addEventListener("pointercancel", onCancel, options)
         view.addEventListener("pointermove", onMove, options)
-        view.addEventListener("blur", interrupt, { signal: dragging.signal })
+        view.addEventListener("blur", interrupt, options)
         Queue.offerUnsafe(
           queue,
           NumberFieldMessage.StartedScrub({ focus: mouse })

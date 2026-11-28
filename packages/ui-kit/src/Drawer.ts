@@ -1297,7 +1297,6 @@ const TrackSwipe = Mount.makeStream(
               moved.timeStamp,
               false
             )
-            if (moved.buttons === 0) release(moved.timeStamp)
           }, (ended) => release(ended.timeStamp))
         }
         const onTouchStart = (event: TouchEvent) => {
@@ -1614,7 +1613,6 @@ const TrackSwipeArea = Mount.makeStream(
           apply(g)
         }
         const release = (g: AreaGesture, time: number) => {
-          if (gesture !== g) return
           finish(g)
           if (!g.started) return
           send(DrawerMessage.ReleasedAreaSwipe({
@@ -1635,10 +1633,8 @@ const TrackSwipeArea = Mount.makeStream(
           g.stop = followPointer(
             node,
             event.pointerId,
-            (moved) => {
-              move(g, { x: moved.clientX, y: moved.clientY }, moved.timeStamp)
-              if (moved.buttons === 0) release(g, moved.timeStamp)
-            },
+            (moved) =>
+              move(g, { x: moved.clientX, y: moved.clientY }, moved.timeStamp),
             (ended) => release(g, ended.timeStamp)
           )
         }

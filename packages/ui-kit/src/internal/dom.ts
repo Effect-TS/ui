@@ -302,22 +302,23 @@ export const followPointer = (
   const own = (f: (event: PointerEvent) => void) => (event: PointerEvent) => {
     if (event.pointerId === pointer) f(event)
   }
-  const stop = () => {
+  const document = node.ownerDocument
+  document.addEventListener(
+    "pointermove",
+    own((event) => {
+      onMove(event)
+      if (event.buttons === 0) onEnd(event)
+    }),
+    options
+  )
+  document.addEventListener("pointerup", own(onEnd), options)
+  document.addEventListener("pointercancel", own(onEnd), options)
+  node.addEventListener("lostpointercapture", own(onEnd), options)
+  document.defaultView?.addEventListener("blur", onEnd, options)
+  return () => {
     listening.abort()
     if (node.hasPointerCapture?.(pointer) === true) {
       node.releasePointerCapture(pointer)
     }
   }
-  const end = (event: Event) => {
-    if (listening.signal.aborted) return
-    stop()
-    onEnd(event)
-  }
-  const document = node.ownerDocument
-  document.addEventListener("pointermove", own(onMove), options)
-  document.addEventListener("pointerup", own(end), options)
-  document.addEventListener("pointercancel", own(end), options)
-  node.addEventListener("lostpointercapture", own(end), options)
-  document.defaultView?.addEventListener("blur", end, options)
-  return stop
 }
