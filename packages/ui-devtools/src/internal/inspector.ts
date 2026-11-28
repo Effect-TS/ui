@@ -496,7 +496,8 @@ const makeSession = (
   }
 
   const evict = (seq: number, entry: Entry, prune = true) => {
-    entries.delete(seq)
+    // An end evicted with its issuer may be visited again.
+    if (!entries.delete(seq)) return
     hidden.delete(seq)
     previous.delete(seq)
     for (const named of back.get(seq) ?? []) {

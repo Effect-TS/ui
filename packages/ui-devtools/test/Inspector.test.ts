@@ -576,6 +576,18 @@ describe("Inspector", () => {
       ])
     }
     assert.lengthOf(ticking.sessions()[0].records(1), 1)
+    ticking.ingest([
+      {
+        ...base(1, "/A", "A"),
+        _tag: "Unmounted",
+        seq: 302,
+        at: 302,
+        excluded: true
+      } as Entry
+    ])
+    // Clear evicts the hidden end with its update, then reaches it again.
+    ticking.sessions()[0].clear()
+    assert.deepStrictEqual(ticking.sessions()[0].records(1), [])
   })
 
   it("summarizes instances as entries arrive and leave", () => {
