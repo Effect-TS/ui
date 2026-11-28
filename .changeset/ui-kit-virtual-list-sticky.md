@@ -2,4 +2,4 @@
 "@effect/ui-kit": minor
 ---
 
-`VirtualList` runs on `@effect/ui/Virtualizer`, and its new `sticky` prop keeps the last sticky item above the viewport rendered, such as the header of the section on screen.
+Add a `sticky` prop to `VirtualList` that keeps the last specified item at or before the viewport mounted at its own offset. It does not pin the item to the viewport.

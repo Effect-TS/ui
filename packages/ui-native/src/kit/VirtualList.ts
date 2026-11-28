@@ -1,11 +1,10 @@
 /**
- * A scroll view that renders only the items near what's on screen, and
- * leaves room for the others so the scroll covers the whole list. It covers
- * what React Native's `FlatList`, `SectionList` and `VirtualizedList` do.
+ * A headless virtual list that renders items near the viewport and leaves
+ * space for unmounted items, so the scroll covers the whole list.
  *
  * `VirtualList` is a headless component on the same core as `VirtualList` in
- * `@effect/ui-kit` (`@effect/ui/Virtualizer`), so the two take the same
- * props and emit the same `Scrolled`. Your view draws a `scroll` and one
+ * `@effect/ui-kit` (`@effect/ui/Virtualizer`). They share windowing props
+ * and the `Scrolled` event. Your view draws a `scroll` and one
  * element for each index in `items`.
  *
  * **Anatomy**
@@ -44,7 +43,8 @@
  * momentum after it ends, or 100ms after a drag that has none.
  *
  * `sticky` keeps the last sticky item at or before the viewport's start
- * rendered at its own place, such as the header of the section on screen.
+ * mounted at its own offset, such as the header of the section on screen.
+ * It does not pin the item to the viewport.
  *
  * **Example** (A list of rows)
  *
@@ -99,8 +99,8 @@ const scrollEndDelay = 100
 const { layout: _layout, ...coreFields } = Virtualizer.Props.fields
 
 /**
- * The props of `VirtualList`: those of `Virtualizer.Props` in points, but
- * `layout`, and `horizontal`, which scrolls the list sideways.
+ * `Virtualizer.Props` in points, excluding `layout`, plus `horizontal`
+ * for horizontal scrolling.
  *
  * @stability experimental
  * @category models
@@ -143,11 +143,9 @@ export type VirtualListEvents = Virtualizer.Events
 
 const Model = Schema.Struct({
   ...Virtualizer.Model.fields,
-  // What the scroll last reported, along its axis: the offset, the
-  // viewport's size, the content's size, -1 until it's known, and the
-  // viewport's cross size.
   scrollOffset: Schema.Number,
   viewport: Schema.Number,
+  // -1 until native reports the content size.
   content: Schema.Number,
   cross: Schema.Number,
   // Where the leading spacer starts in the content.
@@ -230,14 +228,13 @@ const ScrollEnd = Command.make(
   () => withRoot((host, node) => host.scrollToEnd(node, false))
 )
 
-// Waits out the momentum that may follow a drag.
+// Allows momentum to begin before marking a drag as settled.
 const Settle = Command.make(
   "VirtualList.settle",
   { args: {}, mode: "switch" },
   () => Effect.as(Effect.sleep(scrollEndDelay), Message.Settled())
 )
 
-// The props with the native defaults, which are also the core's props.
 const withDefaults = (props: VirtualListProps): VirtualListProps => ({
   ...props,
   initialCount: props.initialCount ?? 10,
@@ -291,16 +288,13 @@ const startOf = (
       index++
     }
   }
-  // A row outside the window, or gone from the list, has no placement to use.
   return index >= from && index < to
     ? plan.offsetOf(index) + offset - placed.at
     : fallback
 }
 
-// Tells the core where the viewport is, once the scroll has laid out. When
-// the content changed and native keeps the first visible item in place, the
-// offset is from before native moved the scroll, so the item stays the one
-// the viewport starts at until the next scroll event.
+// After a content change, the stored offset can precede native's anchor
+// adjustment. Keep the same visible item until the next scroll event.
 const moved = (
   model: Model,
   props: VirtualListProps,
@@ -430,10 +424,9 @@ export const VirtualList = Native.component({
 }).make({
   init: ($) => ({
     ...Virtualizer.init(withDefaults($.props)),
-    // Native reports an item's layout only when it changes, so the core's
-    // reset of every size at a new cross size would lose sizes that are never
-    // reported again. The core's width stays fixed, and the list drops the
-    // sizes of the items it isn't rendering when the cross size changes.
+    // Native reports layout only when it changes. Keep the core's width
+    // fixed to retain measurements that native will not report again;
+    // cross-size changes invalidate only unmounted items.
     width: 1,
     scrollOffset: 0,
     viewport: 0,
@@ -568,8 +561,8 @@ export const VirtualList = Native.component({
   },
   subscriptions: ({ model, props }) => {
     const fresh = Virtualizer.freshOf(model, props)
-    // A held request can resolve on a props change alone, such as the keys
-    // bringing its key, which sends no message that would scroll to it.
+    // A key can appear without a native event. Resolve waiting requests
+    // on props changes too, so the list scrolls to the new target.
     const held = fresh !== null || model.viewport === 0
       ? null
       : Virtualizer.waitingOf(model, props)
@@ -589,9 +582,8 @@ export const VirtualList = Native.component({
         String(target),
         () => Stream.make(Message.Resolved())
       ),
-      // Fixed rows report no placement, and native can move them without a
-      // scroll or a new content size, so the last placement is dropped as
-      // the props switch to fixed sizes.
+      // Fixed rows can move without a scroll or content-size event. Drop
+      // the old placement on entry to fixed mode, before measuring resumes.
       props.measure === false && model.placed !== null &&
       Subscription.make(
         "VirtualList.fixed",
@@ -663,7 +655,6 @@ export const VirtualList = Native.component({
       }
       const key = Virtualizer.keyOf(props, index)
       const known = model.sizes[Virtualizer.sizeKey(props, index)]
-      // The first item around the viewport also reports where it moves to.
       const first = index === anchor
       const { placed } = model
       return b.on("layout", ({ layout }) => {

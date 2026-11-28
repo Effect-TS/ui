@@ -2,4 +2,4 @@
 "@effect/ui": minor
 ---
 
-Add experimental `Virtualizer`, the host-neutral core of a virtual list: the props, events, `update` and `plan` that work out which items to render and where a scroll request goes.
+Add experimental `Virtualizer`, a host-independent core for calculating which list items to render, spacer sizes, and scroll request targets.

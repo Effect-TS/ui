@@ -112,11 +112,10 @@
  *
  * **Sticky items**
  *
- * `sticky` lists the indices of items that stick to the top, such as
- * section headers styled `position: sticky`. The last one at or above the
- * viewport's top stays rendered at its own place in the list, after the rows
- * around it are left out, so it goes on sticking until the next one pushes it
- * out.
+ * `sticky` lists item indices, such as section headers, to keep mounted.
+ * The last one at or above the viewport's top stays at its own offset even
+ * when surrounding items are unmounted. The prop does not pin the item;
+ * positioning is up to the consumer's styles.
  *
  * **Styling**
  *

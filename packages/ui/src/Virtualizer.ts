@@ -59,7 +59,7 @@ export const ScrollTarget = UiSchema.TaggedEnum({
 export type ScrollTarget = typeof ScrollTarget.Type
 
 /**
- * Where an item a scroll request goes to ends up in the viewport.
+ * The alignment of a requested item within the viewport.
  * `"nearest"` leaves an item that is in full view where it is, and otherwise
  * brings in its nearest edge.
  *
@@ -70,7 +70,7 @@ export type ScrollTarget = typeof ScrollTarget.Type
 export const Align = Schema.Literals(["start", "center", "end", "nearest"])
 
 /**
- * Where an item a scroll request goes to ends up in the viewport.
+ * The alignment of a requested item within the viewport.
  *
  * @stability experimental
  * @category models
@@ -159,9 +159,9 @@ export const Props = Schema.Struct({
    */
   reserveStart: Schema.optional(Schema.Number),
   /**
-   * The indices of the items that stick to the start of the viewport, such as
-   * section headers. The last one at or before the viewport's start stays
-   * rendered at its own offset wherever the list scrolls.
+   * Indices of items to keep mounted, such as section headers. The last one
+   * at or before the viewport's start stays rendered at its own offset.
+   * This does not pin the item to the viewport.
    */
   sticky: Schema.optional(Schema.Array(Schema.Number)),
   /**
