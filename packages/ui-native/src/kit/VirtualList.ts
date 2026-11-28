@@ -188,6 +188,7 @@ const Message = UiSchema.TaggedEnum({
     first: Schema.Boolean
   },
   Requested: { scrollTo: Virtualizer.ScrollTo },
+  Resolved: {},
   DragBegan: {},
   DragEnded: {},
   MomentumBegan: {},
@@ -278,7 +279,8 @@ const startOf = (
 ): number => {
   const { placed } = model
   const fallback = offset - originOf(model, props)
-  if (placed === null) return fallback
+  // Fixed rows report no placement, and native lays them out as planned.
+  if (placed === null || props.measure === false) return fallback
   const plan = given ?? Virtualizer.plan(model, props)
   const [from, to] = plan.window
   let index = placed.index
@@ -530,6 +532,8 @@ export const VirtualList = Native.component({
             Virtualizer.Message.RequestedScroll({ scrollTo: message.scrollTo })
           )
         )
+      case "Resolved":
+        return finish($, props, { model, events: [] })
       case "DragBegan": {
         const dropped = Virtualizer.update(
           model,
@@ -561,12 +565,26 @@ export const VirtualList = Native.component({
   },
   subscriptions: ({ model, props }) => {
     const fresh = Virtualizer.freshOf(model, props)
+    // A held request can resolve on a props change alone, such as the keys
+    // bringing its key, which sends no message that would scroll to it.
+    const held = fresh !== null || model.viewport === 0
+      ? null
+      : Virtualizer.waitingOf(model, props)
+    const target = held === null
+      ? null
+      : Virtualizer.targetOf(model, withDefaults(props), held)
     return [
       fresh !== null &&
       Subscription.make(
         "VirtualList.scrollTo",
         JSON.stringify(fresh),
         () => Stream.make(Message.Requested({ scrollTo: fresh }))
+      ),
+      target !== null &&
+      Subscription.make(
+        "VirtualList.resolved",
+        String(target),
+        () => Stream.make(Message.Resolved())
       )
     ]
   },

@@ -275,6 +275,31 @@ describe("VirtualList", () => {
     await list.close()
   })
 
+  it("drops where native placed a row once the rows take fixed sizes", async () => {
+    const list = await setup({ count: 1000, itemSize: 40 })
+    await list.layOut()
+    await list.scrollTo(2020)
+    await list.measure(47, 1900, 40)
+    await list.setProps({ count: 1000, itemSize: 80, measure: false })
+    await list.scrollTo(4020, 80020)
+    assert.strictEqual(list.events[list.events.length - 1]!.first, 50)
+    await list.close()
+  })
+
+  it("scrolls to a waiting key once the keys bring it", async () => {
+    const keys = Array.from({ length: 100 }, (_, i) => "k" + i)
+    const scrollTo = {
+      target: Virtualizer.ScrollTarget.Key({ key: "arrives" })
+    }
+    const list = await setup({ keys, itemSize: 40, measure: false, scrollTo })
+    await list.layOut()
+    await list.scrollTo(0, 4020)
+    const next = keys.map((key, i) => i === 50 ? "arrives" : key)
+    await list.setProps({ keys: next, itemSize: 40, measure: false, scrollTo })
+    assert.deepStrictEqual(list.scrolls(), [20 + 50 * 40])
+    await list.close()
+  })
+
   it("reports scrolling through the momentum after a drag, or until 100ms after a drag without one", async () => {
     const list = await setup({ count: 1000, itemSize: 40 })
     await list.layOut()
