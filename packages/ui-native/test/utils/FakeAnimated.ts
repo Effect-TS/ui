@@ -157,6 +157,9 @@ export const make = (
     setAnimatedNodeOffset(tag: number, offset: number) {
       need(tag).offset = offset
     },
+    getValue(tag: number, callback: (value: number) => void) {
+      callback(value(tag))
+    },
     startListeningToAnimatedNodeValue(tag: number) {
       need(tag)
       listened.add(tag)

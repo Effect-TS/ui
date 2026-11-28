@@ -572,6 +572,7 @@ interface AnimatedModule {
   stopAnimation(id: number): void
   setAnimatedNodeValue(tag: number, value: number): void
   setAnimatedNodeOffset(tag: number, offset: number): void
+  getValue(tag: number, callback: (value: number) => void): void
   startListeningToAnimatedNodeValue(tag: number): void
   stopListeningToAnimatedNodeValue(tag: number): void
   addListener?(event: string): void
@@ -597,7 +598,7 @@ const heard = new Map<number, NativeNode>()
 // The own values of the props a header, or a scroll view with headers,
 // shows in their place, to show again after.
 const kept = new WeakMap<NativeNode, Record<string, unknown>>()
-// Where each scroll view last scrolled to.
+// Where native last had each scroll view scrolled, as its headers went.
 const offsets = new WeakMap<NativeNode, number>()
 // The devices whose value reports are followed.
 const listening = new WeakSet<Native.Device>()
@@ -654,33 +655,35 @@ const keep =
     else host.set(n, key, value)
   }
 
-// Shows `values` in place of the node's own.
+// Shows `values` in place of the node's own. A node can be both a header
+// and a scroll view with headers, so each key is kept once.
 const replace = (n: NativeNode, values: Record<string, unknown>) => {
-  const mine: Record<string, unknown> = {}
+  let mine = kept.get(n)
+  if (mine === undefined) kept.set(n, mine = {})
   for (const key in values) {
-    mine[key] = n.props[key] ?? n.outer?.props[key]
+    if (!(key in mine)) mine[key] = n.props[key] ?? n.outer?.props[key]
     if (values[key] !== undefined) n.host.set(n, key, values[key])
   }
-  kept.set(n, mine)
 }
 
-const restore = (n: NativeNode) => {
-  const values = kept.get(n)!
-  kept.delete(n)
-  for (const key in values) {
+// Shows the node's own values of `keys` again.
+const restore = (n: NativeNode, keys: ReadonlyArray<string>) => {
+  const mine = kept.get(n)!
+  for (const key of keys) {
     // A transform the node's own `style` drives stays the driver's.
     if (key !== "transform" || own.get(n)?.transform === undefined) {
-      n.host.set(n, key, values[key])
+      n.host.set(n, key, mine[key])
     }
+    delete mine[key]
   }
+  for (const _ in mine) return
+  kept.delete(n)
 }
 
-// Follows what native changes between commits: where a scroll view is
-// scrolled to, and the layout of a header or a scroll view with headers,
-// which React Native's sticky headers follow with `onLayout`.
-const follow = (n: NativeNode, type: string, payload: any) => {
-  if (type === "topScroll") offsets.set(n, payload?.contentOffset?.y ?? 0)
-  else if (type === "topLayout" && kept.has(n)) n.host.commit()
+// Lays the headers out again when native changes the layout of one, or of
+// a scroll view with headers, which React Native follows with `onLayout`.
+const follow = (n: NativeNode, type: string) => {
+  if (type === "topLayout" && kept.has(n)) n.host.commit()
 }
 
 const driverOf = (host: Native.ViewHost): Driver | null => {
@@ -815,7 +818,9 @@ const assign = (host: Native.ViewHost) => {
       st.headers.delete(h)
       headers.delete(h)
       show(d, h, host)
-      restore(h)
+      // A scroll view with headers still follows its layout.
+      const keys = ["zIndex", "transform", "onLayout"]
+      restore(h, d.sticky.has(h) ? keys.slice(0, 2) : keys)
     }
     for (const h of kids) {
       if (h === undefined || st.headers.has(h)) continue
@@ -826,9 +831,10 @@ const assign = (host: Native.ViewHost) => {
       translate(d, h)
     }
     if (live) {
-      // As React Native's `ScrollView`: the offset starts where the view
-      // is scrolled to, or at `contentOffset`, and a top inset, which iOS
-      // reports as a negative offset at rest, is added to it.
+      // As React Native's `ScrollView`: the offset starts where native had
+      // the view scrolled when it last had headers, or at `contentOffset`,
+      // and a top inset, which iOS reports as a negative offset at rest, is
+      // added to it.
       const s = sourceOf(d, st.source)
       s.node = n
       s.start = offsets.get(n) ?? (n.props.contentOffset as any)?.y ?? 0
@@ -840,8 +846,15 @@ const assign = (host: Native.ViewHost) => {
     } else {
       clearTimeout(st.timer)
       d.sticky.delete(n)
-      restore(n)
-      sourceOf(d, st.source).node = undefined
+      restore(n, headers.has(n) ? [] : ["onLayout"])
+      const s = sourceOf(d, st.source)
+      s.node = undefined
+      // As React Native's `AnimatedValue` when detached, keeps where native
+      // has the view scrolled, which JS may not have seen, for when it has
+      // headers again.
+      if (s.y !== undefined) {
+        native(d).getValue(s.y, (y) => offsets.set(n, y - s.inset))
+      }
     }
   }
 }

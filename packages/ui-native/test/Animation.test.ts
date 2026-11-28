@@ -234,6 +234,24 @@ const Headers = Native.component({
     )
 })
 
+// A header that is a scroll view with a header of its own.
+const Nested = Native.component({
+  name: "Nested",
+  model: Schema.Struct({ inner: Schema.Boolean }),
+  message: UiSchema.TaggedEnum({ Flip: {} })
+}).make({
+  init: () => ({ inner: true }),
+  update: { Flip: ($) => $.evolve({ inner: (inner) => !inner }) },
+  view: (h, model) =>
+    pipe(h.scroll, Animation.stickyHeaders([0])).children(
+      pipe(
+        h.scroll.style({ height: 50, zIndex: 3 }),
+        model.inner ? Animation.stickyHeaders([0]) : identity
+      ).children(h.view.style({ height: 20 })),
+      h.view.style({ height: 600 })
+    )
+})
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 const headers = async (os: string) => {
@@ -376,8 +394,10 @@ describe("Animation", { concurrent: false }, () => {
         assert.strictEqual(t.shown(t.a()), 300)
         assert.strictEqual(t.shown(t.b()), 50)
 
-        // Once the scroll pauses, Fabric gets where they are shown.
-        t.scroll(120)
+        // Once the scroll pauses, Fabric gets where they are shown, which
+        // JS may not have seen.
+        t.scroll(100)
+        animated.scroll(t.scroller().tag, { y: 120 })
         await sleep(100)
         assert.deepStrictEqual(t.a().props.transform, [{ translateY: 120 }])
         assert.deepStrictEqual(t.b().props.transform, [{ translateY: 0 }])
@@ -508,6 +528,29 @@ describe("Animation", { concurrent: false }, () => {
       }
     })
   }
+
+  it("keeps a scroll view a header of the one around it when its own headers go", async () => {
+    const { close, fabric, find, root, settle } = await mount((root) =>
+      Renderer.mount(Nested, {}, root)
+    )
+    const inner = () => find((n) => n.props.height === 50)
+    const outer = find(FakeFabric.byName("RCTScrollView"))
+    const content = find(FakeFabric.byName("RCTScrollContentView"))
+    root.send({ _tag: "Flip" })
+    await settle()
+    assert.strictEqual(inner().props.zIndex, 10)
+    assert.strictEqual(inner().props.onLayout, true)
+    // It still follows layouts native makes.
+    fabric.place(outer, [0, 0, 390, 500])
+    fabric.place(content, [0, 0, 390, 1000])
+    fabric.place(inner(), [0, 100, 390, 50])
+    fabric.emit(inner(), "topLayout", {})
+    animated.scroll(outer.tag, { y: 150 })
+    assert.deepStrictEqual(animated.view(inner().tag)?.transform, [{
+      translateY: 50
+    }])
+    await close()
+  })
 
   it("animates to each target from where the value is, and reports the end", async () => {
     const before = animated.nodes()
