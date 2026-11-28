@@ -44,13 +44,13 @@ export interface Feed {
   readonly open: boolean
   readonly position: () => Position
   readonly fields: ReadonlyArray<string>
-  /** The rules not recorded, when the page has a recorder to change. */
+  /** The rules not recorded; absent when the page has no recorder to change. */
   readonly notRecording?: (() => ReadonlyArray<Rule>) | undefined
   /** The raw message tag of an `Update`. */
   readonly messageTag?:
     | ((session: string, seq: number) => string | undefined)
     | undefined
-  /** Whether a rule not recorded matches an entry recorded before it. */
+  /** Whether a stopped rule hides an entry buffered before it. */
   readonly stopped?: ((session: string, seq: number) => boolean) | undefined
   /** While pulled, the page's input picks an element: the pick, or `undefined` for Escape. */
   readonly pick?: Stream.Stream<Picked | undefined> | undefined
@@ -960,7 +960,6 @@ const FieldButtons = (
     })
   )
 
-// Starts or stops recording what a rule matches.
 const RuleButton = (h: H, rule: Rule, recording: boolean) => {
   const label = Rules.labelOf(rule)
   const verb = recording ? "Start recording " : "Stop recording "
@@ -980,9 +979,8 @@ const NotRecording = (h: H, rules: ReadonlyArray<Rule>) =>
     rules.map((rule) => RuleButton(h, rule, true))
   )
 
-// What the selected entry offers to stop: its message in its component (for
-// `PropsChanged`, the message it follows from), its component, and each
-// instance from its own up to the root's child with everything below.
+// For `PropsChanged`, the message choice is the update that caused it. Path
+// choices run from the entry's instance up to the root's child.
 const stopChoices = (
   feed: Feed,
   session: Session,
@@ -1024,7 +1022,6 @@ const StopMenu = (h: H, key: string, choices: ReadonlyArray<Rule>) =>
     )
   )
 
-// The entries held, less those a rule now stopped matches.
 const shownEntries = (feed: Feed, session: Session) => {
   const entries = session.entries()
   const stopped = feed.stopped

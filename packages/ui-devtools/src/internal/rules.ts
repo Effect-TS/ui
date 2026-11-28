@@ -9,7 +9,7 @@ export const isRule = (rule: Rule): boolean =>
   rule.tag !== undefined || rule.component !== undefined ||
   rule.path !== undefined
 
-// Strings are tags, and a rule without fields would match everything.
+// Drop empty rules, which would otherwise match everything.
 export const normalize = (
   exclude: ReadonlyArray<string | Exclusion> | undefined
 ): ReadonlyArray<Rule> =>
@@ -45,10 +45,7 @@ const test = (rule: Rule, entry: Entry) =>
   (rule.path === undefined || entry.path === rule.path ||
     entry.path.startsWith(rule.path + "/"))
 
-/**
- * The update a `PropsChanged` follows from, when that update is a fact: the
- * message that passed the props down.
- */
+/** The update a `PropsChanged` follows from, when that update is a top-level message. */
 export const causeOf = <E extends Entry | Outside>(
   entry: Entry,
   resolve: (session: string, seq: number) => E | undefined
@@ -62,10 +59,7 @@ export const causeOf = <E extends Entry | Outside>(
     : undefined
 }
 
-/**
- * Whether a rule matches the entry, or matches by its `tag` the update a
- * `PropsChanged` follows from.
- */
+// A tag rule also matches a `PropsChanged` through the update that caused it.
 export const excludes = (
   rules: Iterable<Rule>,
   entry: Entry,

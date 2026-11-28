@@ -637,13 +637,11 @@ const makeSession = (
         }
         if (state) coalesced.set(instance, entry)
         else if (fleeting) coalesced.delete(instance)
-        // An unmount stays, without a slot, so a late viewer replays it. The
-        // rest only changes the instance's records: apply it, keep nothing.
-        // But for the end of a run a held entry opened, which a late viewer
-        // replays too.
+        // Keep other unmounts, and run ends a held entry started, without a
+        // slot so a late viewer replays them. The rest only update records.
         transient = fleeting || !(state || gone)
       } else {
-        // Any shown entry, a fetch too, ends the interval stopped ones coalesce in.
+        // Any shown entry, FetchStarted included, closes the coalescing interval.
         settled = newest
         coalesced.clear()
       }

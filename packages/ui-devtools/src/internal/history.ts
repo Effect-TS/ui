@@ -20,10 +20,7 @@ export interface History {
   readonly holds: (session: string, seq: number) => boolean
   /** An entry held, shown or excluded. */
   readonly entry: (session: string, seq: number) => Entry | undefined
-  /**
-   * The entry a shown `PropsChanged` at `seq` was caused by, while the
-   * `PropsChanged` is held, even once the cause is evicted.
-   */
+  /** Retained cause of a held shown `PropsChanged`, even after eviction. */
   readonly cause: (session: string, seq: number) => Entry | undefined
   /** The last seq recorded, excluded entries included. */
   readonly latest: (session: string) => number | undefined
@@ -99,7 +96,7 @@ const isDirty = (dirty: ReadonlySet<string>, path: string) => {
   return false
 }
 
-// What an excluded entry replaces: the instance's earlier one with its key.
+// The slot an excluded entry takes in its instance's coalesced entries.
 const keyOf = (entry: Entry): string | undefined => {
   switch (entry._tag) {
     case "Waiting":
@@ -113,14 +110,13 @@ const keyOf = (entry: Entry): string | undefined => {
   }
 }
 
-// A state entry without query results keeps those of the one it replaces,
-// with any result that changed after it. When the replaced one had none
-// either, the query changes kept apply over the earlier state.
 type StateEntry = Extract<
   Entry,
   { readonly _tag: "Waiting" | "Mounted" | "Update" }
 >
 
+// A state entry without query results keeps those of the one it replaces,
+// with any kept `QueryChanged` newer than it applied.
 const carryQueries = (
   entry: StateEntry,
   replaced: StateEntry,
@@ -140,12 +136,10 @@ const carryQueries = (
 
 const makeSession = (size: number) => {
   const base = new Map<number, Held>()
-  // Every entry held by seq, oldest first, and which of them are shown.
   const entries = new Map<number, Entry>()
   const shown = new Set<number>()
   const causes = new Map<number, Entry>()
-  // Excluded entries since the last shown one, by instance: only the latest
-  // state, props and result of each query matter to the next shown entry.
+  // Excluded entries since the last shown entry, keyed by slot per instance.
   const coalesced = new Map<number, Map<string, Entry>>()
   // Ranges of seqs that never arrived, kept until older than the entries held.
   const gaps: Array<readonly [number, number]> = []
@@ -190,9 +184,8 @@ const makeSession = (size: number) => {
       entries.set(entry.seq, entry)
       return
     }
-    // The first mount at a path that a shown entry caused keeps its own slot:
-    // Time travel at that entry paints it, whatever the instance does next.
-    // Time travel can't use a later one at the same path.
+    // Preserve only the first mount per path caused by a shown entry; Time
+    // travel at that entry paints it and cannot use later mounts at that path.
     const causal = (entry._tag === "Mounted" || entry._tag === "Waiting") &&
       entry.causedBy !== undefined && entry.causedBy <= shownSeq &&
       !painting.has(entry.path)

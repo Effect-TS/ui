@@ -550,8 +550,7 @@ describe("Inspector", () => {
       ["/A", "/B"]
     )
 
-    // A stopped tick's run ends with nothing left to replay it for once the
-    // next tick replaces the tick that issued it.
+    // Replaced stopped ticks must not retain completed command runs.
     const ticking = Inspector.make({ size: 2 })
     ticking.ingest([mounted(1, 1, "/A", "A", 0)])
     for (let seq = 2; seq < 300; seq += 3) {

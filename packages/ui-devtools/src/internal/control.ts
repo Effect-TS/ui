@@ -2,7 +2,6 @@ import * as MessageLog from "@effect/ui/MessageLog"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 
-// What a recording rule matches: every field given must match.
 export const Rule = Schema.Struct({
   tag: Schema.optionalKey(Schema.String),
   component: Schema.optionalKey(Schema.String),
@@ -11,7 +10,7 @@ export const Rule = Schema.Struct({
 
 export type Rule = typeof Rule.Type
 
-// The runtime recording choices a tab saved, oldest first.
+// Saved runtime choices, oldest first.
 export const isChoices = Schema.is(
   Schema.Array(Schema.Tuple([Rule, Schema.Boolean]))
 )

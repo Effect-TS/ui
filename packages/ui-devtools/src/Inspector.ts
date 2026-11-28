@@ -401,19 +401,14 @@ export const diff: (
 ) => ReadonlyArray<Change> = internal.diff
 
 /**
- * What `exclude` stops recording. Every field given must match, and at
- * least one must be given.
+ * A recording exclusion rule. Every given field must match (at least one
+ * required); a string in `exclude` is shorthand for `{ tag }`.
  *
- * **Details**
- *
- * - `tag` matches an `Update` whose message has that `_tag`, and the
- *   `PropsChanged` entries that follow from it when it's a fact: the props
- *   it passed down. Without `tag`, a rule matches every entry of an
- *   instance.
- * - `component` matches the instances of the component with that name.
- * - `path` matches the instance at that path and every instance below it.
- *
- * A string in `exclude` is short for `{ tag }`.
+ * - `tag`: matches `Update` entries with that message `_tag` and the
+ *   `PropsChanged` entries they cause. Omit to match every entry of the
+ *   targeted instances.
+ * - `component`: matches instances of that component name.
+ * - `path`: matches that instance path and everything below it.
  *
  * @stability experimental
  * @category models
@@ -431,19 +426,13 @@ export interface Exclusion {
  *
  * **Details**
  *
- * An entry an `exclude` rule matches, or one marked `excluded: true` by
- * `DevTools.layer`, is omitted from `entries` and takes no slot. Of an
- * instance's excluded `Update`, `Mounted` and `Waiting` entries, only
- * the latest since the last shown entry of any instance is kept, so the next
- * shown entry is still compared with the latest excluded state. An excluded
- * `Unmounted` is kept too, unless the instance mounted since the last shown
- * entry. So is one that ends a run an entry still held started. Other
- * excluded entries update the instance's records and are not kept. Links to
- * an entry not kept resolve to `Outside`.
- *
- * `exclude` is not a way to hide sensitive data: later entries still carry
- * whatever an excluded message changed in the Model. Use `Schema.Redacted`
- * for sensitive values.
+ * Entries matching `exclude` or marked `excluded: true` are omitted from
+ * `entries` and take no buffer slots. Between shown entries, each instance
+ * keeps only its latest excluded `Waiting`, `Mounted` or `Update`, its
+ * `Unmounted` unless it also mounted in that interval, and the end of any
+ * run a held entry started. Links to an entry not kept resolve to `Outside`.
+ * `exclude` does not hide sensitive data, since later entries still carry
+ * what an excluded message changed in the Model; use `Schema.Redacted`.
  *
  * @stability experimental
  * @category constructors

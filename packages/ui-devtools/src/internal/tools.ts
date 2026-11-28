@@ -193,7 +193,7 @@ const GetState = read(Tool.make("get_state", {
     instance: Schema.Number,
     at: Schema.optionalKey(Schema.Number).annotate({
       description:
-        "The seq to read the state at. Defaults to the latest, a stopped entry's included."
+        "The seq to read state at. Defaults to the latest recorded entry, including stopped ones."
     }),
     path: Path
   }),
@@ -235,12 +235,10 @@ const Resume = control(Tool.make("resume", {
 
 const SetRecording = control(Tool.make("set_recording", {
   description:
-    "Stops or starts recording, on the session's page, the entries a rule matches: give at least one of tag, " +
-    "component and path, and every one given must match. With tag, the rule matches updates of that message " +
-    "_tag and the PropsChanged entries they cause; without it, every entry of the matched instances. " +
-    "Stopped entries get no rows and take no slots. " +
-    "The choice overrides the page's exclude and lasts until the tab closes. " +
-    "Returns the rules the page is not recording.",
+    "Stops or starts recording future entries matching a rule (at least one of tag, component, or path; all given " +
+    "fields must match). With tag, matches those updates and the PropsChanged entries they cause; without tag, " +
+    "matches every entry of the targeted instances. Stopped entries take no buffer slots; the overlay also hides " +
+    "already-buffered matches until resumed. Overrides exclude until the tab closes. Returns the rules not recorded.",
   parameters: Schema.Struct({
     session: SessionParam,
     tag: Schema.optionalKey(Schema.String).annotate({

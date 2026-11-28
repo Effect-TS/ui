@@ -218,7 +218,7 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
           return
         }
       }
-      // Choices made at runtime override `exclude` until the tab closes.
+      // Runtime choices override `exclude` for the tab.
       const choices = new Map<string, readonly [Control.Rule, boolean]>()
       const stopped = new Map<string, Control.Rule>()
       const choose = (rule: Control.Rule, recording: boolean) => {

@@ -260,9 +260,8 @@ export interface InstanceBase extends Base {
   readonly instance: number
   readonly component: Component.Any
   /**
-   * Marks an entry DevTools has stopped recording. It gets no row and takes
-   * no slot: DevTools keeps only what it needs for the next shown entry's
-   * diff and Time travel.
+   * Marks an entry DevTools stopped recording. It gets no row or slot;
+   * DevTools keeps only what the next shown entry's diff and Time travel need.
    */
   readonly excluded?: boolean | undefined
 }

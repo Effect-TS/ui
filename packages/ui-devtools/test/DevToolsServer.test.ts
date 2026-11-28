@@ -575,8 +575,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
             update(6, { a: 3, b: 4 }),
             update(7),
             { _tag: "Unmounted", ...stopped, seq: 8 },
-            // A shown fetch ends the interval a stopped child mounted in, so
-            // its unmount is kept for a late viewer.
+            // Shown FetchStarted closes the interval so Child's stopped unmount replays.
             {
               _tag: "Mounted",
               ...stopped,

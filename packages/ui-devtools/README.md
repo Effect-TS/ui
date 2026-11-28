@@ -52,11 +52,11 @@ The overlay keeps the raw entries, alongside the Wire frames, to paint from. The
 
 It follows the latest entry until one is selected, and remembers whether the panel is open and its size in `localStorage`. **Clear** empties the timeline while keeping mounted instances, the next entry's diff, and Time travel accurate (disabled while the page is paused).
 
-`DevTools.layer` accepts `position`, `size` (1,000 shown entries by default) and `exclude`: message `_tag` strings matched across every component, or rules such as `{ tag: "Ticked", component: "Kit" }`, `{ component: "Menu" }` and `{ path: "/LaunchPage/Kit[]" }` (that instance and everything below it). A tag rule also excludes the `PropsChanged` entries its updates cause. Excluded entries add no rows and take no slots, so high-frequency bursts do not evict the buffer, while the next shown entry's Model diff and Time travel state stay accurate. `exclude` is not a way to hide sensitive data: later entries still carry whatever an excluded message changed in the Model — use `Schema.Redacted` for sensitive values.
+`DevTools.layer` accepts `position`, `size` (1,000 shown entries by default) and `exclude`: message `_tag` strings or rules (`{ tag: "Ticked", component: "Kit" }`, `{ component: "Menu" }`, `{ path: "/LaunchPage/Kit[]" }` for an instance and everything below it). Tag rules also exclude the `PropsChanged` entries their updates cause. Excluded entries add no rows and take no slots, while Model diffs and Time travel stay accurate. `exclude` does not hide sensitive data, since later entries still carry what an excluded message changed in the Model; use `Schema.Redacted`.
 
 Use `DevTools.layer({ fields: ["commandId"] })` to show top-level message and Command argument values on timeline rows. Only string, number and boolean values are shown; redacted values are omitted. Click a value to filter by its field name and value across instances. Click it again, or click the chip under the filters, to clear the field filter. Other filters still apply.
 
-`exclude` sets the initial recording policy. To change it while the app runs, select an entry and pick from **Stop recording**: its message in its component, every instance of its component, or its instance or an ancestor and everything below. Rows already in the timeline that match are hidden at once. The **Not recording** strip under the filters lists stopped rules, including configured exclusions. Click one to resume recording and show its hidden rows again; entries logged while it was stopped can't be recovered.
+To change the policy at runtime, select an entry and pick a rule from **Stop recording** (its message in its component, every instance of its component, or its instance or ancestor subtree). Matching rows already in the buffer are hidden, and future matching entries are not recorded. Click a rule in the **Not recording** strip to resume recording and show previously buffered rows again; entries logged while stopped can't be recovered.
 
 These choices override `exclude` and persist through reloads until the tab closes. Excluded Wire frames carry the same policy to the Node server and its agent tools.
 
@@ -89,7 +89,7 @@ The plugin starts the server with `vite dev` only and adds a `<meta>` tag with i
 
 | Tool                 | Does                                                                                          |
 | -------------------- | --------------------------------------------------------------------------------------------- |
-| `list_sessions`      | the sessions held: app, host, connected, controllable, paused at, the tags not recorded       |
+| `list_sessions`      | the sessions held: app, host, connected, controllable, paused at, the rules not recorded      |
 | `list_instances`     | the instances of a session, with how their Command runs ended                                 |
 | `list_entries`       | entries as rows with their `fields`, filtered by instance, kind, `_tag` or field value        |
 | `count_entries`      | entries by entry and message `_tag`                                                           |

@@ -90,26 +90,21 @@ export type WebMcpOptions = internal.WebMcpOptions
  * of each session (1,000 by default). To send entries to another sink as
  * well, combine both with `MessageLog.fanout`.
  *
- * `exclude` keeps noisy entries out of the timeline. A string is a message
- * `_tag`, matched across every component. An `Inspector.Exclusion` narrows
- * a tag to a `component`, or, without a tag, matches every entry of a
- * component's instances or of an instance `path` and everything below it.
- * A tag rule also matches the `PropsChanged` entries its updates cause. An
- * excluded entry gets no row and takes no slot: of an instance's excluded
- * entries since the last shown one, only those the next shown entry's Model
- * diff and Time travel need are kept. `exclude` is not a way to hide
- * sensitive data: later entries still carry whatever an excluded message
- * changed in the Model. Use `Schema.Redacted` for sensitive values.
+ * `exclude` stops recording noisy entries: a string matches a message `_tag`
+ * across components, and an `Inspector.Exclusion` matches by `tag`,
+ * `component`, or instance `path` (and everything below it). Tag rules also
+ * exclude the `PropsChanged` entries their updates cause. Excluded entries
+ * take no buffer slots while keeping Model diffs and Time travel accurate.
+ * `exclude` does not hide sensitive data, since later entries still carry
+ * what an excluded message changed in the Model; use `Schema.Redacted`.
  *
- * `exclude` sets the initial recording policy. Select an entry and pick
- * from Stop recording to stop its message in its component, every instance
- * of its component, or its instance or an ancestor and everything below.
- * Rows already held that a stopped rule matches are hidden. Click a rule in
- * the Not recording strip to resume and show them again, or use the
- * `set_recording` MCP tool for either action. Entries logged while stopped
- * can't be brought back. These choices override `exclude` and persist
- * through reloads in `sessionStorage` until the tab closes. Excluded Wire
- * frames carry the same policy to the DevTools server.
+ * Select an entry and pick from Stop recording (or use `set_recording`) to
+ * change the policy at runtime. Matching rows already buffered are hidden,
+ * and future matching entries are not recorded. Click a rule in the Not
+ * recording strip to resume recording and show previously buffered rows
+ * again; entries logged while stopped can't be recovered. Choices override
+ * `exclude`, persist in `sessionStorage` until the tab closes, and travel on
+ * excluded Wire frames to the DevTools server.
  *
  * Clear empties the timeline while keeping mounted instances and each
  * instance's pre-clear state for the next entry's diff and Time travel. Clear

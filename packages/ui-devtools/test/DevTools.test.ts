@@ -73,7 +73,6 @@ const click = Effect.fnUntraced(function*(element: Element) {
   yield* settle
 })
 
-// Opens the selected entry's Stop recording menu and picks a rule from it.
 const stopRecording = Effect.fnUntraced(function*(
   root: HTMLElement,
   label: string
@@ -536,8 +535,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
         assert.lengthOf(rows(/TickedWall/), 0)
         assert.lengthOf(rows(/TickedCounter/), 1)
 
-        // Each stopped tick re-renders both tiles, and neither the tick nor
-        // the PropsChanged it causes takes a slot from the click.
+        // Stopped ticks and their caused PropsChanged must not evict the click.
         yield* press("Click")
         yield* press("Tick wall", 3)
         assert.lengthOf(rows(/ClickedCounter/), 1)
