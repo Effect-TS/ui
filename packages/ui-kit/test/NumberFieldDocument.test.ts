@@ -541,33 +541,78 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.isFalse(app.firstElementChild!.hasAttribute("data-scrubbing"))
     }))
 
-  it.effect("window blur ends a stepper hold and a scrub drag once, and a later release changes nothing", () =>
+  it.effect("window blur and lost pointer capture end stepper holds and scrub drags once, and later releases change nothing", () =>
     Effect.gen(function*() {
       const { app, taken } = yield* mount({ locale: "en-US" })
       const root = app.firstElementChild!
-      pointer(app.querySelector(".increment")!, "pointerdown")
+      const increment = app.querySelector<HTMLButtonElement>(".increment")!
+      const scrub = app.querySelector<HTMLElement>(".scrub")!
+      const label = app.querySelector<HTMLElement>(".label")!
+
+      pointer(increment, "pointerdown")
       yield* tick
       assert.deepStrictEqual(taken(), ["updated 6 increment-press"])
       window.dispatchEvent(new Event("blur"))
       yield* wait(600)
+      assert.deepStrictEqual(taken(), ["committed 6 increment-press"])
       pointer(window, "pointerup")
       yield* tick
-      assert.deepStrictEqual(taken(), ["committed 6 increment-press"])
+      assert.deepStrictEqual(taken(), [])
 
-      pointer(app.querySelector(".scrub")!, "pointerdown", {
-        clientX: 10,
-        clientY: 10
-      })
+      const touch = { pointerType: "touch", pointerId: 7 }
+      pointer(increment, "pointerdown", touch)
+      yield* wait(80)
+      assert.deepStrictEqual(taken(), ["updated 7 increment-press"])
+      increment.dispatchEvent(
+        new PointerEvent("lostpointercapture", { pointerId: 7 })
+      )
+      yield* wait(600)
+      assert.deepStrictEqual(taken(), ["committed 7 increment-press"])
+      pointer(window, "pointerup", touch)
+      yield* tick
+      assert.deepStrictEqual(taken(), [])
+
+      const outside = app.appendChild(document.createElement("input"))
+      outside.focus()
+      pointer(scrub, "pointerdown", { clientX: 10, clientY: 10 })
+      yield* tick
+      assert.isTrue(root.hasAttribute("data-scrubbing"))
       pointer(window, "pointermove", { clientX: 14, clientY: 10 })
+      yield* tick
+      assert.deepStrictEqual(taken(), ["updated 11 scrub"])
       window.dispatchEvent(new Event("blur"))
+      yield* tick
+      assert.deepStrictEqual(taken(), ["committed 11 scrub"])
+      assert.isFalse(root.hasAttribute("data-scrubbing"))
       pointer(window, "pointermove", { clientX: 30, clientY: 10 })
       pointer(window, "pointerup")
       yield* tick
-      assert.deepStrictEqual(taken(), [
-        "updated 10 scrub",
-        "committed 10 scrub"
-      ])
+      assert.deepStrictEqual(taken(), [])
+
+      const touchScrub = { pointerType: "touch", pointerId: 9 }
+      pointer(label, "pointerdown", { ...touchScrub, clientX: 10, clientY: 10 })
+      pointer(window, "pointermove", {
+        ...touchScrub,
+        clientX: 14,
+        clientY: 10
+      })
+      yield* tick
+      assert.isTrue(root.hasAttribute("data-scrubbing"))
+      assert.deepStrictEqual(taken(), ["updated 15 scrub"])
+      label.dispatchEvent(
+        new PointerEvent("lostpointercapture", { pointerId: 9 })
+      )
+      yield* tick
+      assert.deepStrictEqual(taken(), ["committed 15 scrub"])
       assert.isFalse(root.hasAttribute("data-scrubbing"))
+      pointer(window, "pointermove", {
+        ...touchScrub,
+        clientX: 30,
+        clientY: 10
+      })
+      pointer(window, "pointerup", touchScrub)
+      yield* tick
+      assert.deepStrictEqual(taken(), [])
     }))
 
   it.effect("refused edits restore displayed text on blur without committing, and stepper release commits props.value", () =>

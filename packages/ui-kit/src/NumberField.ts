@@ -987,6 +987,10 @@ const TrackStepper = Mount.makeStream(
             })
             view.addEventListener("pointercancel", finish, { signal })
             view.addEventListener("blur", end, { signal })
+            node.addEventListener("lostpointercapture", finish, {
+              capture: true,
+              signal
+            })
             node.addEventListener("pointerdown", onPointerDown, { signal })
             node.addEventListener("pointerup", onPointerUp, { signal })
             node.addEventListener("pointermove", onPointerMove, { signal })
@@ -1204,7 +1208,9 @@ const TrackScrub = Mount.makeStream(
         view.addEventListener("pointerup", onUp, options)
         view.addEventListener("pointercancel", onCancel, options)
         view.addEventListener("pointermove", onMove, options)
-        view.addEventListener("blur", interrupt, options)
+        node.addEventListener("lostpointercapture", onCancel, options)
+        // Bubble phase hears only window blur, not element focus changes.
+        view.addEventListener("blur", interrupt, { signal: dragging.signal })
         Queue.offerUnsafe(
           queue,
           NumberFieldMessage.StartedScrub({ focus: mouse })
