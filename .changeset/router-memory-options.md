@@ -2,4 +2,4 @@
 "@effect/ui": minor
 ---
 
-`Router.make` takes `restore: false` to save no snapshot of a page it leaves. A `Location` has its history entry's `index`, `Router.subscription`'s mapper gets the `Location` after the route, and `changes` emits again when Back or forward reaches another entry of the same route, or a push adds one for a `#hash`.
+Add `restore: false` to `Router.make` to skip history snapshots, and the history entry's `index` to `Location`. `changes` now also emits when Back, forward or a `#hash` push moves to another entry of the same route, and `Router.subscription`'s mapper gets the `Location` too.

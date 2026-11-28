@@ -21,11 +21,13 @@
  * the rest as its path: with `"myapp://"`, `myapp://people/1?tab=a` opens
  * `/people/1?tab=a`, and with `"https://example.com"`,
  * `https://example.com/people/1` opens `/people/1`. The app starts at the
- * URL that launched it, or at `/`, and a URL that opens it while it runs
- * is pushed. A path the routes don't parse, with no catch-all route, is
- * ignored. The app starts at the routes' base root without a deep link. Without `prefixes` it always starts at `/`. An href the
- * routes don't parse, as from `Router.load` or a `Link`, opens with
- * `Linking.openURL`.
+ * URL that launched it, and a URL that arrives while it runs is pushed. A
+ * path the routes don't parse, with no catch-all route, is ignored. Without
+ * a deep link, or without `prefixes`, the app starts at the routes' base
+ * root: `/`, `#/` for a `"#"` base, or the base itself.
+ *
+ * An href the routes don't parse, as from `Router.load` or a `Link`,
+ * opens with `Linking.openURL`.
  *
  * The screen reader's focus moves to a screen that comes to the top, which
  * reads it, so nothing is announced. A screen that has more to say runs
@@ -34,8 +36,10 @@
  * **Example** (An app with two screens)
  *
  * ```ts
- * import { NativeApp, NativeRouter } from "@effect/ui-native"
+ * import { Native, NativeApp, NativeRouter } from "@effect/ui-native"
  * import { Stack } from "@effect/ui-native/kit"
+ * import { Layer, Schema } from "effect"
+ * import { AppRoute, Message, screen } from "./routes.ts"
  *
  * const App = Native.component({
  *   name: "App",
@@ -176,8 +180,7 @@ export const pathOf = (
   return undefined
 }
 
-// A history in memory, which opens what the routes don't parse with
-// `Linking.openURL`.
+// Opens hrefs the routes don't parse with `Linking.openURL`.
 const memoryHistory = (url: string, device: Native.Device): Router.History => {
   const history = Router.memoryHistory(url)
   return {
@@ -295,8 +298,8 @@ export const subscription = <U extends Router.Routes, Msg>(
     (route, { index }) => f({ route, index, id: issued += 1 })
   )
 
-// Each navigation's id. A `#hash` entry keeps the location's seq, and a
-// screen that was popped may still be sliding out under its id.
+// Navigation ids never repeat: a `#hash` entry keeps its location's seq,
+// and a popped screen can still be sliding out under its id.
 let issued = 0
 
 /**

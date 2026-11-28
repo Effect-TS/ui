@@ -84,6 +84,16 @@ Networking globals are opt-in, so apps that don't make requests don't bundle Rea
 `NativeRouter.layer({ routes, prefixes })` provides the `Router` and its Commands, as `BrowserRouter` does in the browser, on a history kept in memory. The root holds the stack of entries up to the current one and draws it with the kit's `Stack`:
 
 ```ts
+import { Stack } from "@effect/ui-native/kit"
+import * as Native from "@effect/ui-native/Native"
+import * as NativeApp from "@effect/ui-native/NativeApp"
+import * as NativeRouter from "@effect/ui-native/NativeRouter"
+import * as UiSchema from "@effect/ui/UiSchema"
+import * as Layer from "effect/Layer"
+import * as Schema from "effect/Schema"
+import { AppRoute } from "./routes.ts"
+import { About, Home } from "./screens.ts"
+
 const Message = UiSchema.TaggedEnum({
   Navigated: { navigation: NativeRouter.Navigation(AppRoute) }
 })
@@ -130,7 +140,7 @@ NativeApp.register(
 - **Transitions.** Screens switch at once by default. `transition: StackSlide.slide()` slides them on the native driver, and `StackSlide.slide({ swipeBack: StackSwipe.swipeBack() })` adds a swipe from the left edge on iOS that runs Back, or springs back when it ends short or a block is held. Each move of the swipe runs on the JS thread, so a busy thread makes the screen lag the finger. A stack without a transition bundles neither `Animation` nor `Pan`.
 - **Links.** `Link(h, { href })` is a `Pressable` with the link role that navigates on press and reports `Router.intent` when a touch starts, for prefetch. An href the routes don't parse opens with `Linking.openURL`.
 - **Back.** A `BackHandler.onPress` on the top screen gets the press first. Handlers on covered screens get none. Then the router goes back one entry, and at the first it closes the app. While a `Router.blocked` block is held, Back does nothing.
-- **Deep links.** A URL that starts with one of `prefixes` opens the rest as its path: with `"myapp://"`, `myapp://people/1` opens `/people/1`. The app starts at the URL that launched it, or at `/`, and a URL that arrives while it runs is pushed. Pass a function for other schemes.
+- **Deep links.** A URL that starts with one of `prefixes` opens the rest as its path: with `"myapp://"`, `myapp://people/1` opens `/people/1`. The app starts at the URL that launched it, or else at the routes' base root, and a URL that arrives while it runs is pushed. Pass a function for other schemes.
 - **Accessibility.** The screen reader's focus moves to a screen that comes to the top, which reads it. Nothing is announced; a screen with more to say runs `AccessibilityInfo.announce`.
 
 ## Testing

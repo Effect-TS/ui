@@ -1026,9 +1026,8 @@ const idle = (e: Entry): boolean => {
   return true
 }
 
-// Commits the end values, so Fabric's shadow tree, and a view it recreates,
-// show what the driver shows. They are the targets, which `set` can move
-// from what the last render built.
+// Commits the targets, which `set` can move away from the last render, so
+// Fabric's shadow tree and any view it recreates match the driver.
 const settle = (e: Entry) => {
   const n = e.node
   const spec = e.built!
