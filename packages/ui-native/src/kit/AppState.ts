@@ -99,7 +99,7 @@ export const changes: Stream.Stream<State> = device.changes(state)
 
 /**
  * A Subscription that sends `message` when the system is low on memory, so
- * the app can drop caches.
+ * the app can drop caches. Only iOS sends memory warnings.
  *
  * @stability experimental
  * @category subscriptions
