@@ -1,6 +1,6 @@
 # Native example
 
-An Expo app built with `@effect/ui-native`: a counter, a controlled name input that Reset clears, nested text, and a scrolling list. It has no React components of its own; React Native's renderer is replaced by `NativeApp.register` in `src/main.ts`.
+An Expo app built with `@effect/ui-native`: a counter, a controlled name input that Reset clears, nested text, and a scrolling list. The list's sticky header follows the scroll on the native driver, and new rows fade in with `LayoutAnimation`. It has no React components of its own; React Native's renderer is replaced by `NativeApp.register` in `src/main.ts`.
 
 The commands below run from this directory after `pnpm install` at the repository root, with the Android SDK and a JDK installed. The `android` and `ios` directories are generated and not committed.
 

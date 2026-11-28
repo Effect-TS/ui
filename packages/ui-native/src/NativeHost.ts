@@ -18,8 +18,20 @@
  */
 import type * as Renderer from "@effect/ui/Renderer"
 import type * as Context from "effect/Context"
-import { flushInputs, kinds } from "./internal/kinds.ts"
-import { isColor, markDirty, mounted, surface } from "./internal/node.ts"
+import {
+  commits,
+  flushInputs,
+  kinds,
+  layouts,
+  props
+} from "./internal/kinds.ts"
+import {
+  container,
+  isColor,
+  markDirty,
+  mounted,
+  surface
+} from "./internal/node.ts"
 import { drop, fire, rectOf, route } from "./internal/touch.ts"
 import * as Native from "./Native.ts"
 
@@ -66,6 +78,11 @@ export interface UIManager {
     node: unknown,
     isJSResponder: boolean,
     blockNativeResponder: boolean
+  ): void
+  configureNextLayoutAnimation(
+    config: object,
+    onEnd: () => void,
+    onFail: () => void
   ): void
 }
 
@@ -146,11 +163,11 @@ const defaultsOf = ({ host, kind: { defaults } }: NativeNode) =>
   typeof defaults === "function" ? defaults(host) : defaults
 
 const rawText: Native.ViewKind = { viewName: "RCTRawText" }
-const container: Native.ViewKind = { viewName: "" }
 
 let lastTag = 0
 
 const none = {}
+const noop = () => {}
 
 /**
  * Makes a host for the surface `rootTag`, and the node its root mounts in.
@@ -214,6 +231,8 @@ export const make = (options: Options): {
   ) => {
     if (n.shadow !== undefined) ui.dispatchCommand(n.shadow, name, args)
   }
+  // The LayoutAnimation config for the next commit that changes the tree.
+  let layout: object | undefined
   const commit = () => {
     flushInputs(view)
     if (root.dirty) {
@@ -225,8 +244,13 @@ export const make = (options: Options): {
           ui.appendChildToSet(set, build(place(k), rootTag))
         }
       }
+      if (layout !== undefined) {
+        ui.configureNextLayoutAnimation(layout, noop, noop)
+      }
       ui.completeRoot(rootTag, set)
     }
+    layout = undefined
+    for (const hook of commits) hook(view)
     onCommit?.()
   }
   const view: Native.ViewHost = {
@@ -236,7 +260,12 @@ export const make = (options: Options): {
     color,
     command,
     fire,
-    commit
+    commit,
+    // `build` recreates a view whose parent tag changed.
+    recreate(n) {
+      n.parentTag = 0
+      markDirty(n)
+    }
   }
   const root = new NativeNode(surface, view)
 
@@ -421,7 +450,11 @@ export const make = (options: Options): {
         else setProp(n, propOf(name), true)
       }
     },
-    commit
+    commit,
+    viewTransition(update, types) {
+      for (const type of types) layout = layouts.get(type) ?? layout
+      update()
+    }
   }
   const operations: Context.Service.Shape<typeof Native.Host> = {
     command,
@@ -457,7 +490,7 @@ const same = (a: any, b: any): boolean => {
 }
 
 const setProp = (n: NativeNode, name: string, value: unknown) => {
-  const set = n.kind.props?.[name]
+  const set = n.kind.props?.[name] ?? props.get(name)
   if (set === undefined) n.host.set(n, name, value)
   else set(n, value, n.host)
 }

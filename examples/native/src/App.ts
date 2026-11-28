@@ -1,12 +1,20 @@
 // Every export of this module is a component, so an edit to it swaps in
 // place in the dev client and keeps the count, the name and the list.
-import { Image, Pan, Pressable, VirtualView } from "@effect/ui-native/kit"
+import {
+  Animation,
+  Image,
+  LayoutAnimation,
+  Pan,
+  Pressable,
+  VirtualView
+} from "@effect/ui-native/kit"
 import * as Native from "@effect/ui-native/Native"
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
 import * as Renderer from "@effect/ui/Renderer"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Effect from "effect/Effect"
+import { pipe } from "effect/Function"
 import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
 import mark from "./assets/mark.png"
@@ -119,6 +127,7 @@ export const App = Native.component({
     ClickedReset: ($) => $.evolve({ count: 0, name: "", notes: "" }),
     ChangedName: ($, { value }) => $.evolve({ name: value }),
     ChangedNotes: ($, { value }) => $.evolve({ notes: value }),
+    // New rows fade in as the list makes room for them.
     ClickedAdd: ($) =>
       $.evolve({
         items: (
@@ -127,7 +136,7 @@ export const App = Native.component({
           ...items,
           `Item ${items.length + 1}: ${$.model.name || "stranger"}`
         ]
-      }),
+      }).viewTransition([LayoutAnimation.easeInEaseOut]),
     SelectedItem: ($, { item }) => $.evolve({ selected: item }),
     Dragged: ($, { dx }) => $.evolve({ dragged: $.model.dropped + dx }),
     Dropped: ($) => $.evolve({ dropped: $.model.dragged }),
@@ -197,6 +206,8 @@ export const App = Native.component({
         )
       )
     }
+    const list = h.id("list")
+    const scrolled = Animation.scroll(list, "y")
     return h.view.style({
       flex: 1,
       paddingTop: 64,
@@ -255,7 +266,22 @@ export const App = Native.component({
       h.text.style({ fontSize: 16, color: "#374151" }).children(
         model.selected === "" ? "Tap an item" : `Selected ${model.selected}`
       ),
-      h.scroll.style({ flex: 1 }).children(
+      pipe(h.scroll.style({ flex: 1 }), Animation.source(list)).children(
+        // A sticky header: it moves down as far as the list scrolls up, on
+        // the UI thread, and its rule fades in once the rows pass under it.
+        pipe(
+          h.view.style({ backgroundColor: "white", zIndex: 1 }),
+          Animation.style({ transform: [{ translateY: scrolled }] })
+        ).children(
+          h.text.style({ fontSize: 14, color: "#6b7280", paddingVertical: 8 })
+            .children(`${model.items.length} items`),
+          pipe(
+            h.view.style({ height: 1, backgroundColor: "#d1d5db" }),
+            Animation.style({
+              opacity: Animation.interpolate(scrolled, [0, 24], [0, 1], "clamp")
+            })
+          )
+        ),
         ...model.items.map((item) =>
           Pressable(h, {
             onPress: Message.SelectedItem({ item }),
