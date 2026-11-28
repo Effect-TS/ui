@@ -1002,12 +1002,27 @@ const idle = (e: Entry): boolean => {
 }
 
 // Commits the end values, so Fabric's shadow tree, and a view it recreates,
-// show what the driver shows.
+// show what the driver shows. They are the targets, which `set` can move
+// from what the last render built.
 const settle = (e: Entry) => {
   const n = e.node
   const spec = e.built!
+  const at = (path: string, v: Value): Value =>
+    typeof v === "number" ? e.targets.get(path)?.to ?? v : v
   for (const key in spec) {
-    const value = resolve(spec[key]!.value, false)
+    const layer = spec[key]!.value
+    const value = resolve(
+      Array.isArray(layer)
+        ? (layer as Transforms).map((item, i) => {
+          const out: Record<string, Value> = {}
+          for (const k in item) {
+            out[k] = at(key + "." + i + "." + k, item[k as TransformKey]!)
+          }
+          return out
+        })
+        : at(key, layer as Value),
+      false
+    )
     if (value !== undefined) n.host.set(n, key, value)
   }
   n.host.commit()
