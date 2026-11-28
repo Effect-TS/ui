@@ -301,10 +301,15 @@ const startOf = (
 // offset is from before native moved the scroll, so the item stays the one
 // the viewport starts at until the next scroll event.
 const moved = (
-  model: Model,
+  given: Model,
   props: VirtualListProps,
   kept = false
 ): Virtualizer.Updated<Model> => {
+  // Fixed rows report no placement, so one from before would be stale once
+  // rows are measured again.
+  const model = props.measure === false && given.placed !== null
+    ? { ...given, placed: null }
+    : given
   if (model.viewport === 0) return { model, events: [] }
   const origin = originOf(model, props)
   return Virtualizer.update(

@@ -275,7 +275,7 @@ describe("VirtualList", () => {
     await list.close()
   })
 
-  it("drops where native placed a row once the rows take fixed sizes", async () => {
+  it("drops where native placed a row once the rows take fixed sizes, also after measuring again", async () => {
     const list = await setup({ count: 1000, itemSize: 40 })
     await list.layOut()
     await list.scrollTo(2020)
@@ -283,6 +283,18 @@ describe("VirtualList", () => {
     await list.setProps({ count: 1000, itemSize: 80, measure: false })
     await list.scrollTo(4020, 80020)
     assert.strictEqual(list.events[list.events.length - 1]!.first, 50)
+    // Back to 40-point rows below an 80-point reserve, so row 47 moved to
+    // 1980 without reporting it.
+    await list.setProps({
+      count: 1000,
+      itemSize: 40,
+      measure: false,
+      reserveStart: 80
+    })
+    await list.scrollTo(2100, 40100)
+    await list.setProps({ count: 1000, itemSize: 40, reserveStart: 80 })
+    await list.scrollTo(2140, 40100)
+    assert.strictEqual(list.events[list.events.length - 1]!.first, 51)
     await list.close()
   })
 
