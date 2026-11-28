@@ -51,6 +51,12 @@ export * as Query from "./Query.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as QueryPersistence from "./QueryPersistence.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as Renderer from "./Renderer.ts"
 
 /**

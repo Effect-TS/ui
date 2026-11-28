@@ -374,6 +374,9 @@ export declare namespace Service {
  *   It overrides the cache's default of 5 minutes.
  * - `refetchInterval` polls an entry while it's watched.
  * - `tags` lists the invalidation tags the query belongs to.
+ * - `persist` saves the query's Successes and restores them after a reload,
+ *   stale, when the app provides `QueryPersistence.layerKvs`. Without that
+ *   Layer it does nothing.
  *
  * `toLayer` takes a fetcher function or an Effect that builds one once per
  * Layer build. Retries go inside the fetcher (`Effect.retry`); the cache never
@@ -478,6 +481,7 @@ export const Service: <Self>() => <
         >
         | undefined
       readonly tags?: ReadonlyArray<Tag> | undefined
+      readonly persist?: boolean | undefined
     }
 ) => Service<
   Self,
@@ -496,6 +500,7 @@ export const Service: <Self>() => <
     readonly idleTimeToLive?: Duration.Input | undefined
     readonly refetchInterval?: RefetchInterval<any, any, any> | undefined
     readonly tags?: ReadonlyArray<Tag> | undefined
+    readonly persist?: boolean | undefined
   }
 ): any => {
   const def = makeDef(name, options)
@@ -590,7 +595,9 @@ const queryClass = (def: QueryDef) => {
                 }
                 const offer = (result: Item): void => {
                   if (failed !== undefined) return
-                  if (last !== undefined && Equal.equals(result, last)) return
+                  if (
+                    last !== undefined && queryCore.sameResult(result, last)
+                  ) return
                   last = result
                   pending.push(result)
                   wake()
@@ -1055,6 +1062,7 @@ export const InfiniteService: <Self>() => <
         >
         | undefined
       readonly tags?: ReadonlyArray<Tag> | undefined
+      readonly persist?: boolean | undefined
     }
 ) => InfiniteService<
   Self,
@@ -1079,6 +1087,7 @@ export const InfiniteService: <Self>() => <
     readonly idleTimeToLive?: Duration.Input | undefined
     readonly refetchInterval?: RefetchInterval<any, any, any> | undefined
     readonly tags?: ReadonlyArray<Tag> | undefined
+    readonly persist?: boolean | undefined
   }
 ): any => {
   const def = makeDef(
@@ -1362,6 +1371,7 @@ export const StreamService: <Self>() => <
       readonly tags?: ReadonlyArray<Tag> | undefined
       readonly staleTime?: never
       readonly refetchInterval?: never
+      readonly persist?: never
     }
 ) => StreamService<
   Self,
@@ -1383,7 +1393,7 @@ export const StreamService: <Self>() => <
   queryClass(makeDef(
     name,
     // Overridden, not left out: an options variable can still hold them.
-    { ...options, staleTime: 0, refetchInterval: undefined },
+    { ...options, staleTime: 0, refetchInterval: undefined, persist: false },
     undefined,
     liveOps
   ))
@@ -2392,6 +2402,8 @@ interface QueryDef {
     | ((result: Settled, args: any) => Duration.Input | undefined)
     | undefined
   readonly tags: ReadonlyArray<string>
+  /** Opts into `QueryPersistence`. */
+  readonly persist: boolean | undefined
   /** Throws when the args don't encode, or encode to something JSON can't carry. */
   readonly argsKey: (args: unknown) => string
   /** The args with the optional `undefined` properties of an args struct dropped, as the key sees them. */
@@ -2493,6 +2505,7 @@ const makeDef = (
     readonly idleTimeToLive?: Duration.Input | undefined
     readonly refetchInterval?: RefetchInterval<any, any, any> | undefined
     readonly tags?: ReadonlyArray<{ readonly name: string }> | undefined
+    readonly persist?: boolean | undefined
   },
   list?: ListDef,
   live?: LiveOps
@@ -2577,6 +2590,7 @@ const makeDef = (
     tags: (options.tags ?? []).map((tag) => tag.name),
     argsKey,
     logKey,
+    persist: options.persist,
     list,
     live
   }
@@ -3157,7 +3171,7 @@ class SnapshotImpl implements Equal.Equal {
     const b = that[SnapshotTypeId]
     return a.def.name === b.def.name && a.label === b.label &&
       a.argsKey === b.argsKey && a.patched === b.patched &&
-      sameMore(a.more, b.more) && Equal.equals(a.result, b.result)
+      sameMore(a.more, b.more) && queryCore.sameResult(a.result, b.result)
   }
   [Hash.symbol](): number {
     const data = this[SnapshotTypeId]
@@ -4266,7 +4280,7 @@ export const makeCache = (options: {
   readonly visibility: Signal
   readonly connectivity: Signal
   /** The problems sink. A throw from it is swallowed. */
-  readonly report: (problem: Problem) => void
+  readonly report: (problem: Problem.Any) => void
   /** In milliseconds, from `cacheIdleMs`. */
   readonly idleMs: number
   /**
@@ -4334,6 +4348,8 @@ interface CacheEnv {
   ) => void
   readonly ensureFetch: (entry: Entry, trigger: Trigger, build: Build) => void
   readonly store: (entry: Entry, result: Settled) => void
+  /** Saves a Success that isn't stored through `store`, keeping its timestamp. */
+  readonly save: (entry: Entry, result: Settled) => void
   readonly storeFailure: (entry: Entry, cause: Cause.Cause<any>) => boolean
   readonly markDefect: (
     entry: Entry,
@@ -4652,6 +4668,7 @@ const listOps: ListOps = {
           entry.result = AsyncResult.success(out.pages, {
             timestamp: previous.timestamp
           })
+          env.save(entry, entry.result)
           entry.hasMore = { result: entry.result, value: out.hasMore }
           entry.hydrated = false
         } else if (error !== undefined && Option.isSome(error)) {
@@ -4757,20 +4774,23 @@ const listOps: ListOps = {
     if (entry === undefined) return
     const result = entry.result
     if (result?._tag === "Success" && result.value.length > 1) {
-      entry.result = AsyncResult.success(result.value.slice(0, 1), {
-        timestamp: result.timestamp
-      })
+      env.save(
+        entry,
+        entry.result = AsyncResult.success(result.value.slice(0, 1), {
+          timestamp: result.timestamp
+        })
+      )
     } else if (
       result?._tag === "Failure" && Option.isSome(result.previousSuccess)
     ) {
       const previous = result.previousSuccess.value
       if (previous.value.length > 1) {
+        const first = AsyncResult.success(previous.value.slice(0, 1), {
+          timestamp: previous.timestamp
+        })
+        env.save(entry, first)
         entry.result = AsyncResult.failure(result.cause, {
-          previousSuccess: Option.some(
-            AsyncResult.success(previous.value.slice(0, 1), {
-              timestamp: previous.timestamp
-            })
-          )
+          previousSuccess: Option.some(first)
         })
       }
     }
@@ -4880,6 +4900,9 @@ const buildCache = (
   const defaultIdleMs = options.idleMs ?? cacheIdleMs(options.idleTimeToLive)
   const settleOnce = options.settleOnce === true
   const fetches = options.fetches !== false
+  const persistence = settleOnce
+    ? undefined
+    : Context.get(context, queryCore.Persistence)
 
   const queries = new Map<string, QueryDef>()
   const duplicates = new WeakSet<QueryDef>()
@@ -4901,6 +4924,10 @@ const buildCache = (
   let hydratedAt = 0
   let hydratedStatic = false
   let windowOpen = false
+  // From a hydration until adoption: saved values would change the adopted frame.
+  let adopting = false
+  // Entries made while adopting and not shipped: they look up their saved value at adoption.
+  const unrestored = new Set<Entry>()
   // Writes and invalidations, entry creation and run starts share one sequence.
   let seq = 0
   let issued = 0
@@ -4943,7 +4970,7 @@ const buildCache = (
       fiber.interruptUnsafe()
     }
   }
-  const report = (problem: Problem): void => {
+  const report = (problem: Problem.Any): void => {
     try {
       options.report(problem)
     } catch {
@@ -5000,21 +5027,29 @@ const buildCache = (
   }
   const lookup = (def: QueryDef, argsKey: string): Entry | undefined =>
     index.get(def.name)?.get(argsKey)
+  const savedOf = (
+    def: QueryDef,
+    argsKey: string
+  ): AsyncResult.Success<any, any> | undefined =>
+    adopting ? undefined : persistence?.get(def, argsKey)
   const ensureEntry = (
     def: QueryDef,
     args: unknown,
-    argsKey = def.argsKey(args)
+    argsKey = def.argsKey(args),
+    saved?: AsyncResult.Success<any, any>
   ): Entry => {
     const found = lookup(def, argsKey)
     if (found !== undefined) return found
+    saved ??= savedOf(def, argsKey)
     const entry: Entry = {
       def,
       argsKey,
       args,
       logKey: undefined,
-      result: undefined,
-      settledAt: 0,
-      invalidated: false,
+      // A saved Success is stale from the start, as a seed is.
+      result: saved,
+      settledAt: saved === undefined ? 0 : now(),
+      invalidated: saved !== undefined,
       removed: false,
       watchers: new Set(),
       waiters: new Set(),
@@ -5043,6 +5078,7 @@ const buildCache = (
     let byKey = index.get(def.name)
     if (byKey === undefined) index.set(def.name, byKey = new Map())
     byKey.set(argsKey, entry)
+    if (adopting && def.persist) unrestored.add(entry)
     return entry
   }
   const removeEntry = (entry: Entry): void => {
@@ -5189,7 +5225,7 @@ const buildCache = (
       }
       if (
         patched === watcher.lastPatched && sameMore(more, watcher.lastMore) &&
-        Equal.equals(result, watcher.last)
+        queryCore.sameResult(result, watcher.last)
       ) {
         continue
       }
@@ -5417,6 +5453,7 @@ const buildCache = (
       startFetch,
       ensureFetch,
       store,
+      save,
       storeFailure,
       markDefect,
       afterFetch,
@@ -5525,8 +5562,11 @@ const buildCache = (
       )
     }
   }
+  const save = (entry: Entry, result: Settled): void =>
+    persistence?.save(entry.def, entry.argsKey, result, report)
   /** A settle or a stored write: patches held after success are confirmed and go. */
   const store = (entry: Entry, result: Settled): void => {
+    save(entry, result)
     entry.result = result
     entry.settledAt = now()
     entry.invalidated = false
@@ -5946,7 +5986,15 @@ const buildCache = (
 
   const peek: CacheInternals["peek"] = (def, args) => {
     const registered = register(def)
-    const entry = lookup(registered, registered.argsKey(args))
+    const argsKey = registered.argsKey(args)
+    let entry = lookup(registered, argsKey)
+    if (entry === undefined) {
+      // Only a saved value makes an entry here. It idles out like any other.
+      const saved = savedOf(registered, argsKey)
+      if (saved !== undefined) {
+        afterQuiet(entry = ensureEntry(registered, args, argsKey, saved))
+      }
+    }
     return entry === undefined ? AsyncResult.initial() : view(entry)
   }
 
@@ -6534,6 +6582,7 @@ const buildCache = (
       }
       const entry = existing ?? ensureEntry(def, args, argsKey)
       entry.result = result
+      unrestored.delete(entry)
       // It ages from the client's mount. Under `static` its age is unknown: stale unless never stale by age.
       entry.settledAt = hydratedAt
       entry.invalidated = hydratedStatic && def.staleMs !== Infinity
@@ -6557,6 +6606,7 @@ const buildCache = (
     hydratedStatic = hydrateOptions?.static === true
     hydrateDecode = hydrateOptions?.decodeSuccess
     windowOpen = !hydratedStatic
+    adopting = true
     raw = parsed
     // Reads the cache has already seen decode at once.
     for (const name of Array.from(raw.keys())) {
@@ -6565,6 +6615,29 @@ const buildCache = (
     }
   }
   const closeWindow = (): void => {
+    adopting = false
+    // An entry made while the page was adopted gets its saved value now: as its
+    // result, or under a Failure that has no previous Success.
+    for (const entry of unrestored) {
+      const result = entry.result
+      if (
+        entry.removed || result?._tag === "Success" ||
+        (result !== undefined && Option.isSome(result.previousSuccess))
+      ) continue
+      const saved = savedOf(entry.def, entry.argsKey)
+      if (saved === undefined) continue
+      if (result === undefined) {
+        entry.result = saved
+        entry.settledAt = now()
+        entry.invalidated = true
+      } else {
+        entry.result = AsyncResult.failure(result.cause, {
+          previousSuccess: Option.some(saved)
+        })
+      }
+      emit(entry)
+    }
+    unrestored.clear()
     if (!windowOpen) return
     windowOpen = false
     for (const [name, byKey] of raw) {

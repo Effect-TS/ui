@@ -9,7 +9,8 @@
 import * as Context from "effect/Context"
 import type * as Duration from "effect/Duration"
 import type * as Effect from "effect/Effect"
-import type * as AsyncResult from "effect/reactivity/AsyncResult"
+import * as Equal from "effect/Equal"
+import * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Query from "../Query.ts"
 import type * as componentQueries from "./queries.ts"
 import type * as queryRun from "./queryRun.ts"
@@ -265,6 +266,45 @@ export const Shipped: Context.Reference<ShippedContext | undefined> = Context
   .Reference<ShippedContext | undefined>("@effect/ui/Query/Shipped", {
     defaultValue: () => undefined
   })
+
+/**
+ * Persistence backend for `persist` queries, provided by `QueryPersistence`.
+ *
+ * @internal
+ */
+export interface Persistence {
+  readonly get: (
+    def: ReturnType<typeof Query.defOf>,
+    argsKey: string
+  ) => AsyncResult.Success<any, any> | undefined
+  /** `report` is the cache's problems sink, which the Layer's context may not hold. */
+  readonly save: (
+    def: ReturnType<typeof Query.defOf>,
+    argsKey: string,
+    result: AsyncResult.AsyncResult<any, any>,
+    report: (problem: Query.Problem.Any) => void
+  ) => void
+}
+
+/** @internal */
+export const Persistence: Context.Reference<Persistence | undefined> = Context
+  .Reference<Persistence | undefined>("@effect/ui/Query/Persistence", {
+    defaultValue: () => undefined
+  })
+
+/**
+ * `Equal.equals`, except that two Failures also compare their previous
+ * Success, which AsyncResult's own equality ignores.
+ *
+ * @internal
+ */
+export const sameResult = (a: unknown, b: unknown): boolean =>
+  Equal.equals(a, b) &&
+  !(AsyncResult.isAsyncResult(a) && a._tag === "Failure" &&
+    !Equal.equals(
+      a.previousSuccess,
+      (b as AsyncResult.Failure<unknown, unknown>).previousSuccess
+    ))
 
 /** @internal */
 export const report = (
