@@ -10,7 +10,8 @@ React Native vocabulary and Fabric host for `@effect/ui`. Apps render native vie
 ## Modules
 
 - `Native`: `Native.component`, `Native.H`, the element vocabulary (`view`, `text`, `scroll`, `input`), style, prop and event types, `Native.Host`, `Native.clear`, `Native.setSelection`, and `Native.defineView` for custom native views
-- `@effect/ui-native/kit`: native controls and APIs beyond the vocabulary, bundled only when imported. `Css` parses CSS strings into the style forms native reads, `RefreshControl` adds pull to refresh, and `Modal`, `SafeArea`, `Drawer` and `InputAccessory` are screen containers. `Pressable` adds press states, a pressed style and the Android ripple; `Pan` handles drags after a configurable movement threshold
+- `@effect/ui-native/kit`: native controls and APIs beyond the vocabulary, bundled only when imported. `Css` parses CSS strings into the style forms native reads, `Image` and `ImageBackground` render images, `RefreshControl` adds pull to refresh, and `Modal`, `SafeArea`, `Drawer` and `InputAccessory` are screen containers. `Pressable` adds press states, a pressed style and the Android ripple; `Pan` handles drags after a configurable movement threshold
+- `@effect/ui-native/assets`: ambient TypeScript declarations for static image imports (`import logo from "./logo.png"`)
 - `NativeHost`: `make`, the `Renderer.Host` that builds Fabric shadow trees and commits them to a surface
 - `NativeApp`: `mount`, `mountEffect`, and `register`, which runs an app on every surface native starts; the `Surface` service
 - `@effect/ui-native/networking`: opt-in side-effect entry that installs React Native's networking globals (`fetch`, `XMLHttpRequest`, `WebSocket`, `URL`, `AbortController`)
@@ -40,13 +41,13 @@ export default NativeMetro.withEffectUi(
 )
 ```
 
-A release build (`NODE_ENV=production`, as `expo export` and Gradle's release tasks set it) is pre-bundled with Vite, which tree-shakes `effect` and `@effect/ui`, and Metro bundles the result with React Native. Packages with native code or assets are left to Metro: `react-native`, `expo`, and their scoped and prefixed packages by default, and any others named in the `external` option.
+A release build (`NODE_ENV=production`, as `expo export` and Gradle's release tasks set it) is pre-bundled with Vite, which tree-shakes `effect` and `@effect/ui`, and Metro bundles the result with React Native. Static `import`s of assets (`resolver.assetExts`) are left to Metro automatically so scale variants and files are preserved; use `import` rather than `require`, which pre-bundling rejects. Packages with native code are left to Metro: `react-native`, `expo`, and their scoped and prefixed packages by default, and any others named in the `external` option.
 
 Each platform in `platforms` (`["android", "ios"]` by default) gets a pre-bundle using Metro's `sourceExts` and `resolverMainFields`. For each source extension, resolution tries the platform suffix, then `.native`, then no suffix. Platforms without a pre-bundle, such as web, use the sources.
 
 An app's `resolver.resolveRequest` also runs for non-external imports in the pre-bundle:
 
-- Return a source file or an empty module. Put packages that resolve to assets in `external`.
+- Return a source file, asset files, or an empty module.
 - Delegate to `context.resolveRequest` to let Vite resolve an import, including a renamed import or a changed origin.
 - Do not read the delegated result's `filePath` or request another platform. Either fails the release build: Vite resolves asynchronously and only for the build's platform.
 

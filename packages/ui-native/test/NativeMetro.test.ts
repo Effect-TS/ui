@@ -192,4 +192,124 @@ NativeApp.register(NativeApp.mount(App, {}))
     )
     assert.include(error?.message, "./title on platform null")
   }, 30_000)
+
+  it(
+    "leaves asset imports external, preserves package asset importers, and rejects require of assets",
+    async () => {
+      // Scale-only relative asset, nested scale-only package assets (via export
+      // map and via external), and a resolveRequest assetFiles alias.
+      write("src/mark@2x.png", "png-2x")
+      write("src/badge@2x.png", "png-badge")
+      write(
+        "node_modules/nested-consumer/package.json",
+        JSON.stringify({ name: "nested-consumer", main: "index.js" })
+      )
+      write(
+        "node_modules/nested-consumer/index.js",
+        `import exportedIcon from "exported-images/icon.png"
+import externalIcon from "private-images/icon.png"
+export default [exportedIcon, externalIcon]
+`
+      )
+      write(
+        "node_modules/nested-consumer/node_modules/exported-images/package.json",
+        JSON.stringify({
+          name: "exported-images",
+          exports: { "./icon.png": "./art/logo.png" }
+        })
+      )
+      write(
+        "node_modules/nested-consumer/node_modules/exported-images/art/logo@2x.png",
+        "png-exported-2x"
+      )
+      write(
+        "node_modules/nested-consumer/node_modules/private-images/icon@2x.png",
+        "png-external-2x"
+      )
+      write(
+        "src/assets-entry.ts",
+        `import mark from "./mark.png"
+import badge from "./badge"
+import nestedIcons from "nested-consumer"
+export default [mark, badge, nestedIcons]
+`
+      )
+      const config = await NativeMetro.withEffectUi(
+        {
+          projectRoot: root,
+          resolver: {
+            sourceExts: ["ts", "js"],
+            assetExts: ["png"],
+            resolveRequest: (context, moduleName, platform) =>
+              moduleName === "./badge"
+                ? {
+                  type: "assetFiles",
+                  filePaths: [Path.join(root, "src/badge@2x.png")]
+                }
+                : context.resolveRequest(context, moduleName, platform)
+          }
+        },
+        {
+          entry: "src/assets-entry.ts",
+          platforms: ["android"],
+          external: ["private-images"]
+        }
+      )
+      const bundle = readBundle(config, "src/assets-entry.ts", "android")
+      assert.notInclude(bundle, "data:image")
+      const imports = [...bundle.matchAll(/from "([^"]+)"/g)].map((m) => m[1]!)
+      assert.include(imports, Path.join(root, "src/mark.png"))
+      assert.include(imports, Path.join(root, "src/badge.png"))
+
+      // Non-path asset imports resolve through Metro with their original importer.
+      const seen: Array<readonly [string, string]> = []
+      for (const specifier of imports) {
+        if (Path.isAbsolute(specifier)) continue
+        config.resolver!.resolveRequest!(
+          {
+            dev: false,
+            originModulePath: Path.join(
+              root,
+              "node_modules/.cache/@effect/ui-native/main.android.js"
+            ),
+            resolveRequest: (
+              ctx: { readonly originModulePath: string },
+              name: string
+            ) => {
+              seen.push([ctx.originModulePath, name])
+              return { type: "assetFiles", filePaths: [] }
+            }
+          },
+          specifier,
+          "android"
+        )
+      }
+      const consumerPath = Path.join(
+        root,
+        "node_modules/nested-consumer/index.js"
+      )
+      assert.deepStrictEqual(seen, [
+        [consumerPath, "exported-images/icon.png"],
+        [consumerPath, "private-images/icon.png"]
+      ])
+
+      for (const target of ["./mark.png", "expo-icons/mark.png"]) {
+        write(
+          "src/require-asset.ts",
+          `declare const require: (id: string) => number
+export default require("${target}")
+`
+        )
+        const error = await NativeMetro.withEffectUi({
+          projectRoot: root,
+          resolver: { sourceExts: ["ts", "js"], assetExts: ["png"] }
+        }, { entry: "src/require-asset.ts", platforms: ["android"] }).then(
+          () => undefined,
+          (err: Error) => err
+        )
+        assert.include(error?.message, "static `import`")
+      }
+    },
+    30_000
+  )
 })

@@ -17,6 +17,8 @@
 export * from "./ActivityIndicator.ts"
 export * as Css from "./Css.ts"
 export * from "./Drawer.ts"
+export * from "./Image.ts"
+export * from "./ImageBackground.ts"
 export * from "./InputAccessory.ts"
 export * from "./Modal.ts"
 export * from "./Pan.ts"

@@ -1,7 +1,45 @@
 import * as Path from "node:path"
-import type { MetroConfig } from "../NativeMetro.ts"
+import type { MetroConfig, ResolveRequest } from "../NativeMetro.ts"
+
+// Bare or external asset import resolved by Metro from its original importer.
+export interface DeferredAsset {
+  readonly moduleName: string
+  readonly origin: string
+  readonly runUpstream: boolean
+}
 
 const native = /^(?:@?react-native|@?expo)(?:[-/]|$)/
+
+const defaultAssetExts = [
+  "bmp",
+  "gif",
+  "jpg",
+  "jpeg",
+  "png",
+  "psd",
+  "svg",
+  "webp",
+  "xml",
+  "m4v",
+  "mov",
+  "mp4",
+  "mpeg",
+  "mpg",
+  "webm",
+  "aac",
+  "aiff",
+  "caf",
+  "m4a",
+  "mp3",
+  "wav",
+  "html",
+  "pdf",
+  "yaml",
+  "yml",
+  "otf",
+  "ttf",
+  "zip"
+]
 
 // Metro delegates synchronously; Vite resolves asynchronously. Return a
 // deferred request and reject filePath reads inside the app's resolver.
@@ -25,20 +63,26 @@ const delegate = (moduleName: string, origin: string): Delegated => ({
 
 const empty = "\0@effect/ui-native/empty"
 
+// Metro resolves the unscaled path to every @2x/@3x variant.
+const stripScaleSuffix = (filePath: string): string =>
+  filePath.replace(/@[\d.]+x(?=\.[^./\\]+$)/, "")
+
 /**
- * Pre-bundles `entry` for `platform` under the project's
- * `node_modules/.cache`. Returns the file written, and the file `entry`
- * resolved to. Modules resolve as Metro resolves them: the app's
- * `resolveRequest` first, then, on Android, an import of `./title` picks
- * `title.android.ts` over `title.native.ts` over `title.ts`, trying the
- * config's `sourceExts` in order.
+ * Pre-bundles `entry` for `platform` under `node_modules/.cache` using Metro's
+ * `resolveRequest`, platform/native extensions, and `sourceExts`. Static
+ * imports matching `assetExts` are left to Metro, preserving original
+ * importers for deferred package assets.
  */
 export const prebundle = async (
   config: MetroConfig,
   platform: string,
   entry: string,
   external: ReadonlyArray<string | RegExp>
-): Promise<{ readonly file: string; readonly entry: string }> => {
+): Promise<{
+  readonly file: string
+  readonly entry: string
+  readonly assets: ReadonlyMap<string, DeferredAsset>
+}> => {
   const { build } = await import("vite")
   const outDir = Path.join(
     config.projectRoot,
@@ -47,6 +91,7 @@ export const prebundle = async (
   const file = `main.${platform}.js`
   const sourceExts = config.resolver?.sourceExts ??
     ["js", "jsx", "json", "ts", "tsx"]
+  const assetExts = new Set(config.resolver?.assetExts ?? defaultAssetExts)
   const mainFields = config.resolver?.resolverMainFields ??
     ["react-native", "browser", "main"]
   const isExternal = (id: string) =>
@@ -56,20 +101,54 @@ export const prebundle = async (
         ? id === entry || id.startsWith(entry + "/")
         : entry.test(id)
     )
-  const resolveRequest = config.resolver?.resolveRequest
+  // Metro tells an asset by its extension alone, case and all.
+  const isAsset = (id: string) => assetExts.has(Path.extname(id).slice(1))
+  const resolveRequest: ResolveRequest = config.resolver?.resolveRequest ??
+    ((context, moduleName, platform) =>
+      context.resolveRequest(context, moduleName, platform))
+  const assets = new Map<string, DeferredAsset>()
+  const assetTokens = new Map<string, string>()
+  const deferAsset = (
+    moduleName: string,
+    origin: string,
+    runUpstream: boolean
+  ) => {
+    const key = `${runUpstream ? "1" : "0"}\0${origin}\0${moduleName}`
+    let token = assetTokens.get(key)
+    if (token === undefined) {
+      token = `@effect/ui-native/__asset__/${assets.size}`
+      assetTokens.set(key, token)
+      assets.set(token, { moduleName, origin, runUpstream })
+    }
+    return { id: token, external: true as const }
+  }
   const result = await build({
     configFile: false,
     root: config.projectRoot,
     mode: "production",
     logLevel: "warn",
-    plugins: resolveRequest == null ? [] : [{
-      name: "@effect/ui-native:resolve-request",
+    plugins: [{
+      name: "@effect/ui-native:metro",
       enforce: "pre",
-      async resolveId(source, importer) {
-        if (
-          importer === undefined || source[0] === "\0" || isExternal(source)
-        ) {
-          return null
+      async resolveId(source, importer, options) {
+        if (importer === undefined || source[0] === "\0") return null
+        const rejectRequire = () => {
+          if (options.kind === "require-call") {
+            throw new Error(
+              `[@effect/ui-native] Cannot require asset "${source}" from ${importer} in a pre-bundle; use a static \`import\` instead`
+            )
+          }
+        }
+        const leave = (id: string) => {
+          rejectRequire()
+          return { id, external: "absolute" as const }
+        }
+        if (isExternal(source)) {
+          if (isAsset(source)) {
+            rejectRequire()
+            return deferAsset(source, importer, true)
+          }
+          return { id: source, external: true }
         }
         const delegated = new Set<Delegated>()
         const found = resolveRequest(
@@ -101,6 +180,19 @@ export const prebundle = async (
         )
         if (delegated.has(found as Delegated)) {
           const { moduleName, origin } = found as Delegated
+          if (isAsset(moduleName)) {
+            // Relative assets may exist only as @2x or platform-suffixed files.
+            if (moduleName[0] === "." || Path.isAbsolute(moduleName)) {
+              return leave(Path.resolve(Path.dirname(origin), moduleName))
+            }
+            rejectRequire()
+            const resolved = await this.resolve(moduleName, origin, {
+              skipSelf: true
+            })
+            return resolved !== null
+              ? { id: resolved.id, external: "absolute" as const }
+              : deferAsset(moduleName, origin, false)
+          }
           if (moduleName === source && origin === importer) return null
           if (isExternal(moduleName)) return { id: moduleName, external: true }
           const resolved = await this.resolve(moduleName, origin, {
@@ -115,6 +207,9 @@ export const prebundle = async (
         }
         if (found.type === "sourceFile") return found.filePath
         if (found.type === "empty") return empty
+        if (found.type === "assetFiles") {
+          return leave(stripScaleSuffix(found.filePaths![0]!))
+        }
         throw new Error(
           `[@effect/ui-native] resolveRequest resolved ${source} to ${found.type}, which a pre-bundle can't hold, so add it to external`
         )
@@ -143,8 +238,7 @@ export const prebundle = async (
         // its interop, as it does for the rest of the app.
         formats: ["es"],
         fileName: () => file
-      },
-      rollupOptions: { external: isExternal }
+      }
     }
   })
   const output = Array.isArray(result) ? result[0] : result
@@ -156,5 +250,9 @@ export const prebundle = async (
       `[@effect/ui-native] Vite didn't report the file ${entry} resolved to`
     )
   }
-  return { file: Path.join(outDir, file), entry: Path.normalize(resolved) }
+  return {
+    file: Path.join(outDir, file),
+    entry: Path.normalize(resolved),
+    assets
+  }
 }

@@ -53,3 +53,28 @@ declare module "react-native/Libraries/Components/Sound/NativeSoundManager" {
   const NativeSoundManager: { readonly playTouchSound: () => void } | null
   export default NativeSoundManager
 }
+
+declare module "react-native/asset-registry" {
+  export interface PackagerAsset {
+    readonly __packager_asset?: boolean | undefined
+    readonly httpServerLocation: string
+    readonly width?: number | undefined
+    readonly height?: number | undefined
+    readonly scales: ReadonlyArray<number>
+    readonly hash: string
+    readonly name: string
+    readonly type: string
+    readonly resolver?: "android" | "generic" | undefined
+  }
+  export const registerAsset: (asset: PackagerAsset) => number
+  export const getAssetByID: (assetId: number) => PackagerAsset | undefined
+  const AssetRegistry: {
+    readonly registerAsset: typeof registerAsset
+    readonly getAssetByID: typeof getAssetByID
+  }
+  export default AssetRegistry
+}
+
+declare module "react-native/Libraries/TurboModule/TurboModuleRegistry" {
+  export function get<T = Record<string, any>>(name: string): T | null
+}

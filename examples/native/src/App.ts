@@ -1,6 +1,6 @@
 // Every export of this module is a component, so an edit to it swaps in
 // place in the dev client and keeps the count, the name and the list.
-import { Pan, Pressable, VirtualView } from "@effect/ui-native/kit"
+import { Image, Pan, Pressable, VirtualView } from "@effect/ui-native/kit"
 import * as Native from "@effect/ui-native/Native"
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
@@ -9,6 +9,7 @@ import * as UiSchema from "@effect/ui/UiSchema"
 import * as Effect from "effect/Effect"
 import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
+import mark from "./assets/mark.png"
 
 const Rect = Schema.Struct({
   x: Schema.Number,
@@ -203,13 +204,21 @@ export const App = Native.component({
       gap: 20,
       backgroundColor: "white"
     }).children(
-      h.text.style({
-        fontSize: 64,
-        fontWeight: "bold",
-        color: "#1f2937",
-        textAlign: "center"
+      h.view.style({
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 12
       }).children(
-        String(model.count)
+        Image(h, { source: mark }),
+        h.text.style({
+          fontSize: 64,
+          fontWeight: "bold",
+          color: "#1f2937",
+          textAlign: "center"
+        }).children(
+          String(model.count)
+        )
       ),
       h.view.style({ flexDirection: "row", justifyContent: "center", gap: 16 })
         .children(
