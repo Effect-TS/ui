@@ -228,6 +228,53 @@ describe("VirtualList", () => {
     await list.close()
   })
 
+  it("measures from the first row of the range around the viewport, not a sticky row before it", async () => {
+    const keys = Array.from({ length: 1000 }, (_, i) => "k" + i)
+    const list = await setup({ keys, itemSize: 40, sticky: [0] })
+    await list.layOut()
+    await list.scrollTo(20 + 50 * 40)
+    assert.include(list.children(), "header s0 0 s1840 47 ")
+    // Rows 0 and 47 to 62 grow to 80 around the spacer native still has.
+    const rows = [0, ...Array.from({ length: 16 }, (_, i) => 47 + i)]
+    rows.map(list.row).forEach((row, i) =>
+      list.fabric.emit(row, "topLayout", {
+        layout: {
+          x: 0,
+          y: i === 0 ? 20 : 20 + 80 + 1840 + (i - 1) * 80,
+          width: 300,
+          height: 80
+        }
+      })
+    )
+    await list.settle()
+    await list.scrollTo(20 + 80 + 1840 + 3 * 80, 20 + 1000 * 40 + 17 * 40)
+    assert.strictEqual(list.events[list.events.length - 1]!.first, 50)
+    await list.close()
+  })
+
+  it("falls back to the scroll offset when the placed row is gone", async () => {
+    const list = await setup({ count: 1000, itemSize: 40 })
+    await list.layOut()
+    await list.scrollTo(20 + 50 * 40)
+    await list.measure(47, 20 + 47 * 40, 40)
+    await list.setProps({ count: 10, itemSize: 40 })
+    await list.scrollTo(20, 420)
+    const last = list.events[list.events.length - 1]!
+    assert.deepStrictEqual([last.first, last.offset], [0, 0])
+    await list.close()
+  })
+
+  it("sends a scroll that changes the first row once corrected by where native placed it", async () => {
+    const list = await setup({ count: 1000, itemSize: 40 })
+    await list.layOut()
+    await list.scrollTo(2035)
+    // Row 47 is 10 points lower than estimated, so 2025 starts in row 49.
+    await list.measure(47, 1910, 40)
+    await list.scrollTo(2025)
+    assert.strictEqual(list.events[list.events.length - 1]!.first, 49)
+    await list.close()
+  })
+
   it("reports scrolling through the momentum after a drag, or until 100ms after a drag without one", async () => {
     const list = await setup({ count: 1000, itemSize: 40 })
     await list.layOut()

@@ -257,24 +257,34 @@ const atEndOf = (model: Model, core: Virtualizer.Props): boolean =>
 const anchoredOf = (props: VirtualListProps): boolean =>
   props.measure !== false || props.keys !== undefined
 
-// The viewport's start in the core's layout. Measured from the first
-// rendered item where native placed it, since the core's estimates for the
-// items before it can change before native lays out the spacer they size.
+// The range around the viewport: the longest, as a sticky item's range is
+// one item and native sends no focus.
+const mainOf = (plan: Virtualizer.Plan): readonly [number, number] =>
+  plan.ranges.reduce((a, b) => b[1] - b[0] > a[1] - a[0] ? b : a)
+
+// The viewport's start in the core's layout. Measured from the first item of
+// the range around the viewport where native placed it, since the core's
+// estimates for the items before it can change before native lays out the
+// spacer they size.
 const startOf = (
   model: Model,
   props: VirtualListProps,
-  core: Virtualizer.Props
+  core: Virtualizer.Props,
+  plan = Virtualizer.plan(model, core)
 ): number => {
   const { placed } = model
   const fallback = model.scrollOffset - originOf(model, props)
   if (placed === null) return fallback
-  const plan = Virtualizer.plan(model, core)
-  const index = sizeKey(core, placed.index) === placed.key
-    ? placed.index
-    : plan.items.find((i) => sizeKey(core, i) === placed.key)
-  return index === undefined
-    ? fallback
-    : plan.offsetOf(index) + model.scrollOffset - placed.at
+  const [from, to] = mainOf(plan)
+  let index = placed.index
+  if (sizeKey(core, index) !== placed.key) {
+    index = from
+    while (index < to && sizeKey(core, index) !== placed.key) index++
+  }
+  // A row outside the range, or gone from the list, has no placement to use.
+  return index >= from && index < to
+    ? plan.offsetOf(index) + model.scrollOffset - placed.at
+    : fallback
 }
 
 // Tells the core where the viewport is, once the scroll has laid out. When
@@ -577,7 +587,7 @@ export const VirtualList = Native.component({
       plan.ranges.slice(1).map(([start], i) => [start, plan.gaps[i]!])
     )
     const anchored = anchoredOf(props)
-    const origin = originOf(model, props)
+    const anchor = mainOf(plan)[0]
     const main = (rect: Native.Rect) => horizontal ? rect.x : rect.y
     const length = (
       rect: { readonly width: number; readonly height: number }
@@ -587,8 +597,8 @@ export const VirtualList = Native.component({
       const offset = horizontal ? event.x : event.y
       const viewport = length(event)
       const content = horizontal ? event.contentWidth : event.contentHeight
-      const start = offset - origin
       const next = { ...model, scrollOffset: offset, viewport, content }
+      const start = startOf(next, props, core, plan)
       // Most scroll events leave the same items visible and send nothing.
       // A waiting request's plan is around its target, not the viewport, so
       // the scroll that reaches the target is sent.
@@ -631,8 +641,8 @@ export const VirtualList = Native.component({
       }
       const key = Virtualizer.keyOf(core, index)
       const known = model.sizes[key ?? String(index)]
-      // The first item also reports where it moves to.
-      const first = index === plan.items[0]
+      // The first item around the viewport also reports where it moves to.
+      const first = index === anchor
       const { placed } = model
       return b.on("layout", ({ layout }) => {
         const size = length(layout)
