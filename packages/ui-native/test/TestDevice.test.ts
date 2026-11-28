@@ -210,14 +210,18 @@ describe("TestDevice", () => {
               h.text.children("listening")
           })
           const play = yield* Play.make(Listener, {})
-          device.memoryWarning()
+          if (android) {
+            assert.throws(() => device.memoryWarning(), /no memory warning/)
+          } else {
+            device.memoryWarning()
+          }
           device.receiveURL("app://note/1")
           device.setAccessibility("screenReader", true)
           if (android) device.pressBack()
           yield* TestHost.settle
           assert.deepStrictEqual(play.root.model(), [
             "screenReader false",
-            "memory",
+            ...(android ? [] : ["memory"]),
             "app://note/1",
             "screenReader true",
             ...(android ? ["back"] : [])
@@ -278,8 +282,23 @@ describe("TestDevice", () => {
             Alert.alert({ title: "Hi", cancelable: true })
           )
           if (android) {
-            device.dismissAlert()
+            // Back goes to the alert, not the app, and a new alert
+            // dismisses the one shown.
+            device.pressBack()
             assert.isUndefined(yield* Fiber.join(dismissed))
+            const stuck = yield* open(Alert.alert({ title: "Hi" }))
+            device.pressBack()
+            assert.throws(() => device.dismissAlert(), /isn't cancelable/)
+            const next = yield* open(
+              Alert.alert({
+                title: "Next",
+                buttons: [{ id: "next", text: "Next" }]
+              })
+            )
+            assert.isUndefined(yield* Fiber.join(stuck))
+            assert.throws(() => device.answerAlert("OK"), /no button "OK"/)
+            device.answerAlert("Next")
+            assert.strictEqual(yield* Fiber.join(next), "next")
           } else {
             assert.throws(() => device.dismissAlert(), /only with a button/)
             device.answerAlert("OK")
@@ -312,16 +331,22 @@ describe("TestDevice", () => {
           const share = yield* open(
             Share.share({ message: "Hi", url: "https://effect.website" })
           )
-          device.answerShare("com.apple.mail")
+          if (android) {
+            assert.throws(() => device.answerShare(), /once the sheet opens/)
+          } else {
+            device.answerShare("com.apple.mail")
+          }
           assert.deepStrictEqual(yield* Fiber.join(share), {
             action: "shared",
             activityType: android ? undefined : "com.apple.mail"
           })
-          const unshared = yield* open(Share.share({ message: "Hi" }))
-          device.dismissShare()
-          assert.deepStrictEqual(yield* Fiber.join(unshared), {
-            action: "dismissed"
-          })
+          if (!android) {
+            const unshared = yield* open(Share.share({ message: "Hi" }))
+            device.dismissShare()
+            assert.deepStrictEqual(yield* Fiber.join(unshared), {
+              action: "dismissed"
+            })
+          }
 
           yield* Linking.openURL("https://effect.website")
           yield* Linking.openSettings
@@ -354,8 +379,9 @@ describe("TestDevice", () => {
                 buttons: ["Later", "OK", "OK"]
               },
               { _tag: "Alert", title: "Hi", buttons: ["OK"] },
-              { _tag: "Share", message: "Hi https://effect.website" },
-              { _tag: "Share", message: "Hi" }
+              { _tag: "Alert", title: "Hi", buttons: ["OK"] },
+              { _tag: "Alert", title: "Next", buttons: ["Next"] },
+              { _tag: "Share", message: "Hi https://effect.website" }
             ]
             : [
               {

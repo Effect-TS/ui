@@ -212,13 +212,15 @@ export type Entry =
  */
 export interface TestDevice {
   /**
-   * Presses Android's Back. When nothing takes the press, the app closes,
-   * which `log` records as `Exit`. Throws on iOS, which has no Back.
+   * Presses Android's Back. An open alert takes the press, and closes when
+   * it's `cancelable`. Otherwise, when nothing takes the press, the app
+   * closes, which `log` records as `Exit`. Throws on iOS, which has no Back.
    */
   readonly pressBack: () => void
   /** Sets the system's colour scheme. An app's `Appearance.setColorScheme` overrides it. */
   readonly setColorScheme: (colorScheme: Appearance.ColorScheme) => void
   readonly setAppState: (state: AppState.State) => void
+  /** Warns that memory is low. Throws on Android, which sends no warning. */
   readonly memoryWarning: () => void
   /** Shows the keyboard at the bottom of the screen, `height` points tall. */
   readonly showKeyboard: (height: number) => void
@@ -256,9 +258,12 @@ export interface TestDevice {
     text: string,
     login?: string | undefined
   ) => void
-  /** Shares from the first open share sheet, with the activity iOS reports. */
+  /**
+   * Shares from the first open share sheet, with the activity iOS reports.
+   * Throws on Android, which reports a share once the sheet opens.
+   */
   readonly answerShare: (activityType?: string | undefined) => void
-  /** Closes the first open share sheet without sharing. */
+  /** Closes the first open share sheet without sharing. Throws on Android. */
   readonly dismissShare: () => void
   /** Sets what `PermissionsAndroid` checks and requests answer for `permission`. */
   readonly setPermission: (
@@ -298,6 +303,8 @@ interface Open {
   readonly buttons: ReadonlyArray<string>
   readonly answer: (...args: Array<any>) => void
   readonly dismiss?: (() => void) | undefined
+  // Whether the user can close it without a button.
+  readonly cancelable?: boolean | undefined
 }
 
 type Listener = (payload: any) => void
@@ -418,8 +425,11 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
     close(open.find((o) => o.entry._tag === tag), labels[tag])
   const dismiss = (tag: Dialog, refused: string) => {
     const o = open.find((o) => o.entry._tag === tag)
-    if (o !== undefined && o.dismiss === undefined) throw new Error(refused)
+    if (o !== undefined && !o.cancelable) throw new Error(refused)
     close(o, labels[tag]).dismiss!()
+  }
+  const sheet = () => {
+    if (!ios) throw new Error("Android reports a share once the sheet opens")
   }
   const sameTexts = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) =>
     a.length === b.length && a.every((text, i) => text === b[i])
@@ -555,7 +565,8 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
             buttons: [],
             answer: (activityType?: string) =>
               success(true, activityType ?? null),
-            dismiss: () => success(false, null)
+            dismiss: () => success(false, null),
+            cancelable: true
           })
       },
       AlertManager: {
@@ -639,6 +650,8 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
             [config.buttonPositive, -1]
           ] as const).filter(([text]) => text !== undefined)
           const buttons = keys.map(([text]) => text!)
+          // Showing an alert dismisses the one already shown.
+          for (const o of open.slice()) close(o, "alert").dismiss!()
           show({
             entry: defined({
               _tag: "Alert",
@@ -649,7 +662,8 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
             buttons,
             answer: (index: number) =>
               onAction("buttonClicked", keys[index][1]),
-            dismiss: config.cancelable ? () => onAction("dismissed") : undefined
+            dismiss: () => onAction("dismissed"),
+            cancelable: config.cancelable
           })
         }
       },
@@ -683,20 +697,16 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
         share: (
           content: { title?: string; message?: string },
           dialogTitle?: string
-        ) =>
-          new Promise((resolve) =>
-            show({
-              entry: defined({
-                _tag: "Share",
-                title: content.title,
-                message: content.message,
-                dialogTitle
-              }),
-              buttons: [],
-              answer: () => resolve({ action: "sharedAction" }),
-              dismiss: () => resolve({ action: "dismissedAction" })
-            })
-          )
+        ) => {
+          // Android reports a share as soon as the sheet opens.
+          log(defined({
+            _tag: "Share",
+            title: content.title,
+            message: content.message,
+            dialogTitle
+          }))
+          return Promise.resolve({ action: "sharedAction" })
+        }
       },
       Vibration: {
         vibrate,
@@ -724,9 +734,15 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
 
     pressBack: () => {
       if (ios) throw new Error("iOS has no Back button")
-      // Without a listener, the app's fallback closes it.
-      if (listeners.get("hardwareBackPress")?.size) emit("hardwareBackPress")
-      else log({ _tag: "Exit" })
+      // An open alert takes the press. Without a listener, the app's
+      // fallback closes it.
+      if (open.length > 0) {
+        if (open[0].cancelable) close(open[0], "alert").dismiss!()
+      } else if (listeners.get("hardwareBackPress")?.size) {
+        emit("hardwareBackPress")
+      } else {
+        log({ _tag: "Exit" })
+      }
     },
     setColorScheme: (value) => setScheme(value, override),
     setAppState: (state) => {
@@ -734,7 +750,10 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
       appState = state
       emit("appStateDidChange", { app_state: state }, "AppState")
     },
-    memoryWarning: () => emit("memoryWarning", undefined, "AppState"),
+    memoryWarning: () => {
+      if (!ios) throw new Error("Android sends no memory warning")
+      emit("memoryWarning", undefined, "AppState")
+    },
     showKeyboard: (height) => {
       keyboard = true
       keyboardEvent("Show", height)
@@ -773,8 +792,14 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
           : "The alert isn't cancelable"
       ),
     answerPrompt: (button, text, login) => press("Prompt", button, text, login),
-    answerShare: (activityType) => take("Share").answer(activityType),
-    dismissShare: () => dismiss("Share", "The share sheet can't be dismissed"),
+    answerShare: (activityType) => {
+      sheet()
+      take("Share").answer(activityType)
+    },
+    dismissShare: () => {
+      sheet()
+      dismiss("Share", "The share sheet can't be dismissed")
+    },
     setPermission: (permission, value) => {
       permissions.set(permission, value)
     },
