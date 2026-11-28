@@ -1148,7 +1148,7 @@ export interface Plan {
   readonly lanes: number
   readonly gap: number
   readonly total: number
-  readonly items: ReadonlyArray<number>
+  readonly items: Array<number>
   readonly ranges: ReadonlyArray<readonly [number, number]>
   readonly before: number
   readonly gaps: ReadonlyArray<number>
