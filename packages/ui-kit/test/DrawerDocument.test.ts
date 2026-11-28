@@ -293,6 +293,38 @@ describe("Drawer in a document", { concurrent: false }, () => {
       assert.isFalse(root.model()!.open)
     }))
 
+  it.effect("a lost pointer capture or window blur ends a swipe, and a later release does nothing", () =>
+    Effect.gen(function*() {
+      const root = yield* mount({})
+      sized(popup(), 300, 200)
+      const handle = document.getElementById("handle")!
+      const interruptions = [
+        () => {
+          popup().releasePointerCapture(1)
+          popup().dispatchEvent(
+            new PointerEvent("lostpointercapture", { pointerId: 1 })
+          )
+        },
+        () => window.dispatchEvent(new Event("blur"))
+      ]
+      for (const interrupt of interruptions) {
+        drag(handle, [10, 10], [10, 30], 20)
+        yield* tick
+        assert.strictEqual(popup().getAttribute("data-swiping"), "")
+        interrupt()
+        yield* tick
+        assert.isNull(popup().getAttribute("data-swiping"))
+        assert.strictEqual(movement(), "0px")
+        pointer(document, "pointermove", 10, 150)
+        pointer(document, "pointerup", 10, 150, 0)
+        yield* tick
+        assert.strictEqual(movement(), "0px")
+        assert.isNull(popup().getAttribute("data-swiping"))
+      }
+      assert.notInclude(root.model()!.events, "RequestedClose:swipe")
+      assert.isTrue(root.model()!.open)
+    }))
+
   it.effect("a close during a swipe ends the swipe, and the popup is inert through its exit", () =>
     Effect.gen(function*() {
       yield* holdExits

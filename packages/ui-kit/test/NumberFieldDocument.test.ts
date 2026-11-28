@@ -541,6 +541,35 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.isFalse(app.firstElementChild!.hasAttribute("data-scrubbing"))
     }))
 
+  it.effect("window blur ends a stepper hold and a scrub drag once, and a later release changes nothing", () =>
+    Effect.gen(function*() {
+      const { app, taken } = yield* mount({ locale: "en-US" })
+      const root = app.firstElementChild!
+      pointer(app.querySelector(".increment")!, "pointerdown")
+      yield* tick
+      assert.deepStrictEqual(taken(), ["updated 6 increment-press"])
+      window.dispatchEvent(new Event("blur"))
+      yield* wait(600)
+      pointer(window, "pointerup")
+      yield* tick
+      assert.deepStrictEqual(taken(), ["committed 6 increment-press"])
+
+      pointer(app.querySelector(".scrub")!, "pointerdown", {
+        clientX: 10,
+        clientY: 10
+      })
+      pointer(window, "pointermove", { clientX: 14, clientY: 10 })
+      window.dispatchEvent(new Event("blur"))
+      pointer(window, "pointermove", { clientX: 30, clientY: 10 })
+      pointer(window, "pointerup")
+      yield* tick
+      assert.deepStrictEqual(taken(), [
+        "updated 10 scrub",
+        "committed 10 scrub"
+      ])
+      assert.isFalse(root.hasAttribute("data-scrubbing"))
+    }))
+
   it.effect("refused edits restore displayed text on blur without committing, and stepper release commits props.value", () =>
     Effect.gen(function*() {
       const { app, input, taken } = yield* mount({ locale: "en-US" }, 5, {
