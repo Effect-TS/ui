@@ -66,6 +66,7 @@ import * as Hash from "effect/Hash"
 import * as Layer from "effect/Layer"
 import * as Option from "effect/Option"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
+import * as Reactivity from "effect/reactivity/Reactivity"
 import * as Schema from "effect/Schema"
 import * as SchemaAST from "effect/SchemaAST"
 import * as SchemaIssue from "effect/SchemaIssue"
@@ -377,6 +378,10 @@ export declare namespace Service {
  * - `persist` saves the query's Successes and restores them after a reload,
  *   stale, when the app provides `QueryPersistence.layerKvs`. Without that
  *   Layer it does nothing.
+ * - `reactivityKeys` maps arguments to `Reactivity.KeysInput` so each live
+ *   entry invalidates on matching publications when `Reactivity.Reactivity`
+ *   is in context. Pick either `reactivityKeys` or Command `invalidates` per
+ *   query.
  *
  * `toLayer` takes a fetcher function or an Effect that builds one once per
  * Layer build. Retries go inside the fetcher (`Effect.retry`); the cache never
@@ -482,6 +487,9 @@ export const Service: <Self>() => <
         | undefined
       readonly tags?: ReadonlyArray<Tag> | undefined
       readonly persist?: boolean | undefined
+      readonly reactivityKeys?:
+        | ((args: Service.ArgsSchema<Args>["Type"]) => Reactivity.KeysInput)
+        | undefined
     }
 ) => Service<
   Self,
@@ -501,6 +509,7 @@ export const Service: <Self>() => <
     readonly refetchInterval?: RefetchInterval<any, any, any> | undefined
     readonly tags?: ReadonlyArray<Tag> | undefined
     readonly persist?: boolean | undefined
+    readonly reactivityKeys?: ((args: any) => Reactivity.KeysInput) | undefined
   }
 ): any => {
   const def = makeDef(name, options)
@@ -1063,6 +1072,9 @@ export const InfiniteService: <Self>() => <
         | undefined
       readonly tags?: ReadonlyArray<Tag> | undefined
       readonly persist?: boolean | undefined
+      readonly reactivityKeys?:
+        | ((args: Service.ArgsSchema<Args>["Type"]) => Reactivity.KeysInput)
+        | undefined
     }
 ) => InfiniteService<
   Self,
@@ -1088,6 +1100,7 @@ export const InfiniteService: <Self>() => <
     readonly refetchInterval?: RefetchInterval<any, any, any> | undefined
     readonly tags?: ReadonlyArray<Tag> | undefined
     readonly persist?: boolean | undefined
+    readonly reactivityKeys?: ((args: any) => Reactivity.KeysInput) | undefined
   }
 ): any => {
   const def = makeDef(
@@ -1287,6 +1300,11 @@ export interface StreamService<
  *   is collected, `idleTimeToLive` after it was last watched or asked for.
  * - `invalidate` closes the stream, waits for its cleanup, and a watched
  *   entry opens a new one.
+ * - `reactivityKeys` has the same effect as calling `invalidate(args)` when a
+ *   matching key is published. Use it for changes the stream can't observe
+ *   (such as a session or filter change); to rerun a read on publication
+ *   instead, return `reactivity.stream(keys, read)` without declaring
+ *   `reactivityKeys`.
  * - A typed failure is stored over the last value and closes the stream.
  *   Completion keeps the last value. Either way nothing reopens the stream
  *   until the entry is asked for again.
@@ -1369,6 +1387,9 @@ export const StreamService: <Self>() => <
       readonly error?: Error | undefined
       readonly idleTimeToLive?: Duration.Input | undefined
       readonly tags?: ReadonlyArray<Tag> | undefined
+      readonly reactivityKeys?:
+        | ((args: Service.ArgsSchema<Args>["Type"]) => Reactivity.KeysInput)
+        | undefined
       readonly staleTime?: never
       readonly refetchInterval?: never
       readonly persist?: never
@@ -1388,6 +1409,7 @@ export const StreamService: <Self>() => <
     readonly error?: Schema.Top | undefined
     readonly idleTimeToLive?: Duration.Input | undefined
     readonly tags?: ReadonlyArray<Tag> | undefined
+    readonly reactivityKeys?: ((args: any) => Reactivity.KeysInput) | undefined
   }
 ): any =>
   queryClass(makeDef(
@@ -1893,6 +1915,19 @@ export class HydrationDecodeFailed
 {}
 
 /**
+ * A query declared `reactivityKeys` in a cache built without
+ * `Reactivity.Reactivity`. Reported once per query; nothing registers.
+ *
+ * @stability experimental
+ * @category problems
+ * @since 0.1.0
+ */
+export class ReactivityMissing extends Data.TaggedClass("ReactivityMissing")<{
+  readonly message: string
+  readonly query: string
+}> {}
+
+/**
  * Diagnostic problems reported by the cache without changing its behavior.
  *
  * **Details**
@@ -1919,6 +1954,7 @@ export type Problem =
   | EncodeFailed
   | HydrationMalformed
   | HydrationDecodeFailed
+  | ReactivityMissing
 
 /**
  * Helper types for `Problem`.
@@ -1979,9 +2015,9 @@ export class Cache extends Context.Service<Cache, {
  *
  * `idleTimeToLive` is how long an entry stays once nothing watches it, 5
  * minutes by default; a query can override it. The cache takes `Visibility`,
- * `Connectivity`, `Problems` and the `Clock` from where the Layer is built,
- * and is disposed with the Layer's Scope: fetches in flight are interrupted,
- * and the close waits for their cleanup.
+ * `Connectivity`, `Problems`, `Clock`, and optional `Reactivity.Reactivity`
+ * from where the Layer is built, and is disposed with the Layer's Scope:
+ * fetches in flight are interrupted, and the close waits for their cleanup.
  *
  * **Gotchas**
  *
@@ -2404,6 +2440,7 @@ interface QueryDef {
   readonly tags: ReadonlyArray<string>
   /** Opts into `QueryPersistence`. */
   readonly persist: boolean | undefined
+  readonly reactivityKeys: ((args: any) => Reactivity.KeysInput) | undefined
   /** Throws when the args don't encode, or encode to something JSON can't carry. */
   readonly argsKey: (args: unknown) => string
   /** The args with the optional `undefined` properties of an args struct dropped, as the key sees them. */
@@ -2506,6 +2543,7 @@ const makeDef = (
     readonly refetchInterval?: RefetchInterval<any, any, any> | undefined
     readonly tags?: ReadonlyArray<{ readonly name: string }> | undefined
     readonly persist?: boolean | undefined
+    readonly reactivityKeys?: ((args: any) => Reactivity.KeysInput) | undefined
   },
   list?: ListDef,
   live?: LiveOps
@@ -2588,6 +2626,7 @@ const makeDef = (
     idleMs,
     refetchInterval,
     tags: (options.tags ?? []).map((tag) => tag.name),
+    reactivityKeys: options.reactivityKeys,
     argsKey,
     logKey,
     persist: options.persist,
@@ -3935,6 +3974,7 @@ interface Entry {
   interval: { readonly ms: number | undefined } | undefined
   intervalDue: number | undefined
   intervalCancel: (() => void) | undefined
+  offReactivity: (() => void) | undefined
   /** In issue order. */
   patches: Array<PatchRec>
   /** The first trigger deferred under a live patch. */
@@ -4903,6 +4943,9 @@ const buildCache = (
   const persistence = settleOnce
     ? undefined
     : Context.get(context, queryCore.Persistence)
+  const reactivity = settleOnce
+    ? undefined
+    : Context.getOrUndefined(context, Reactivity.Reactivity)
 
   const queries = new Map<string, QueryDef>()
   const duplicates = new WeakSet<QueryDef>()
@@ -5003,6 +5046,18 @@ const buildCache = (
     const existing = queries.get(def.name)
     if (existing === undefined) {
       queries.set(def.name, def)
+      if (
+        !settleOnce && reactivity === undefined &&
+        def.reactivityKeys !== undefined
+      ) {
+        report(
+          new ReactivityMissing({
+            query: def.name,
+            message: "[Query] " + quote(def.name) +
+              " declares reactivityKeys, but no Reactivity service is in the cache's context."
+          })
+        )
+      }
       decodeRaw(def)
       return def
     }
@@ -5062,6 +5117,7 @@ const buildCache = (
       interval: undefined,
       intervalDue: undefined,
       intervalCancel: undefined,
+      offReactivity: undefined,
       patches: [],
       deferred: undefined,
       shared: undefined,
@@ -5075,6 +5131,17 @@ const buildCache = (
       hasMore: undefined,
       moreWaiters: new Set()
     }
+    // Before the index insert, so keys that throw leave no entry behind.
+    if (
+      !disposed && reactivity !== undefined && def.reactivityKeys !== undefined
+    ) {
+      entry.offReactivity = reactivity.registerUnsafe(
+        def.reactivityKeys(args),
+        () => {
+          if (!disposed) invalidateEntry(entry)
+        }
+      )
+    }
     let byKey = index.get(def.name)
     if (byKey === undefined) index.set(def.name, byKey = new Map())
     byKey.set(argsKey, entry)
@@ -5084,6 +5151,7 @@ const buildCache = (
   const removeEntry = (entry: Entry): void => {
     if (entry.removed) return
     entry.removed = true
+    entry.offReactivity?.()
     dropFetch(entry)
     cancelIdle(entry)
     stopInterval(entry)
@@ -6930,6 +6998,7 @@ const buildCache = (
     for (const build of attached) build.listeners.delete(buildClosed)
     attached.clear()
     for (const entry of allEntries()) {
+      entry.offReactivity?.()
       dropFetch(entry)
       resumeAll(entry.waiters, Exit.interrupt())
       resumeAll(entry.moreWaiters, Exit.interrupt())

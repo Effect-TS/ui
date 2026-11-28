@@ -34,6 +34,10 @@ class GetUser extends Query.Service<GetUser>()(
       >()
       expect(args).type.toBe<{ readonly id: string }>()
       return undefined
+    },
+    reactivityKeys: (args) => {
+      expect(args).type.toBe<{ readonly id: string }>()
+      return ["users:" + args.id]
     }
   }
 ) {
@@ -112,6 +116,14 @@ describe("Query", () => {
       ...args,
       success: Schema.Number,
       staleTime: 0
+    })
+    Query.StreamService<"S">()("S", {
+      args: { id: Schema.String },
+      success: Schema.Number,
+      reactivityKeys: (args) => {
+        expect(args).type.toBe<{ readonly id: string }>()
+        return ["notes:" + args.id]
+      }
     })
   })
 
@@ -204,7 +216,11 @@ class ListUsers extends Query.InfiniteService<ListUsers>()(
     cursor: Schema.Number,
     next: (lastPage) =>
       lastPage.next === null ? Option.none() : Option.some(lastPage.next),
-    staleTime: "1 minute"
+    staleTime: "1 minute",
+    reactivityKeys: (args) => {
+      expect(args).type.toBe<{ readonly team: string }>()
+      return ["team:" + args.team]
+    }
   }
 ) {}
 

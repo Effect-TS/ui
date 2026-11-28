@@ -18,7 +18,7 @@ import {
 } from "effect"
 import type { Duration } from "effect"
 import { KeyValueStore } from "effect/persistence"
-import { AsyncResult } from "effect/reactivity"
+import { AsyncResult, Reactivity } from "effect/reactivity"
 import { TestClock } from "effect/testing"
 
 const User = Schema.Struct({ id: Schema.String, name: Schema.String })
@@ -55,6 +55,9 @@ const makeUsers = (options: {
     User,
     string
   >
+  readonly reactivityKeys?: (
+    args: { readonly id: string }
+  ) => Reactivity.KeysInput
 }) => {
   const db = {
     calls: 0,
@@ -1946,5 +1949,118 @@ describe("Query", () => {
       }).pipe(Effect.provide(yield* persisted(New.layer)))
       assert.deepStrictEqual(yield* memory.keys, [])
     }).pipe(Effect.provide(KeyValueStore.layerMemory))
+  })
+
+  it.effect("reactivityKeys invalidates matching entries before staleTime without affecting other keys", () => {
+    const { GetUser, db, provide } = makeUsers({
+      staleTime: "1 minute",
+      reactivityKeys: ({ id }) => [`users:${id}`]
+    })
+    return Effect.gen(function*() {
+      const watched = yield* watch(GetUser.changes({ id: "1" }))
+      const other = yield* watch(GetUser.changes({ id: "3" }))
+      yield* GetUser.prefetch({ id: "2" })
+      yield* advance(10)
+
+      // Before staleTime expires: invalidating a watched key refetches it; other keys stay untouched.
+      db.name = "Bea"
+      yield* Reactivity.invalidate(["users:1"])
+      yield* advance(10)
+      assert.deepStrictEqual(watched.seen, ["Ann", "Ann waiting", "Bea"])
+      assert.deepStrictEqual(other.seen, ["Ann"])
+
+      // Invalidating an unwatched settled entry marks it stale and refetches on the next get.
+      yield* Reactivity.invalidate(["users:2"])
+      yield* flush
+      assert.isTrue((yield* TestQuery.entry(GetUser, { id: "2" }))?.stale)
+      assert.isFalse((yield* TestQuery.entry(GetUser, { id: "3" }))?.stale)
+      const got = yield* Effect.forkScoped(GetUser.get({ id: "2" }))
+      yield* advance(10)
+      assert.deepStrictEqual(yield* Fiber.join(got), { id: "2", name: "Bea" })
+      assert.deepStrictEqual(yield* triggers, [
+        "watch",
+        "watch",
+        "prefetch",
+        "invalidation",
+        "get"
+      ])
+    }).pipe(provide, Effect.provide(Reactivity.layer))
+  })
+
+  it.effect("reactivityKeys unregisters when an entry is collected or the cache is disposed", () => {
+    let registrations = 0
+    const reactivityLayer = Layer.effect(
+      Reactivity.Reactivity,
+      Effect.map(Reactivity.make, (base) => ({
+        ...base,
+        registerUnsafe: (keys, handler) => {
+          registrations++
+          const unregister = base.registerUnsafe(keys, handler)
+          return () => {
+            registrations--
+            unregister()
+          }
+        }
+      }))
+    )
+    const { GetUser } = makeUsers({
+      staleTime: "Infinity",
+      idleTimeToLive: "1 minute",
+      reactivityKeys: ({ id }) => [`users:${id}`]
+    })
+    return Effect.gen(function*() {
+      const scope = yield* Scope.make()
+      const ctx = yield* Layer.buildWithScope(
+        Layer.merge(GetUser.layer, TestQuery.layer()),
+        scope
+      )
+
+      // Idle collection unregisters the entry.
+      yield* GetUser.prefetch({ id: "1" }).pipe(Effect.provideContext(ctx))
+      yield* advance(10)
+      assert.strictEqual(registrations, 1)
+      yield* advance("1 minute")
+      assert.isUndefined(
+        yield* TestQuery.entry(GetUser, { id: "1" }).pipe(
+          Effect.provideContext(ctx)
+        )
+      )
+      assert.strictEqual(registrations, 0)
+
+      // Cache disposal unregisters remaining entries, and a late watch registers nothing.
+      yield* GetUser.prefetch({ id: "2" }).pipe(Effect.provideContext(ctx))
+      yield* advance(10)
+      assert.strictEqual(registrations, 1)
+      yield* Scope.close(scope, Exit.void)
+      assert.strictEqual(registrations, 0)
+      const late = yield* watch(
+        GetUser.changes({ id: "3" }).pipe(Stream.provideContext(ctx))
+      )
+      assert.strictEqual(registrations, 0)
+      yield* late.stop
+    }).pipe(Effect.provide(reactivityLayer))
+  })
+
+  it.effect("reactivityKeys without Reactivity in context reports ReactivityMissing once and keeps caching", () => {
+    const { GetUser, provide } = makeUsers({
+      staleTime: "1 minute",
+      reactivityKeys: ({ id }) => [`users:${id}`]
+    })
+    return Effect.gen(function*() {
+      const got = yield* Effect.forkScoped(
+        Effect.all([GetUser.get({ id: "1" }), GetUser.get({ id: "2" })], {
+          concurrency: "unbounded"
+        })
+      )
+      yield* advance(10)
+      assert.deepStrictEqual(yield* Fiber.join(got), [
+        { id: "1", name: "Ann" },
+        { id: "2", name: "Ann" }
+      ])
+      const problems = yield* TestQuery.expectProblem("ReactivityMissing")
+      assert.deepStrictEqual(problems.map((problem) => problem.query), [
+        "users/GetUser"
+      ])
+    }).pipe(provide)
   })
 })
