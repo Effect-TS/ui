@@ -48,26 +48,6 @@ vi.mock(
   "react-native/Libraries/TurboModule/TurboModuleRegistry",
   () => ({ get: (name: string) => native.modules[name] ?? null })
 )
-vi.mock(
-  "react-native/Libraries/StyleSheet/processColor",
-  () => ({ default: (color: unknown) => color })
-)
-vi.mock(
-  "react-native/Libraries/Utilities/Platform",
-  () => ({ default: { OS: "android" } })
-)
-vi.mock(
-  "react-native/Libraries/Core/Devtools/getDevServer",
-  () => ({ default: () => ({ fullBundleUrl: null }) })
-)
-vi.mock(
-  "react-native/Libraries/Utilities/DevSettings",
-  () => ({ default: { reload() {}, onFastRefresh() {} } })
-)
-vi.mock(
-  "react-native/Libraries/WebSocket/WebSocket",
-  () => ({ default: function WebSocket() {} })
-)
 
 const global = globalThis as any
 
@@ -260,11 +240,11 @@ describe("NativeApp", { concurrent: false }, () => {
     global.RN$AppRegistry.runApplication("main", { rootTag: 31 })
     await settle()
     native.emitter.emit("probe", "event")
-    assert.deepStrictEqual(seen, ["android", "event"])
+    assert.deepStrictEqual(seen, ["ios", "event"])
     global.RN$stopSurface(31)
     await settle()
     native.emitter.emit("probe", "after")
-    assert.deepStrictEqual(seen, ["android", "event"])
+    assert.deepStrictEqual(seen, ["ios", "event"])
   })
 
   it("runs Android's default Back action unless another listener handles it", () => {

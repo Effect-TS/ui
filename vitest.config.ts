@@ -1,3 +1,4 @@
+import * as NativeVitest from "@effect/ui-native/node/NativeVitest"
 import * as path from "node:path"
 import { defineConfig, mergeConfig, type ViteUserConfig } from "vitest/config"
 
@@ -90,7 +91,9 @@ export default defineConfig({
       ...project("@effect/ui-opentui", "packages/ui-opentui", true, {
         test: { execArgv: ffi }
       }),
-      ...project("@effect/ui-native", "packages/ui-native"),
+      ...project("@effect/ui-native", "packages/ui-native", true, {
+        plugins: [NativeVitest.plugin()]
+      }),
       ...example("auth"),
       ...example("canvas-art"),
       ...example("counter"),

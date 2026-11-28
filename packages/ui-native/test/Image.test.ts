@@ -5,42 +5,21 @@ import * as NativeHost from "@effect/ui-native/NativeHost"
 import * as Renderer from "@effect/ui/Renderer"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
-import { assert, describe, it, vi } from "vitest"
+import { type PackagerAsset, registerAsset } from "react-native/asset-registry"
+import { assert, describe, it } from "vitest"
 import * as FakeFabric from "./utils/FakeFabric.ts"
 
-const env = vi.hoisted(() => {
-  const assets: Array<Record<string, unknown>> = []
-  const state = {
-    scriptURL: null as string | null,
-    dimensions: { window: { scale: 1 } } as Record<string, unknown>
-  }
-  return {
-    state,
-    registerAsset(asset: Record<string, unknown>): number {
-      return assets.push(asset)
-    },
-    getAssetByID(id: number): Record<string, unknown> | undefined {
-      return assets[id - 1]
-    }
-  }
-})
+const state = {
+  scriptURL: null as string | null,
+  dimensions: { window: { scale: 1 } } as Record<string, unknown>
+}
 
-vi.mock("react-native/asset-registry", () => ({
-  registerAsset: env.registerAsset,
-  getAssetByID: env.getAssetByID
-}))
-
-vi.mock("react-native/Libraries/TurboModule/TurboModuleRegistry", () => ({
-  get(name: string) {
-    if (name === "SourceCode") {
-      return { getConstants: () => ({ scriptURL: env.state.scriptURL }) }
-    }
-    if (name === "DeviceInfo") {
-      return { getConstants: () => ({ Dimensions: env.state.dimensions }) }
-    }
-    return null
-  }
-}))
+const module = (name: string) =>
+  name === "SourceCode"
+    ? { getConstants: () => ({ scriptURL: state.scriptURL }) }
+    : name === "DeviceInfo"
+    ? { getConstants: () => ({ Dimensions: state.dimensions }) }
+    : undefined
 
 const Mode = Schema.Literals([
   "asset",
@@ -59,9 +38,9 @@ const Message = UiSchema.TaggedEnum({
 
 describe("Image and ImageBackground", () => {
   it("renders sources, defaults, Android headers, events and deduplicates inline objects", async () => {
-    env.state.scriptURL = "http://localhost:8081/index.bundle?platform=android"
-    env.state.dimensions = { windowPhysicalPixels: { scale: 2 } }
-    const logo = env.registerAsset({
+    state.scriptURL = "http://localhost:8081/index.bundle?platform=android"
+    state.dimensions = { windowPhysicalPixels: { scale: 2 } }
+    const logo = registerAsset({
       httpServerLocation: "/assets/src/assets",
       width: 24,
       height: 24,
@@ -70,7 +49,7 @@ describe("Image and ImageBackground", () => {
       name: "mark",
       type: "png"
     })
-    const unsized = env.registerAsset({
+    const unsized = registerAsset({
       httpServerLocation: "/assets/src/assets",
       scales: [1],
       hash: "u1",
@@ -153,7 +132,7 @@ describe("Image and ImageBackground", () => {
 
     const { fabric, find, printed, root, settle } = await FakeFabric.mount(
       (container) => Renderer.mount(Screen, {}, container),
-      (color) => `color:${String(color)}`
+      { color: (color) => `color:${String(color)}`, module }
     )
 
     const img = () => find(FakeFabric.byName("RCTImageView"))
@@ -241,17 +220,16 @@ describe("Image and ImageBackground", () => {
       os: string,
       scriptURL: string | null,
       dimensions: Record<string, unknown>,
-      asset: Record<string, unknown>
+      asset: PackagerAsset
     ) => {
-      env.state.scriptURL = scriptURL
-      env.state.dimensions = dimensions
-      const id = env.registerAsset(asset)
+      state.scriptURL = scriptURL
+      state.dimensions = dimensions
+      const id = registerAsset(asset)
       const fabric = FakeFabric.make()
       const { host, root } = NativeHost.make({
         ui: fabric.ui,
         rootTag: 1,
-        os,
-        processColor: (c) => c
+        device: FakeFabric.device({ os, module })
       })
       const node = host.createElement("image")
       host.setProp(node, "source", id)
@@ -353,9 +331,9 @@ describe("Image and ImageBackground", () => {
   })
 
   it("renders ImageBackground with the image filling behind children", async () => {
-    env.state.scriptURL = "assets://index.android.bundle"
-    env.state.dimensions = { windowPhysicalPixels: { scale: 2 } }
-    const bg = env.registerAsset({
+    state.scriptURL = "assets://index.android.bundle"
+    state.dimensions = { windowPhysicalPixels: { scale: 2 } }
+    const bg = registerAsset({
       httpServerLocation: "/assets/src",
       width: 200,
       height: 100,
@@ -378,8 +356,9 @@ describe("Image and ImageBackground", () => {
           .children(h.text.children("Over the image"))
     })
 
-    const { find, printed } = await FakeFabric.mount((container) =>
-      Renderer.mount(Card, {}, container)
+    const { find, printed } = await FakeFabric.mount(
+      (container) => Renderer.mount(Card, {}, container),
+      { module }
     )
     assert.strictEqual(
       printed(),

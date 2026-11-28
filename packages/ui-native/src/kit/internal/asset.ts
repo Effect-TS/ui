@@ -1,5 +1,7 @@
 import { getAssetByID, type PackagerAsset } from "react-native/asset-registry"
-import { get as getTurboModule } from "react-native/Libraries/TurboModule/TurboModuleRegistry"
+import type { ViewHost } from "../../Native.ts"
+
+export { getAssetByID }
 
 export interface ResolvedAsset {
   readonly __packager_asset: true
@@ -72,29 +74,19 @@ const localScriptDir = (
   return dir.includes("://") ? dir : `file://${dir}`
 }
 
-const deviceScale = (): number => {
-  const dims = getTurboModule<{
-    readonly getConstants: () => {
-      readonly Dimensions?: {
-        readonly window?: { readonly scale?: number }
-        readonly windowPhysicalPixels?: { readonly scale?: number }
-      }
-    }
-  }>("DeviceInfo")?.getConstants()?.Dimensions
+const deviceScale = (host: ViewHost): number => {
+  const dims = host.module("DeviceInfo")?.getConstants()?.Dimensions
   return (dims?.window ?? dims?.windowPhysicalPixels)?.scale ?? 1
 }
 
-const scriptURL = (): string | null | undefined =>
-  getTurboModule<{
-    readonly getConstants: () => { readonly scriptURL?: string | null }
-  }>("SourceCode")?.getConstants()?.scriptURL
-
 const resolvePackagerAsset = (
   asset: PackagerAsset,
-  os: string
+  host: ViewHost
 ): ResolvedAsset => {
-  const scale = pickScale(asset.scales, deviceScale())
-  const url = scriptURL()
+  const os = host.os
+  const scale = pickScale(asset.scales, deviceScale(host))
+  const url: string | null | undefined = host.module("SourceCode")
+    ?.getConstants()?.scriptURL
   const serverURL = url?.match(/^https?:\/\/.*?\//)?.[0] ?? null
   let uri: string
   if (serverURL !== null && !(asset.type === "xml" && os === "android")) {
@@ -131,10 +123,10 @@ const cache: Array<ResolvedAsset | undefined> = []
 
 export const resolveAsset = (
   id: number,
-  os: string
+  host: ViewHost
 ): ResolvedAsset | undefined => {
   const cached = cache[id]
   if (cached !== undefined) return cached
   const asset = getAssetByID(id)
-  return asset && (cache[id] = resolvePackagerAsset(asset, os))
+  return asset && (cache[id] = resolvePackagerAsset(asset, host))
 }

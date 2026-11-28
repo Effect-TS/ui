@@ -59,9 +59,10 @@
  * @since 0.1.0
  */
 import type * as View from "@effect/ui/View"
-import processColor from "react-native/Libraries/StyleSheet/processColor"
+import { props as setters } from "../internal/kinds.ts"
 import { touch } from "../internal/touch.ts"
 import type * as Native from "../Native.ts"
+import type { NativeNode } from "../NativeHost.ts"
 import { press, type PressOptions } from "./internal/press.ts"
 import { bind, ignore, insets } from "./internal/view.ts"
 
@@ -127,6 +128,13 @@ export interface PressableProps {
  * @since 0.1.0
  */
 export type PressableElement<Msg> = Native.Element<Msg, any, any, any, any>
+
+// The host processes the ripple's colour, so the element holds it as written.
+const setRipple =
+  (name: string) => (n: NativeNode, value: any, host: Native.ViewHost) =>
+    host.set(n, name, value && { ...value, color: host.color(value.color) })
+const background = setRipple("nativeBackgroundAndroid")
+const foreground = setRipple("nativeForegroundAndroid")
 
 /**
  * Makes an element pressable. Call it with the caller's `h`, then chain
@@ -217,19 +225,20 @@ export const Pressable = <
       } satisfies PressOptions
     )
     if (hitSlop !== undefined) out = out.prop("hitSlop", hitSlop)
-    return rippled
-      ? out.prop(
-        ripple.foreground === true
-          ? "nativeForegroundAndroid"
-          : "nativeBackgroundAndroid",
-        {
-          type: "RippleAndroid",
-          color: processColor(ripple.color),
-          borderless: ripple.borderless === true,
-          rippleRadius: ripple.radius,
-          alpha: ripple.alpha ?? null
-        }
-      )
-      : out
+    if (!rippled) return out
+    setters.set("nativeBackgroundAndroid", background)
+    setters.set("nativeForegroundAndroid", foreground)
+    return out.prop(
+      ripple.foreground === true
+        ? "nativeForegroundAndroid"
+        : "nativeBackgroundAndroid",
+      {
+        type: "RippleAndroid",
+        color: ripple.color,
+        borderless: ripple.borderless === true,
+        rippleRadius: ripple.radius,
+        alpha: ripple.alpha ?? null
+      }
+    )
   })
 }

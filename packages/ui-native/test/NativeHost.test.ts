@@ -65,9 +65,11 @@ const setup = async () => {
   const colors: Array<unknown> = []
   const mounted = await FakeFabric.mount(
     (root) => Renderer.mount(Counter, {}, root),
-    (color) => {
-      colors.push(color)
-      return `processed ${String(color)}`
+    {
+      color: (color) => {
+        colors.push(color)
+        return `processed ${String(color)}`
+      }
     }
   )
   return { ...mounted, colors }
@@ -241,8 +243,7 @@ describe("NativeHost", () => {
     const { host, root } = NativeHost.make({
       ui: fabric.ui,
       rootTag: 1,
-      os: "android",
-      processColor: (c) => c
+      device: FakeFabric.device({ os: "android" })
     })
     const outer = host.createElement("text")
     const box = host.createElement("view")
@@ -292,8 +293,7 @@ describe("NativeHost", () => {
       const { host, root } = NativeHost.make({
         ui: fabric.ui,
         rootTag: 1,
-        os,
-        processColor: (c) => c
+        device: FakeFabric.device({ os })
       })
       const nodes = [host.createElement("text"), host.createElement("input")]
       for (const n of nodes) host.insertBefore(root, n, undefined)
@@ -325,8 +325,7 @@ describe("NativeHost", () => {
     const { host, root } = NativeHost.make({
       ui: fabric.ui,
       rootTag: 1,
-      os: "android",
-      processColor: (c) => c
+      device: FakeFabric.device({ os: "android" })
     })
     const view = host.createElement("view")
     const set = (name: string, value: unknown) => {
@@ -381,8 +380,7 @@ describe("NativeHost", () => {
     const { host, root } = NativeHost.make({
       ui: fabric.ui,
       rootTag: 1,
-      os: "ios",
-      processColor: (c) => `processed ${c}`
+      device: FakeFabric.device({ os: "ios", color: (c) => `processed ${c}` })
     })
     const dispatch = (name: string, handler: unknown, payload: unknown) =>
       fired.push([name, handler, payload]) > 0
@@ -453,8 +451,7 @@ describe("NativeHost", () => {
     const { host, root } = NativeHost.make({
       ui: fabric.ui,
       rootTag: 1,
-      os: "android",
-      processColor: (c) => c
+      device: FakeFabric.device({ os: "android" })
     })
     const box = host.createElement("view")
     host.setProp(box, "margin", 4)
@@ -479,8 +476,7 @@ describe("NativeHost", () => {
       const { host, root } = NativeHost.make({
         ui: fabric.ui,
         rootTag,
-        os,
-        processColor: () => color
+        device: FakeFabric.device({ os, color: () => color })
       })
       const scroll = host.createElement("scroll")
       host.setProp(scroll, "horizontal", true)
@@ -508,8 +504,10 @@ describe("NativeHost", () => {
     const { host, root } = NativeHost.make({
       ui: fabric.ui,
       rootTag: 1,
-      os: "ios",
-      processColor: (c) => `color:${String(c)}`
+      device: FakeFabric.device({
+        os: "ios",
+        color: (c) => `color:${String(c)}`
+      })
     })
     const input = host.createElement("input")
     host.insertBefore(root, input, undefined)

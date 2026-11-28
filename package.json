@@ -38,6 +38,7 @@
     "@effect/jsdocs": "workspace:^",
     "@effect/oxc": "workspace:^",
     "@effect/tsgo": "^0.73.4",
+    "@effect/ui-native": "workspace:^",
     "@effect/utils": "workspace:^",
     "@effect/vitest": "^4.1.6",
     "@types/jscodeshift": "^17.3.0",

@@ -99,10 +99,8 @@ export interface Options {
   readonly ui: UIManager
   /** The surface the host renders into, as native passes it to `runApplication`. */
   readonly rootTag: number
-  /** `Platform.OS` of the running app. */
-  readonly os: string
-  /** Turns a CSS colour into the value Fabric parses, as React Native's `processColor`. */
-  readonly processColor: (color: unknown) => unknown
+  /** The device the surface is on, for its `os`, colours and native modules. */
+  readonly device: Native.Device
   /** Called after every `commit`, whether or not it changed anything. */
   readonly onCommit?: (() => void) | undefined
 }
@@ -190,7 +188,8 @@ export const make = (options: Options): {
   readonly root: NativeNode
   readonly operations: Context.Service.Shape<typeof Native.Host>
 } => {
-  const { onCommit, os, processColor, rootTag, ui } = options
+  const { device, onCommit, rootTag, ui } = options
+  const processColor = device.color as (color: unknown) => unknown
   // Each read of a binding method makes a new host function, so read once.
   const createNode = ui.createNode
   const cloneProps = ui.cloneNodeWithNewProps
@@ -263,10 +262,11 @@ export const make = (options: Options): {
     onCommit?.()
   }
   const view: Native.ViewHost = {
-    os,
+    os: device.os,
     ui,
     set: setNative,
     color,
+    module: device.module,
     command,
     fire,
     commit,

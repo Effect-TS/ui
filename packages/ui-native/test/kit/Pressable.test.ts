@@ -3,18 +3,17 @@ import * as Native from "@effect/ui-native/Native"
 import * as Renderer from "@effect/ui/Renderer"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
-import { assert, describe, it, vi } from "vitest"
+import { assert, describe, it } from "vitest"
 import * as FakeFabric from "../utils/FakeFabric.ts"
 
-const sounds = vi.hoisted(() => ({ played: 0 }))
-vi.mock(
-  "react-native/Libraries/StyleSheet/processColor",
-  () => ({ default: (color: unknown) => `processed ${String(color)}` })
-)
-vi.mock(
-  "react-native/Libraries/Components/Sound/NativeSoundManager",
-  () => ({ default: { playTouchSound: () => sounds.played++ } })
-)
+const sounds = { played: 0 }
+const device = {
+  color: (color: unknown) => `processed ${String(color)}`,
+  module: (name: string) =>
+    name === "SoundManager"
+      ? { playTouchSound: () => sounds.played++ }
+      : undefined
+}
 
 const Message = UiSchema.TaggedEnum({ Got: { event: Schema.String } })
 const got = (event: string) => Message.Got({ event })
@@ -63,8 +62,9 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 // A runtime recognizes one touch at a time, so the tests take turns.
 describe("Pressable", { concurrent: false }, () => {
   it("presses in, shows the pressed style for at least 130 ms, and long presses instead of pressing", async () => {
-    const { fabric, find, root, settle } = await FakeFabric.mount((container) =>
-      Renderer.mount(Rows, {}, container)
+    const { fabric, find, root, settle } = await FakeFabric.mount(
+      (container) => Renderer.mount(Rows, {}, container),
+      device
     )
     const text = find(FakeFabric.byText("Row"))
     const row = () => find((n) => n.props.padding === 2)
