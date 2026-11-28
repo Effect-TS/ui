@@ -428,9 +428,26 @@ export const set = (
   if (n === undefined) return
   const e = drivers.get(n.host)?.entries.get(n)
   if (e === undefined) {
-    if (!plain.has(n)) return
-    for (const key in style) {
-      n.host.set(n, key, style[key as keyof Style])
+    const shown = plain.get(n)
+    if (shown === undefined) return
+    for (const key in shown) {
+      const value = style[key as keyof Style]
+      if (value === undefined) continue
+      // As with the driver, a transform's item sets only at the index and
+      // with the name the element animates.
+      n.host.set(
+        n,
+        key,
+        key === "transform"
+          ? (n.props.transform as Transforms).map((item, i) => {
+            for (const k in item) {
+              const v = (value as Transforms)[i]?.[k as TransformKey]
+              if (v !== undefined) return { [k]: v }
+            }
+            return item
+          })
+          : value
+      )
     }
     n.host.commit()
     if (transition !== undefined) n.host.fire(n, "animationEnd", {})

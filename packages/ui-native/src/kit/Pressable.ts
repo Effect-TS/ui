@@ -38,6 +38,13 @@
  * `pointerLeave` events. Enable React Native's W3C pointer events at app
  * launch as described in `Native.ViewEvents`.
  *
+ * **Keyboard and TalkBack**
+ *
+ * The element is `focusable` unless the caller sets it, as in React
+ * Native, so on Android a keyboard or TalkBack can activate it. That sends
+ * `onPress`, with the element's center, and no `onPressIn` or
+ * `onPressOut`.
+ *
  * **Disabled**
  *
  * A disabled `Pressable` has no handlers and `accessibilityState.disabled`,
@@ -62,7 +69,7 @@ import type * as View from "@effect/ui/View"
 import processColor from "react-native/Libraries/StyleSheet/processColor"
 import { touch } from "../internal/touch.ts"
 import type * as Native from "../Native.ts"
-import { press, type PressOptions } from "./internal/press.ts"
+import { click, press, type PressOptions } from "./internal/press.ts"
 import { bind, ignore, insets } from "./internal/view.ts"
 
 /**
@@ -180,6 +187,7 @@ export const Pressable = <
   } = {}
 ): B => {
   touch.press = press
+  touch.click = click
   const element: any = options.element ?? h.view
   const props = options.props ?? {}
   return element.forward((node: any) => {
@@ -219,6 +227,7 @@ export const Pressable = <
       } satisfies PressOptions
     )
     if (hitSlop !== undefined) out = out.prop("hitSlop", hitSlop)
+    if (node.props.focusable === undefined) out = out.prop("focusable", true)
     return rippled
       ? out.prop(
         ripple.foreground === true

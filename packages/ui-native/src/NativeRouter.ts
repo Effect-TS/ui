@@ -98,7 +98,8 @@ export const Stack = <U extends Router.Routes & Schema.Top>(routes: U) =>
 
 /**
  * A navigation `subscription` reports: the route it went to, the index of
- * the history entry it went to, and the `id` a new entry gets.
+ * the history entry it went to, and the `id` a new entry gets, which no
+ * earlier navigation had.
  *
  * @stability experimental
  * @category models
@@ -291,8 +292,12 @@ export const subscription = <U extends Router.Routes, Msg>(
   Router.subscription(
     routes,
     held[held.length - 1]!.route,
-    (route, { index, seq }) => f({ route, index, id: seq })
+    (route, { index }) => f({ route, index, id: issued += 1 })
   )
+
+// Each navigation's id. A `#hash` entry keeps the location's seq, and a
+// screen that was popped may still be sliding out under its id.
+let issued = 0
 
 /**
  * The stack after a navigation.
@@ -318,8 +323,6 @@ export const follow = <U extends Router.Routes>(
   const same = at !== undefined && at.route._tag === route._tag &&
     routes.printPath(at.route) === routes.printPath(route)
   const kept = stack.slice(0, index)
-  // A new entry for a `#hash` is delivered with the current seq, so a new
-  // id is never one the stack holds.
   const id = same
     ? at.id
     : Math.max(navigation.id, ...stack.map((entry) => entry.id + 1))

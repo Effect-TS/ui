@@ -49,21 +49,33 @@ export const fill = {
   bottom: 0
 } as const
 
+// The stacks that have mounted a screen.
+const started = new WeakSet<NativeNode>()
+
 const Track = Mount.makeStream(
   "Screen",
-  { args: { covered: Schema.Boolean, index: Schema.Number } },
+  {
+    args: {
+      covered: Schema.Boolean,
+      index: Schema.Number,
+      depth: Schema.Number
+    }
+  },
   (node: NativeNode, args, changes) =>
     Stream.callback<never, never, ScreenState | Native.Host>(() =>
       Effect.gen(function*() {
         const screen = yield* ScreenState
         const host = yield* Native.Host
         // Focus moves to a screen that comes to the top: one that was
-        // covered, or one pushed over the first.
+        // covered, or one that mounts after the stack's first.
         const show = (covered: boolean) => {
           if (screen.covered && !covered) host.accessibilityEvent(node, "focus")
           screen.covered = covered
         }
-        screen.covered = args.index > 0
+        let stack = node
+        for (let i = 0; i < args.depth; i++) stack = stack.parent ?? stack
+        screen.covered = args.index > 0 || started.has(stack)
+        started.add(stack)
         show(args.covered)
         yield* Effect.forkScoped(
           Stream.runForEach(
@@ -81,6 +93,7 @@ const none: ReadonlyArray<Head.Entry> = []
 /**
  * A screen of a stack. A covered one takes no touches, is hidden from the
  * screen reader and sets no title, and with `fade` it is also transparent.
+ * `depth` is how many views it sits below the stack's root.
  *
  * @internal
  */
@@ -92,6 +105,7 @@ export const Screen = Component.provide(
       index: Schema.Number,
       covered: Schema.Boolean,
       fade: Schema.Boolean,
+      depth: Schema.Number,
       draw: DrawSchema
     }),
     model: Schema.Null,
@@ -103,7 +117,7 @@ export const Screen = Component.provide(
     // Only the top screen's title reaches the head.
     head: ($) => $.props.covered ? hidden : none,
     view: (s) => {
-      const { covered, draw, entry, fade, index } = s.props
+      const { covered, depth, draw, entry, fade, index } = s.props
       return s.view
         .style({
           ...fill,
@@ -116,7 +130,7 @@ export const Screen = Component.provide(
           covered ? "no-hide-descendants" : "auto"
         )
         .prop("accessibilityElementsHidden", covered)
-        .onMount(Track({ covered, index }))
+        .onMount(Track({ covered, index, depth }))
         .children(draw(s as Native.H<never>, entry))
     }
   }),

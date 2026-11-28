@@ -123,6 +123,23 @@ const deactivate = (n: NativeNode, x: number, y: number, now = false) => {
 }
 
 /**
+ * Presses `n` when native activates it without a pointer, as from a
+ * keyboard or TalkBack. Touches never send it, so nothing presses twice.
+ * As React Native's `Pressable`, only the activated element presses.
+ *
+ * @internal
+ */
+export const click = (n: NativeNode) => {
+  const events = n.events
+  if (events?.handlers.pressIn === undefined) return
+  const rect = rectOf(n)
+  const x = rect == null ? 0 : rect[0]! + rect[2]! / 2
+  const y = rect == null ? 0 : rect[1]! + rect[3]! / 2
+  ;(events.options.pressIn as PressOptions | undefined)?.link?.(n, true)
+  fire(n, "press", { x, y })
+}
+
+/**
  * Recognizes presses with `pressIn`, `pressOut` and `longPress`.
  *
  * @internal

@@ -39,20 +39,26 @@ const AppRoute = Route.union({
   Person: Route.make("/people/:id", { params: { id: Schema.Number } })
 })
 
-const PersonMessage = UiSchema.TaggedEnum({ Dirtied: {} })
+const PersonMessage = UiSchema.TaggedEnum({ Dirtied: {}, Tapped: {} })
 
 const Person = Native.component({
   name: "Person",
   props: Schema.Struct({ id: Schema.Number }),
-  model: Schema.Struct({ dirty: Schema.Boolean }),
+  model: Schema.Struct({ dirty: Schema.Boolean, taps: Schema.Number }),
   message: PersonMessage
 }).make({
-  init: () => ({ dirty: false }),
-  update: { Dirtied: ($) => $.evolve({ dirty: (dirty) => !dirty }) },
+  init: () => ({ dirty: false, taps: 0 }),
+  update: {
+    Dirtied: ($) => $.evolve({ dirty: (dirty) => !dirty }),
+    Tapped: ($) => $.evolve({ taps: (taps) => taps + 1 })
+  },
   subscriptions: ({ model }) => [model.dirty && Router.blocked("form")],
-  view: (h) =>
+  view: (h, model) =>
     h.view.children(
       h.text(`person ${h.props.id}`),
+      Pressable(h, { onPress: PersonMessage.Tapped() }).children(
+        h.text(`taps ${model.taps}`)
+      ),
       Pressable(h, { onPress: PersonMessage.Dirtied() }).children(
         h.text("dirty")
       )
@@ -211,6 +217,30 @@ describe("StackSlide", { concurrent: false }, () => {
     assert.strictEqual(app.router.location().index, 0)
     await app.finish()
     assert.deepStrictEqual(app.screens(), [[0, 1]])
+    await app.close()
+  })
+
+  it("gives an entry pushed while a popped one slides out a screen of its own", async () => {
+    const app = await start()
+    await app.run(app.router.navigate("/people/1"))
+    await app.run(app.router.navigate("/people/1#a"))
+    await app.finish()
+    const top = () => {
+      const screens = app.stack().children
+      return [screens[screens.length - 1]!]
+    }
+    FakeFabric.touch(
+      app.fabric,
+      FakeFabric.find(top(), FakeFabric.byText("taps 0"))!
+    )
+    await idle()
+    assert.isDefined(FakeFabric.find(top(), FakeFabric.byText("taps 1")))
+
+    await app.run(app.router.back)
+    await app.run(app.router.navigate("/people/1#b"))
+    await app.finish()
+    assert.strictEqual(app.stack().children.length, 3)
+    assert.isDefined(FakeFabric.find(top(), FakeFabric.byText("taps 0")))
     await app.close()
   })
 

@@ -118,7 +118,14 @@ export const Stack = <Msg, A, R = never, T = never>(
     entries.map((entry, index) =>
       Screen(h, {
         key: String(entry.id),
-        props: { entry, index, covered: index < top, fade: true, draw: screen }
+        props: {
+          entry,
+          index,
+          covered: index < top,
+          fade: true,
+          depth: 1,
+          draw: screen
+        }
       })
     )
   ) as any

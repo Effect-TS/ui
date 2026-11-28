@@ -199,6 +199,7 @@ const Slide = Native.component({
               index,
               covered: gone || index !== top,
               fade: false,
+              depth: 2,
               draw
             }
           })

@@ -321,6 +321,39 @@ describe("NativeRouter", { concurrent: false }, () => {
     await app.close()
   })
 
+  it("presses and follows links activated without a pointer", async () => {
+    const app = await start()
+    const link = app.find((n) => n.props.accessibilityRole === "link")
+    // Android sends a click only to a focusable view.
+    assert.strictEqual(link.props.focusable, true)
+    // A touch's click has a pointer, and the touch has already pressed.
+    app.fabric.emit(link, "topClick", { pointerId: 1, pointerType: "touch" })
+    await app.settle()
+    assert.strictEqual(app.router.location().index, 0)
+    // TalkBack activates the Pressable, around the text.
+    const counter = app.find((n) =>
+      n.children.some((c) => c.children.some(FakeFabric.byText("count 0")))
+    )
+    app.fabric.emit(counter, "topClick", {})
+    await app.settle()
+    assert.isTrue(app.shown("count 1"))
+    app.fabric.emit(link, "topClick", {})
+    await app.settle()
+    assert.strictEqual(app.router.location().index, 1)
+    assert.isTrue(app.shown("person 1 backs 0"))
+    await app.close()
+  })
+
+  it("moves the screen reader's focus to a screen that replaces the first", async () => {
+    const app = await start()
+    await app.run(app.router.replace(AppRoute.Person({ params: { id: 1 } })))
+    const [person] = app.screens()
+    assert.isTrue(app.shown("person 1 backs 0"))
+    assert.deepStrictEqual(app.focused(), [person!.tag])
+    assert.deepStrictEqual(app.announced(), [])
+    await app.close()
+  })
+
   it("does nothing on Back while a block is held", async () => {
     const app = await start()
     await app.press("Ada")
@@ -462,7 +495,7 @@ describe("NativeRouter.follow", () => {
       route: person(2)
     })
     assert.deepStrictEqual(ids(stack), [0, 2])
-    // A new entry for a #hash comes with the current seq.
+    // A new entry's id is never one the stack holds.
     stack = NativeRouter.follow(AppRoute, stack, {
       index: 2,
       id: 2,

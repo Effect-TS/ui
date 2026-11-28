@@ -49,12 +49,17 @@ let pressed: NativeNode | undefined
 /**
  * The recognizers in use. `press` sends `press` to the nearest element
  * that handles it, when the touch ends within 20 points of it. The kit's
- * `Pressable` replaces it, and its `Pan` sets `pan`, which gets the touch
- * in place of `press`.
+ * `Pressable` replaces it and sets `click`, which gets a `click` that has
+ * no pointer, and its `Pan` sets `pan`, which gets the touch in place of
+ * `press`.
  *
  * @internal
  */
-export const touch: { press: Recognizer; pan?: Recognizer | undefined } = {
+export const touch: {
+  press: Recognizer
+  pan?: Recognizer | undefined
+  click?: ((n: NativeNode) => void) | undefined
+} = {
   press(phase, n, payload) {
     if (phase === 0) pressed = nearest(n, "press")
     else if (phase !== 1) {
@@ -190,7 +195,9 @@ const cancel = () => {
 export const route = (n: NativeNode, type: string, payload: any): void => {
   cancel()
   if (!type.startsWith("topTouch")) {
-    if (type === "topMomentumScrollBegin") coasting.set(n, Infinity)
+    if (type === "topClick") {
+      if (payload?.pointerId === undefined) touch.click?.(n)
+    } else if (type === "topMomentumScrollBegin") coasting.set(n, Infinity)
     else if (type === "topMomentumScrollEnd") coasting.set(n, Date.now())
     else if (type === "topScrollBeginDrag" && !taken && under(target, n)) {
       taken = recognize(4, n, payload) !== false
