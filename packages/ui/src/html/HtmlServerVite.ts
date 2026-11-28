@@ -33,6 +33,10 @@
  * first and passes remaining requests to `handler`. `serverOutDir` must
  * not overlap the client `outDir`.
  *
+ * For server rendering, the plugin adds `@effect/ui` and installed packages
+ * that depend on it to `ssr.noExternal` so component libraries share the
+ * app's copy; list a package in `ssr.external` to opt it out.
+ *
  * When another renderer builds the page shell, reduce `index.html` to its
  * asset tags and a `<!--app-html-->` marker directly in `<body>`, so the
  * shell renders the container the client hydrates. `document` inserts
@@ -142,9 +146,9 @@ export interface Plugin {
   readonly name: string
   readonly sharedDuringBuild: true
   config(
-    config: unknown,
+    config: { readonly root?: string | undefined },
     env: { readonly isPreview?: boolean | undefined }
-  ): object
+  ): Promise<object>
   resolveId(source: string): string | undefined
   load(this: LoadContext, id: string): Promise<string | undefined>
   configureServer(server: DevServer): () => void
@@ -232,6 +236,7 @@ const originalUrl = (request: IncomingMessage): string =>
 
 const documentId = "virtual:@effect/ui/document"
 const serverId = "virtual:@effect/ui/server"
+const effectUi = /^@effect\/ui/
 
 const declaration = [
   "import type { Context } from \"effect/Context\"",
@@ -271,12 +276,14 @@ export const plugin = (options: Options): Plugin => {
     name: "effect-ui-html-server",
     // Shared, so the server build sees the `templateFile` that `buildApp` sets.
     sharedDuringBuild: true,
-    config: (_, { isPreview }) => ({
+    config: async ({ root }, { isPreview }) => ({
       // In dev, page requests that Vite doesn't answer reach the server
       // entry. A preview serves `/about` from `about.html`.
       appType: isPreview ? "mpa" : "custom",
       builder: {},
-      ssr: { noExternal: [/^@effect\/ui/] },
+      ssr: {
+        noExternal: [effectUi, ...await uiPackages(path.resolve(root ?? ""))]
+      },
       environments: {
         ssr: {
           build: {
@@ -649,4 +656,61 @@ const send = async (response: Http.ServerResponse, answer: Response) => {
   } else {
     await pipeline(Readable.fromWeb(answer.body as WebStream), response)
   }
+}
+
+type PackageJson = Partial<
+  Record<"dependencies" | "devDependencies" | "peerDependencies", object>
+>
+
+const findPackage = async (
+  from: string,
+  sub = ""
+): Promise<
+  { readonly dir: string; readonly json: PackageJson } | undefined
+> => {
+  let current = from
+  while (true) {
+    const dir = path.join(current, sub)
+    const json: PackageJson | null | undefined = await fs
+      .readFile(path.join(dir, "package.json"), "utf8")
+      .then((text) => JSON.parse(text.replace(/^\uFEFF/, "")))
+      .catch(() => undefined)
+    if (json) return { dir, json }
+    const parent = path.dirname(current)
+    if (parent === current) return undefined
+    current = parent
+  }
+}
+
+const uiPackages = async (root: string): Promise<Array<string>> => {
+  const names = new Set<string>()
+  const crawled = new Set<string>()
+  const crawl = (
+    from: string,
+    dependencies: ReadonlyArray<string>
+  ): Promise<unknown> =>
+    Promise.all(dependencies.map(async (name) => {
+      const found = await findPackage(from, path.join("node_modules", name))
+      if (found === undefined) return
+      const own = Object.keys({
+        ...found.json.dependencies,
+        ...found.json.peerDependencies
+      })
+      if (!own.some((dependency) => effectUi.test(dependency))) return
+      names.add(name)
+      // The real path, so a symlinked package finds its own dependencies.
+      const dir = await fs.realpath(found.dir)
+      if (crawled.has(dir)) return
+      crawled.add(dir)
+      await crawl(dir, own)
+    }))
+  const app = await findPackage(root)
+  if (app !== undefined) {
+    await crawl(
+      app.dir,
+      Object.keys({ ...app.json.dependencies, ...app.json.devDependencies })
+    )
+  }
+  // Sorted, since the crawl's order varies and Vite hashes this list.
+  return [...names].filter((name) => !effectUi.test(name)).sort()
 }

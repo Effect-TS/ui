@@ -429,4 +429,49 @@ describe("HtmlServerVite.plugin", () => {
     },
     60_000
   )
+
+  it(
+    "adds installed libraries that depend on @effect/ui to ssr.noExternal",
+    async () => {
+      const root = await fs.mkdtemp(path.join(os.tmpdir(), "html-server-vite-"))
+      try {
+        const writeJson = async (file: string, data: unknown, prefix = "") => {
+          const target = path.join(root, file)
+          await fs.mkdir(path.dirname(target), { recursive: true })
+          await fs.writeFile(target, prefix + JSON.stringify(data))
+        }
+        await writeJson("package.json", {
+          name: "app",
+          dependencies: {
+            "acme-kit": "1.0.0",
+            "unrelated-lib": "1.0.0"
+          }
+        })
+        await writeJson(
+          "node_modules/acme-kit/package.json",
+          {
+            name: "acme-kit",
+            peerDependencies: { "@effect/ui": "^0.1.0" }
+          },
+          "\uFEFF"
+        )
+        await writeJson("node_modules/unrelated-lib/package.json", {
+          name: "unrelated-lib",
+          dependencies: { effect: "^4.0.0" }
+        })
+
+        const resolved = (await plugin({
+          entry: "/src/entry.server.ts"
+        }).config({ root }, {})) as {
+          readonly ssr?: {
+            readonly noExternal?: ReadonlyArray<string | RegExp>
+          }
+        }
+        expect(resolved.ssr?.noExternal).toContain("acme-kit")
+        expect(resolved.ssr?.noExternal).not.toContain("unrelated-lib")
+      } finally {
+        await fs.rm(root, { recursive: true, force: true })
+      }
+    }
+  )
 })
