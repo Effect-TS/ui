@@ -850,16 +850,22 @@ const TrackStepper = Mount.makeStream(
             queue,
             NumberFieldMessage.HeldStepper({ direction, ...modifiers })
           )
-        const finish = (event: PointerEvent) => {
-          if (event.pointerId !== pointerId) return
+        const end = () => {
+          const holding = release !== undefined
           release?.abort()
           release = undefined
           pressed = false
+          touching = false
           stop()
-          Queue.offerUnsafe(
-            queue,
-            NumberFieldMessage.ReleasedStepper({ direction })
-          )
+          if (holding) {
+            Queue.offerUnsafe(
+              queue,
+              NumberFieldMessage.ReleasedStepper({ direction })
+            )
+          }
+        }
+        const finish = (event: PointerEvent) => {
+          if (event.pointerId === pointerId) end()
         }
         const start = (first: boolean, focus: boolean) => {
           stop()
@@ -917,16 +923,6 @@ const TrackStepper = Mount.makeStream(
           if (touchLike(event.pointerType)) {
             pressed = false
           }
-        }
-        const onPointerCancel = (event: PointerEvent) => {
-          if (event.pointerId !== pointerId) {
-            return
-          }
-          if (release !== undefined) {
-            return finish(event)
-          }
-          pressed = false
-          stop()
         }
         const onPointerMove = (event: PointerEvent) => {
           if (disabled || !touchLike(event.pointerType) || !pressed) {
@@ -989,7 +985,12 @@ const TrackStepper = Mount.makeStream(
               passive: true,
               signal
             })
-            view.addEventListener("pointercancel", onPointerCancel, { signal })
+            view.addEventListener("pointercancel", finish, { signal })
+            view.addEventListener("blur", end, { signal })
+            node.addEventListener("lostpointercapture", finish, {
+              capture: true,
+              signal
+            })
             node.addEventListener("pointerdown", onPointerDown, { signal })
             node.addEventListener("pointerup", onPointerUp, { signal })
             node.addEventListener("pointermove", onPointerMove, { signal })
@@ -1141,10 +1142,13 @@ const TrackScrub = Mount.makeStream(
         if (gecko) exit = setTimeout(release, 20)
         else release()
       }
-      const onCancel = (event: PointerEvent) => {
-        if (!scrubbing || event.pointerId !== pointerId) return
+      const interrupt = () => {
+        if (!scrubbing) return
         stop(true)
         unlock()
+      }
+      const onCancel = (event: PointerEvent) => {
+        if (event.pointerId === pointerId) interrupt()
       }
       const onMove = (event: PointerEvent) => {
         if (!scrubbing || event.pointerId !== pointerId) return
@@ -1204,6 +1208,9 @@ const TrackScrub = Mount.makeStream(
         view.addEventListener("pointerup", onUp, options)
         view.addEventListener("pointercancel", onCancel, options)
         view.addEventListener("pointermove", onMove, options)
+        node.addEventListener("lostpointercapture", onCancel, options)
+        // Bubble phase hears only window blur, not element focus changes.
+        view.addEventListener("blur", interrupt, { signal: dragging.signal })
         Queue.offerUnsafe(
           queue,
           NumberFieldMessage.StartedScrub({ focus: mouse })

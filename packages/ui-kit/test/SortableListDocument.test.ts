@@ -213,7 +213,7 @@ describe("SortableList in a document", { concurrent: false }, () => {
       )
     }).pipe(Effect.scoped))
 
-  it.effect("pick-then-place survives an iOS tap's focusout before click, and pointer drag is scoped per list", () =>
+  it.effect("pick-then-place survives an iOS tap's focusout before click, cancels after an interrupted press, and pointer drag is scoped per list", () =>
     Effect.gen(function*() {
       const Message = UiSchema.TaggedEnum({
         ReorderedFirst: { from: Schema.Number, to: Schema.Number },
@@ -313,6 +313,36 @@ describe("SortableList in a document", { concurrent: false }, () => {
       )
       yield* tick
       assert.deepStrictEqual(root.model()?.first, ["b", "c", "a"])
+
+      for (
+        const interrupt of [
+          () =>
+            document.dispatchEvent(
+              new PointerEvent("pointercancel", {
+                bubbles: true,
+                pointerType: "touch"
+              })
+            ),
+          () => window.dispatchEvent(new Event("blur"))
+        ]
+      ) {
+        handleA.focus()
+        keyboardClick(handleA)
+        yield* tick
+        assert.strictEqual(handleA.getAttribute("aria-pressed"), "true")
+        press(handleA, "touch")
+        handleA.dispatchEvent(
+          new MouseEvent("mousedown", { bubbles: true, cancelable: true })
+        )
+        yield* tick
+        interrupt()
+        yield* tick
+        handleA.dispatchEvent(
+          new FocusEvent("focusout", { bubbles: true, relatedTarget: null })
+        )
+        yield* tick
+        assert.strictEqual(handleA.getAttribute("aria-pressed"), "false")
+      }
 
       // Real pointer drag: list 2 rejects list 1's row; list 1 accepts and reorders.
       const itemC = byId("first-c")
