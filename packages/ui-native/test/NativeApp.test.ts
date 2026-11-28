@@ -4,6 +4,7 @@ import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
+import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
 import { afterAll, assert, describe, it, vi } from "vitest"
 import * as FakeFabric from "./utils/FakeFabric.ts"
@@ -272,5 +273,27 @@ describe("NativeApp", { concurrent: false }, () => {
     native.emitter.addListener("hardwareBackPress", () => {})
     native.emitter.emit("hardwareBackPress")
     assert.strictEqual(native.backPresses, 1)
+  })
+
+  it("falls back to Promise when NativeMicrotasksCxx is absent", async () => {
+    const { queueMicrotask } = global
+    const microtasks = native.modules.NativeMicrotasksCxx
+    vi.resetModules()
+    const Fresh = await import("@effect/ui-native/NativeApp")
+    try {
+      delete native.modules.NativeMicrotasksCxx
+      delete global.queueMicrotask
+      Fresh.register(Layer.empty)
+      let ran = false
+      global.queueMicrotask(() => {
+        ran = true
+      })
+      assert.isFalse(ran)
+      await Promise.resolve()
+      assert.isTrue(ran)
+    } finally {
+      global.queueMicrotask = queueMicrotask
+      native.modules.NativeMicrotasksCxx = microtasks
+    }
   })
 })

@@ -255,7 +255,11 @@ const install = () => {
   // Native's requestAnimationFrame reads the frame time from here.
   global.performance ??= { now: global.nativePerformanceNow ?? Date.now }
   // React Native's setUpTimers installs this from the same module.
-  global.queueMicrotask ??= device.module("NativeMicrotasksCxx").queueMicrotask
+  global.queueMicrotask ??=
+    device.module("NativeMicrotasksCxx")?.queueMicrotask ??
+      ((callback: () => void) => {
+        void Promise.resolve().then(callback)
+      })
   const register = (name: string, module: object) =>
     global.RN$registerCallableModule(name, () => module)
   // Native sends device events, such as the keyboard's and the network's,
