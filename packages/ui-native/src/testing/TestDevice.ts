@@ -7,9 +7,9 @@
  *
  * `layer("android")` or `layer("ios")` provides one value as both
  * `Native.Device`, which the kit's device APIs read, and `TestDevice`, the
- * controls. It acts as that platform does where the kit tells them apart:
- * its native modules, their events and payloads, and iOS's modules that send
- * events only while the kit listens.
+ * controls. It acts as that platform wherever the kit tells them apart:
+ * native modules, event payloads, and iOS modules that emit only while
+ * observed.
  *
  * A control sends its event at once. Run `TestHost.settle`, or a Play step,
  * to see the app's update. An alert, prompt or iOS share sheet the app
@@ -213,9 +213,9 @@ export type Entry =
  */
 export interface TestDevice {
   /**
-   * Presses Android's Back. An open alert takes the press, and closes when
-   * it's `cancelable`. Otherwise, when nothing takes the press, the app
-   * closes, which `log` records as `Exit`. Throws on iOS, which has no Back.
+   * Presses Android's Back. An open alert takes the press and closes if
+   * `cancelable`. With no alert or Back handler, the app exits, which `log`
+   * records as `Exit`. Throws on iOS.
    */
   readonly pressBack: () => void
   /** Sets the system's colour scheme. An app's `Appearance.setColorScheme` overrides it. */
@@ -236,18 +236,16 @@ export interface TestDevice {
   /** Sets which URLs `Linking.openURL` and `Linking.canOpenURL` can open. */
   readonly setOpenable: (canOpen: (url: string) => boolean) => void
   /**
-   * Presses a button on an open alert: the one with `button`'s text on the
-   * first, or a `Choice`'s on the first shown with its `buttons`. Throws
-   * when there's no such alert or button, or when the text is on several
-   * buttons.
+   * Presses a button on an open alert: by text on the first one, or by a
+   * `Choice` on the first shown with its `buttons`. Throws when there's no
+   * such alert or button, or when several buttons have the text.
    */
   readonly answerAlert: <const Buttons extends ReadonlyArray<Alert.Button>>(
     button: string | Choice<Buttons>
   ) => void
   /**
-   * Closes the first open alert without a button. Throws when no alert is
-   * open, when it isn't `cancelable`, and on iOS, where only a button
-   * closes one.
+   * Closes the first open alert without a button. Throws when none is open,
+   * when it isn't `cancelable`, and on iOS, where only a button closes one.
    */
   readonly dismissAlert: () => void
   /**
@@ -260,7 +258,7 @@ export interface TestDevice {
     login?: string | undefined
   ) => void
   /**
-   * Shares from the first open share sheet, with the activity iOS reports.
+   * Shares from the first open iOS share sheet, reporting `activityType`.
    * Throws on Android, which reports a share once the sheet opens.
    */
   readonly answerShare: (activityType?: string | undefined) => void
@@ -346,8 +344,7 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
     entries.push(entry)
   }
 
-  // An iOS module that's an event emitter sends its events only while it
-  // counts listeners.
+  // iOS event emitter modules emit only while they have listeners.
   const emit = (event: string, payload?: unknown, emitter?: string) => {
     if (ios && emitter !== undefined && !counts.get(emitter)) return
     for (const listener of Array.from(listeners.get(event) ?? [])) {
@@ -392,7 +389,7 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
         screenPhysicalPixels: size(screen)
       }
 
-  // iOS also sends the "will" events, as the keyboard starts to move.
+  // iOS also sends the "will" events.
   const keyboardEvent = (name: "Show" | "Hide", height: number) => {
     const payload = {
       endCoordinates: {
@@ -454,7 +451,7 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
       }
       return [close(o, what), index] as const
     }
-    // The kit's buttons in the order native got them, as `Alert` sends them.
+    // The buttons in the order native got them.
     const buttons = buttonsOf(button.buttons)
     const shown = ios
       ? buttons
@@ -735,8 +732,6 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
 
     pressBack: () => {
       if (ios) throw new Error("iOS has no Back button")
-      // An open alert takes the press. Without a listener, the app's
-      // fallback closes it.
       if (open.length > 0) {
         if (open[0].cancelable) close(open[0], "alert").dismiss!()
       } else if (listeners.get("hardwareBackPress")?.size) {

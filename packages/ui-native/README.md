@@ -100,7 +100,7 @@ Effect.gen(function*() {
 }).pipe(Effect.scoped, Effect.runSync)
 ```
 
-A Play runs the kit's Effects, so it needs a device. `TestDevice.layer("android")` or `TestDevice.layer("ios")` provides one that acts as that platform, and its controls speak the kit's terms: `pressBack`, `setColorScheme`, `setAppState`, `showKeyboard`, `resize`, `receiveURL`, `answerAlert`, `answerShare`, `setPermission`, `setAccessibility` and more. A control sends its event at once, so settle before reading the result.
+A Play runs the kit's Effects, so it needs a device. `TestDevice.layer("android")` or `TestDevice.layer("ios")` provides one that acts as that platform, with controls in the kit's terms: `pressBack`, `setColorScheme`, `setAppState`, `showKeyboard`, `resize`, `receiveURL`, `answerAlert`, `answerShare`, `setPermission`, `setAccessibility` and more. A control sends its event at once, so settle before reading the result.
 
 ```ts
 import { TestDevice } from "@effect/ui-native/testing"
@@ -122,7 +122,7 @@ Effect.gen(function*() {
 )
 ```
 
-An alert, prompt or iOS share sheet stays open until the test answers it, as a real one does. Android reports a share as soon as the sheet opens. Pick an alert's button by its text, or, when two buttons share a text, by `id` with the `buttons` the app showed: `device.answerAlert({ buttons, id: "discard" })`. `device.log()` lists what the app asked the device to do, such as the URLs it opened, the alerts it showed and its status bar style. An app never imports `@effect/ui-native/testing`, so it adds nothing to the bundle.
+An alert, prompt or iOS share sheet stays open until the test answers it; Android reports a share as soon as the sheet opens. Pick a button by its text or, when two share a text, by `id` with the `buttons` the app showed: `device.answerAlert({ buttons, id: "discard" })`. `device.log()` lists what the app asked the device to do, such as the URLs it opened, the alerts it showed and its status bar style. Apps never import `@effect/ui-native/testing`, so it adds nothing to the bundle.
 
 ## Touches
 

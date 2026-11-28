@@ -202,8 +202,7 @@ describe("TestDevice", () => {
             Alert.alert({ title: "Hi", cancelable: true })
           )
           if (android) {
-            // Back goes to the alert, not the app, and a new alert
-            // dismisses the one shown.
+            // Back goes to the alert, and a new alert dismisses the open one.
             device.pressBack()
             assert.isUndefined(yield* Fiber.join(dismissed))
             const stuck = yield* open(Alert.alert({ title: "Hi" }))

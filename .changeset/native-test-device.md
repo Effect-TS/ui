@@ -2,4 +2,4 @@
 "@effect/ui-native": minor
 ---
 
-Add `@effect/ui-native/testing` with `TestDevice`, a fake `Native.Device` for Play tests on Android or iOS, driven in the kit's terms such as `pressBack` and `answerAlert`.
+Add `TestDevice` in `@effect/ui-native/testing`: a fake Android or iOS `Native.Device` for Play tests, driven by kit-level controls such as `pressBack` and `answerAlert`.
