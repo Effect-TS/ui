@@ -28,14 +28,17 @@ import * as Renderer from "@effect/ui/Renderer"
 import type * as View from "@effect/ui/View"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
+import * as Equal from "effect/Equal"
 import * as Fiber from "effect/Fiber"
 import * as Layer from "effect/Layer"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Scope from "effect/Scope"
 import RCTDeviceEventEmitter from "react-native/Libraries/EventEmitter/RCTDeviceEventEmitter"
-import NativeDeviceEventManager from "react-native/Libraries/NativeModules/specs/NativeDeviceEventManager"
 import processColor from "react-native/Libraries/StyleSheet/processColor"
+import * as TurboModuleRegistry from "react-native/Libraries/TurboModule/TurboModuleRegistry"
 import Platform from "react-native/Libraries/Utilities/Platform"
+import { type Cell, cell } from "./internal/cell.ts"
+import { blurFocused } from "./internal/focus.ts"
 import * as Native from "./Native.ts"
 import * as NativeHost from "./NativeHost.ts"
 
@@ -44,6 +47,14 @@ declare const global: any
 /**
  * The surface an app was started on, as native passes it.
  *
+ * **Details**
+ *
+ * `props` are the surface's initial props, such as the ones an Android
+ * activity passes in `getLaunchOptions`. Native can replace them while the
+ * surface runs, and `props` always reads the latest. `onProps` calls
+ * `listener` with each replacement that differs from the props before it,
+ * until the returned function is called.
+ *
  * @stability experimental
  * @category services
  * @since 0.1.0
@@ -51,7 +62,10 @@ declare const global: any
 export class Surface extends Context.Service<Surface, {
   readonly appKey: string
   readonly rootTag: number
-  readonly initialProps: Readonly<Record<string, unknown>>
+  readonly props: Readonly<Record<string, unknown>>
+  readonly onProps: (
+    listener: (props: Readonly<Record<string, unknown>>) => void
+  ) => () => void
 }>()("@effect/ui-native/NativeApp/Surface") {}
 
 /**
@@ -96,6 +110,13 @@ export interface MountOptions<
 /**
  * Mounts `component` on the current surface for the life of the Scope.
  *
+ * **Details**
+ *
+ * When `props` is an Effect, it runs before the first render, and again
+ * whenever native replaces the surface's props, so it can read them from
+ * `Surface`. Each run's props go to the root, which skips props equal to its
+ * current ones. A run still going when the next starts is interrupted.
+ *
  * @stability experimental
  * @category constructors
  * @since 0.1.0
@@ -117,7 +138,7 @@ export const mountEffect = <
   props: Props | Effect.Effect<Props, never, RP>,
   options?: MountOptions<V, RF, Events> | undefined
 ): Effect.Effect<
-  Renderer.Root<Model, Msg>,
+  Renderer.Root<Model, Msg, Props>,
   never,
   Exclude<R | RF | RP, Native.Host> | Surface | Scope.Scope
 > =>
@@ -129,12 +150,63 @@ export const mountEffect = <
       processColor,
       onCommit: options?.onCommit
     })
-    return Effect.provideContext(
-      Renderer.mount(component as any, props as any, made.root, options),
-      Context.make(Renderer.Renderer, { host: made.host }).pipe(
-        Context.add(Native.Host, made.operations)
-      )
+    const services = Context.make(Renderer.Renderer, { host: made.host }).pipe(
+      Context.add(Native.Host, made.operations)
     )
+    const mount = (props: unknown) =>
+      Effect.provideContext(
+        Renderer.mount(component as any, props as any, made.root, options),
+        services
+      ) as Effect.Effect<Renderer.Root<Model, Msg, Props>, never, any>
+    if (!Effect.isEffect(props)) return mount(props)
+    // Listens before mounting. Props native sends during the first run of
+    // `props` replace that run, and ones sent while the root mounts run it
+    // again once the root exists.
+    return Effect.flatMap(Effect.context<any>(), (outer) => {
+      const context = Context.merge(outer, services)
+      let root: Renderer.Root<Model, Msg, Props> | undefined
+      let missed = false
+      let replace: (() => void) | undefined
+      let fiber: Fiber.Fiber<unknown> | undefined
+      const run = (root: Renderer.Root<Model, Msg, Props>) => {
+        fiber?.interruptUnsafe()
+        fiber = Effect.runForkWith(context)(Effect.map(props, root.setProps))
+      }
+      const first: Effect.Effect<Props, never, RP> = Effect.suspend(() => {
+        missed = false
+        return Effect.raceFirst(
+          Effect.map(props, (value) => ({ value })),
+          Effect.callback<undefined>((resume) => {
+            replace = () => resume(Effect.succeed(undefined))
+          })
+        )
+      }).pipe(Effect.flatMap((ran) => {
+        replace = undefined
+        return ran === undefined ? first : Effect.succeed(ran.value)
+      }))
+      return Effect.acquireRelease(
+        Effect.sync(() =>
+          surface.onProps(() => {
+            if (root !== undefined) return run(root)
+            missed = true
+            replace?.()
+          })
+        ),
+        (off) =>
+          Effect.sync(() => {
+            off()
+            fiber?.interruptUnsafe()
+          })
+      ).pipe(
+        Effect.andThen(mount(first)),
+        Effect.tap((mounted) =>
+          Effect.sync(() => {
+            root = mounted
+            if (missed) run(mounted)
+          })
+        )
+      )
+    })
   }) as any
 
 /**
@@ -164,6 +236,17 @@ export const mount = <
 ): Layer.Layer<never, never, Exclude<R | RF | RP, Native.Host> | Surface> =>
   Layer.effectDiscard(mountEffect(component, props, options))
 
+const device: Native.Device = {
+  os: Platform.OS,
+  on(event, listener) {
+    const subscription = RCTDeviceEventEmitter.addListener(event, listener)
+    return () => subscription.remove()
+  },
+  module: (name) => TurboModuleRegistry.get(name) ?? undefined,
+  blur: blurFocused,
+  color: processColor
+}
+
 let installed = false
 
 const install = () => {
@@ -185,11 +268,12 @@ const install = () => {
     }
   })
   // Android sends Back to JS first, and runs the activity's default action,
-  // closing it, only when asked to. React Native's BackHandler asks when no
-  // handler consumes the press, so this asks only while it isn't loaded.
+  // closing it, only when asked to. The kit's BackHandler and React Native's
+  // ask when no handler consumes the press, so this asks only while neither
+  // listens.
   RCTDeviceEventEmitter.addListener("hardwareBackPress", () => {
     if (RCTDeviceEventEmitter.listenerCount("hardwareBackPress") === 1) {
-      NativeDeviceEventManager?.invokeDefaultBackPressHandler()
+      device.module("DeviceEventManager")?.invokeDefaultBackPressHandler()
     }
   })
   dev.install(register)
@@ -200,42 +284,58 @@ const install = () => {
  * stops the surface, which closes the Layer's Scope. Call it once, from the
  * module the bundle starts at.
  *
+ * **Details**
+ *
+ * `app` gets the `Surface`, and `Native.Device` for the device APIs in
+ * `@effect/ui-native/kit`.
+ *
  * @stability experimental
  * @category constructors
  * @since 0.1.0
  */
 export const register = <A>(app: Layer.Layer<A, never, Surface>): void => {
   install()
-  const surfaces = new Map<number, Fiber.Fiber<unknown>>()
+  const surfaces = new Map<number, {
+    readonly fiber: Fiber.Fiber<unknown>
+    readonly props: Cell<Readonly<Record<string, unknown>>>
+  }>()
   const stop = (rootTag: number) => {
-    const fiber = surfaces.get(rootTag)
+    const running = surfaces.get(rootTag)
     surfaces.delete(rootTag)
-    if (fiber !== undefined) Effect.runFork(Fiber.interrupt(fiber))
+    if (running !== undefined) Effect.runFork(Fiber.interrupt(running.fiber))
+  }
+  type Params = {
+    readonly rootTag: number
+    readonly initialProps?: Readonly<Record<string, unknown>> | null
   }
   global.RN$AppRegistry = {
-    runApplication(
-      appKey: string,
-      params: {
-        readonly rootTag: number
-        readonly initialProps?: Readonly<Record<string, unknown>>
-      }
-    ) {
+    runApplication(appKey: string, params: Params) {
       stop(params.rootTag)
-      surfaces.set(
-        params.rootTag,
-        Effect.runFork(
+      const props = cell(params.initialProps ?? {}, Equal.equals)
+      surfaces.set(params.rootTag, {
+        props,
+        fiber: Effect.runFork(
           Layer.launch(Layer.provide(
             app,
-            Layer.succeed(Surface, {
-              appKey,
-              rootTag: params.rootTag,
-              initialProps: params.initialProps ?? {}
-            })
+            Layer.succeedContext(
+              Context.make(Surface, {
+                appKey,
+                rootTag: params.rootTag,
+                get props() {
+                  return props.get()
+                },
+                onProps: props.subscribe
+              }).pipe(Context.add(Native.Device, device))
+            )
           ))
         )
-      )
+      })
     },
-    setSurfaceProps() {}
+    // Native sends new props, and sends them again when the surface's
+    // display mode changes.
+    setSurfaceProps(_appKey: string, params: Params) {
+      surfaces.get(params.rootTag)?.props.set(params.initialProps ?? {})
+    }
   }
   global.RN$stopSurface = stop
 }

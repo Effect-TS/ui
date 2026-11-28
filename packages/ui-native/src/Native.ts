@@ -12,17 +12,33 @@ import * as Component from "@effect/ui/Component"
 import * as Renderer from "@effect/ui/Renderer"
 import * as View from "@effect/ui/View"
 import * as Context from "effect/Context"
+import * as Data from "effect/Data"
 import { kinds } from "./internal/kinds.ts"
 import type { NativeNode, UIManager } from "./NativeHost.ts"
 
 /**
- * A colour as React Native parses it: a CSS colour string or a number.
+ * A colour as React Native parses it: a CSS colour string, a number, or a
+ * colour native resolves, such as one `PlatformColor` in the kit makes.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export type Color = string | number
+export type Color = string | number | NativeColor
+
+declare const NativeColorTypeId: unique symbol
+
+/**
+ * A colour native resolves when it draws, such as a system colour. The kit's
+ * `PlatformColor` makes them.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface NativeColor {
+  readonly [NativeColorTypeId]: typeof NativeColorTypeId
+}
 
 /**
  * A colour already converted for Fabric, as `Css.color` from
@@ -1079,7 +1095,69 @@ export class Host extends Context.Service<Host, {
     name: string,
     args?: ReadonlyArray<unknown> | undefined
   ) => void
+  /** Sends an accessibility event, such as `"focus"`, to the node's view. Does nothing before the node's first commit. */
+  readonly accessibilityEvent: (node: NativeNode, type: string) => void
 }>()("@effect/ui-native/Native/Host") {}
+
+/**
+ * The device an app runs on: the events native sends it and its native
+ * modules. The kit's device APIs, such as `Dimensions` and `Keyboard`, are
+ * built on it.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Device {
+  /** `Platform.OS`: `"android"` or `"ios"`, and `"unknown"` off a device. */
+  readonly os: string
+  /** Listens for an event native sends the app, such as `keyboardDidShow`, until the returned function is called. */
+  readonly on: (event: string, listener: (payload: any) => void) => () => void
+  /** The native module named `name`, or `undefined` when the app has none. */
+  readonly module: (name: string) => any
+  /** Blurs the focused `input`, which hides the keyboard. */
+  readonly blur: () => void
+  /** Turns a colour into the value native parses, as React Native's `processColor`. */
+  readonly color: (color: Color) => unknown
+}
+
+const noop = () => {}
+
+/**
+ * The device the app runs on, which `NativeApp.register` provides. The
+ * default sends no events and has no native modules, so a component that
+ * reads it still runs in a test, and a test can provide a fake.
+ *
+ * @stability experimental
+ * @category references
+ * @since 0.1.0
+ */
+export const Device: Context.Reference<Device> = Context.Reference<Device>(
+  "@effect/ui-native/Native/Device",
+  {
+    defaultValue: () => ({
+      os: "unknown",
+      on: () => noop,
+      module: noop,
+      blur: noop,
+      color: (color) => color
+    })
+  }
+)
+
+/**
+ * A native module rejected a call, such as `Linking.openURL` for a URL no app
+ * handles. `cause` is native's error.
+ *
+ * @stability experimental
+ * @category errors
+ * @since 0.1.0
+ */
+export class DeviceError extends Data.TaggedError("DeviceError")<{
+  readonly module: string
+  readonly method: string
+  readonly cause: unknown
+}> {}
 
 declare module "@effect/ui/Command" {
   interface FrameworkServices {

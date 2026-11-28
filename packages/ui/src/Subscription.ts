@@ -258,9 +258,12 @@ export interface DirectControls<State, Msg> {
  * **Details**
  *
  * `attach` runs when the Subscription starts and returns the function that
- * detaches it. `state` is updated on every `subscriptions` run for the same
- * key; read the current value inside `controls.enter((latest) => ...)` so a
- * listener never closes over stale handlers or Model values.
+ * detaches it, or `{ close, start }`. `start` runs once the Subscription
+ * has started, outside the render that started it, so a source can send its
+ * current value before any change. `state` is updated on every
+ * `subscriptions` run for the same key; read the current value inside
+ * `controls.enter((latest) => ...)` so a listener never closes over stale
+ * handlers or Model values.
  *
  * @stability experimental
  * @category constructors
@@ -273,16 +276,17 @@ export const direct = <State, Msg, R = never>(
   attach: (
     context: Context.Context<R>,
     controls: DirectControls<State, Msg>
-  ) => () => void
+  ) =>
+    | (() => void)
+    | { readonly close: () => void; readonly start: () => void }
 ): Subscription<Msg, R> => {
   const connect: NonNullable<services.Direct[typeof services.direct]> = (
     context,
     emit,
     fail,
     enter
-  ) => ({
-    initial: Effect.void,
-    close: attach(context as Context.Context<R>, {
+  ) => {
+    const attached = attach(context as Context.Context<R>, {
       emit: (message, accepted) => emit(message, accepted ?? noop),
       fail,
       enter: (f) =>
@@ -294,7 +298,10 @@ export const direct = <State, Msg, R = never>(
           )
         )
     })
-  })
+    return typeof attached === "function"
+      ? { initial: Effect.void, close: attached }
+      : { initial: Effect.sync(attached.start), close: attached.close }
+  }
   return Object.assign(
     deps === undefined
       ? make<Msg, R>(name, Stream.never)

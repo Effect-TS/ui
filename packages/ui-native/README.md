@@ -9,11 +9,11 @@ React Native vocabulary and Fabric host for `@effect/ui`. Apps render native vie
 
 ## Modules
 
-- `Native`: `Native.component`, `Native.H`, the element vocabulary (`view`, `text`, `scroll`, `input`), style, prop and event types, `Native.Host`, `Native.clear`, `Native.setSelection`, and `Native.defineView` for custom native views
-- `@effect/ui-native/kit`: native controls and APIs beyond the vocabulary, bundled only when imported. `Css` parses CSS strings into the style forms native reads, `Image` and `ImageBackground` render images, `RefreshControl` adds pull to refresh, and `Modal`, `SafeArea`, `Drawer` and `InputAccessory` are screen containers. `Pressable` adds press states, a pressed style and the Android ripple; `Pan` handles drags after a configurable movement threshold. `Animation` animates `opacity` and `transform` on React Native's native driver, and `LayoutAnimation` animates a step's layout changes
+- `Native`: `Native.component`, `Native.H`, the element vocabulary (`view`, `text`, `scroll`, `input`), style, prop and event types, `Native.Host`, `Native.Device`, `Native.clear`, `Native.setSelection`, and `Native.defineView` for custom native views
+- `@effect/ui-native/kit`: native controls and APIs beyond the vocabulary, bundled only when imported. `Css` parses CSS strings into the style forms native reads, `Image` and `ImageBackground` render images, `RefreshControl` adds pull to refresh, and `Modal`, `SafeArea`, `Drawer` and `InputAccessory` are screen containers. `Pressable` adds press states, a pressed style and the Android ripple; `Pan` handles drags after a configurable movement threshold. `Animation` animates `opacity` and `transform` on React Native's native driver, and `LayoutAnimation` animates a step's layout changes. `KeyboardAvoidingView` keeps content above the keyboard, and the device APIs come as namespaces (`AccessibilityInfo`, `Alert`, `AppState`, `Appearance`, `BackHandler`, `Dimensions`, `I18nManager`, `Keyboard`, `Linking`, `PermissionsAndroid`, `PlatformColor`, `Share`, `StatusBar`, `Vibration`)
 - `@effect/ui-native/assets`: ambient TypeScript declarations for static image imports (`import logo from "./logo.png"`)
 - `NativeHost`: `make`, the `Renderer.Host` that builds Fabric shadow trees and commits them to a surface
-- `NativeApp`: `mount`, `mountEffect`, and `register`, which runs an app on every surface native starts; the `Surface` service
+- `NativeApp`: `mount`, `mountEffect`, and `register`, which runs an app on every surface native starts; the `Surface` service, whose `props` follow the surface's props as native updates them
 - `@effect/ui-native/networking`: opt-in side-effect entry that installs React Native's networking globals (`fetch`, `XMLHttpRequest`, `WebSocket`, `URL`, `AbortController`)
 - `@effect/ui-native/node`: `NativeMetro.withEffectUi`, the Metro configuration
 
@@ -53,7 +53,25 @@ An app's `resolver.resolveRequest` also runs for non-external imports in the pre
 
 In development Metro serves the sources. Editing a module that exports only components swaps them in place and keeps their state; editing any other module reloads the app.
 
-On Android, Back closes the app when nothing handles it. An app that adds handlers with React Native's `BackHandler` takes over that default, as it does in a React app.
+## Device APIs
+
+The kit's device APIs use native modules and device events directly rather than React Native's JavaScript wrappers. `NativeApp.register` provides their `Native.Device` service. Tests can provide a fake device; without one, defaults include a 0×0 window at scale 1, the `"active"` app state, and a hidden keyboard.
+
+They come in three forms:
+
+- Effects, such as `Linking.openURL(url)` and `Dimensions.get`. Fallible calls report `Native.DeviceError`.
+- Commands for `update`, such as `Keyboard.Dismiss` and `Alert.Alert`. Commands for fallible calls return a `Result`.
+- Subscriptions and Streams of device events, such as `Dimensions.onChange` and `Keyboard.changes`.
+
+```ts
+import { Command } from "@effect/ui"
+import { Linking } from "@effect/ui-native/kit"
+
+// In update:
+$.run(Linking.Open.make({ url: "https://effect.website" }).pipe(Command.asNoop))
+```
+
+On Android, Back closes the app when nothing handles it. The kit's `BackHandler.onPress` handles it while its Subscription runs, and React Native's `BackHandler` takes over that default as it does in a React app. Use one of them: each closes the app when its own handlers pass on a press.
 
 React Native doesn't load the `expo` package itself: an app that doesn't import it saves about 1 MB of Hermes bytecode.
 
