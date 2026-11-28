@@ -11,18 +11,23 @@ const Message = UiSchema.TaggedEnum({
   Prepended: {},
   Appended: {},
   Grew: {},
-  Scrolled: {
-    first: Schema.Number,
-    last: Schema.Number,
-    atStart: Schema.Boolean,
-    atEnd: Schema.Boolean,
-    scrolling: Schema.Boolean
-  }
+  Scrolled: { seen: Schema.String }
 })
 
 type Message = typeof Message.Type
 
 const section = 100
+
+// `keys` and `sticky` are kept in the model, so the list sees the same
+// arrays until the rows change.
+const rowsOf = (first: number, count: number) => {
+  const rows = Array.from({ length: count }, (_, i) => first + i)
+  return {
+    rows,
+    keys: rows.map(String),
+    sticky: rows.flatMap((row, i) => row % section === 0 ? [i] : [])
+  }
+}
 
 const button = {
   backgroundColor: "#111827",
@@ -44,57 +49,38 @@ export const ListDemo = Native.component({
   model: Schema.Struct({
     // Row numbers, so rows added before the first are negative.
     rows: Schema.Array(Schema.Number),
+    keys: Schema.Array(Schema.String),
+    sticky: Schema.Array(Schema.Number),
     tall: Schema.Boolean,
-    jumps: Schema.Number,
     scrollTo: Schema.NullOr(Virtualizer.ScrollTo),
     seen: Schema.String
   }),
   message: Message
 }).make({
   init: () => ({
-    rows: Array.from({ length: 10_000 }, (_, i) => i),
+    ...rowsOf(0, 10_000),
     tall: false,
-    jumps: 0,
     scrollTo: null,
     seen: ""
   }),
   update: {
     Jumped: ($, { target }) =>
       $.evolve({
-        jumps: (jumps) => jumps + 1,
-        scrollTo: () => ({ target, id: $.model.jumps + 1 })
+        scrollTo: (last) => ({ target, id: Number(last?.id ?? 0) + 1 })
       }),
-    Prepended: ($) =>
-      $.evolve({
-        rows: (rows) => [
-          ...Array.from({ length: 20 }, (_, i) => rows[0]! - 20 + i),
-          ...rows
-        ]
-      }),
-    Appended: ($) =>
-      $.evolve({
-        rows: (rows) => [
-          ...rows,
-          ...Array.from(
-            { length: 20 },
-            (_, i) => rows[rows.length - 1]! + 1 + i
-          )
-        ]
-      }),
+    Prepended: ({ model }) => ({
+      ...model,
+      ...rowsOf(model.rows[0]! - 20, model.rows.length + 20)
+    }),
+    Appended: ({ model }) => ({
+      ...model,
+      ...rowsOf(model.rows[0]!, model.rows.length + 20)
+    }),
     Grew: ($) => $.evolve({ tall: (tall) => !tall }),
-    Scrolled: ($, { atEnd, atStart, first, last, scrolling }) =>
-      $.evolve({
-        seen: () =>
-          `rows ${first}-${last}${atStart ? " start" : ""}${
-            atEnd ? " end" : ""
-          }${scrolling ? " scrolling" : ""}`
-      })
+    Scrolled: ($, { seen }) => $.evolve({ seen: () => seen })
   },
   view: (h, model) => {
-    const keys = model.rows.map(String)
-    const sticky = model.rows.flatMap((row, i) =>
-      row % section === 0 ? [i] : []
-    )
+    const { keys, sticky } = model
     return h.view.style({ flex: 1 }).children(
       h.view.style({
         flexDirection: "row",
@@ -137,11 +123,11 @@ export const ListDemo = Native.component({
         onEmit: {
           Scrolled: ({ atEnd, atStart, first, last, scrolling }) =>
             Message.Scrolled({
-              first: model.rows[first] ?? first,
-              last: model.rows[last] ?? last,
-              atStart,
-              atEnd,
-              scrolling
+              seen: `rows ${model.rows[first] ?? first}-${
+                model.rows[last] ?? last
+              }${atStart ? " start" : ""}${atEnd ? " end" : ""}${
+                scrolling ? " scrolling" : ""
+              }`
             })
         },
         view: (list) =>

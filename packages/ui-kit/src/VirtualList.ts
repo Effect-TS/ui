@@ -374,12 +374,6 @@ interface Tracked {
   readonly length: number
 }
 
-const same = (a: number, b: number): boolean => Math.abs(a - b) < 0.5
-
-const sameTracked = (a: Tracked, b: Tracked): boolean =>
-  same(a.offset, b.offset) && same(a.height, b.height) &&
-  same(a.length, b.length)
-
 const TrackVirtualListArgs = {
   id: Schema.String,
   epoch: Schema.Number,
@@ -493,7 +487,7 @@ const TrackVirtualList = Mount.makeStream(
         const movedByUser = () => {
           const top = scrollTop()
           const element = scroller()
-          const moved = !same(
+          const moved = !Virtualizer.same(
             top,
             Math.min(seen, element.scrollHeight - element.clientHeight)
           )
@@ -581,16 +575,19 @@ const TrackVirtualList = Mount.makeStream(
               viewport.scrollWidth > viewport.clientWidth)
           const above = viewport === null && placement(box().top) > 0.5
           const unchanged = reported !== null &&
-            same(height, reported.height) && atStart === reported.atStart &&
+            Virtualizer.same(height, reported.height) &&
+            atStart === reported.atStart &&
             atEnd === reported.atEnd && overflowing === reported.overflowing &&
             above === reported.above
           if (
             scrolled === null && unchanged &&
-            (same(start, reported!.start) ||
+            (Virtualizer.same(start, reported!.start) ||
               (Virtualizer.within(args.first, start) &&
                 Virtualizer.within(args.last, start + height)))
           ) {
-            if (args.track && !sameTracked(next, tracked)) sendMetrics(next)
+            if (
+              args.track && !Virtualizer.sameTracked(next, tracked)
+            ) sendMetrics(next)
             return
           }
           reported = { start, height, atStart, atEnd, overflowing, above }
@@ -1030,14 +1027,12 @@ export const VirtualList = Html.component({
     const props = p.props
     const id = p.id("virtual-list")
     const plan = Virtualizer.plan(model, props)
-    const { after, before, count, lanes, ranges, total } = plan
+    const { after, before, count, gaps, lanes, total } = plan
     const reserve = Math.max(0, props.reserveStart ?? 0)
     const fill = props.contentAlignment === "end" && model.position !== null
       ? Math.max(0, model.height - total - reserve)
       : 0
     const inset = reserve + fill
-    // The space before each range after the first, by its first index.
-    const gaps = new Map(ranges.slice(1).map(([start], i) => [start, i]))
     const absolute = props.layout === "absolute"
     const first = props.firstPosition ?? 1
     const setSize = String(props.setSize ?? count)
@@ -1057,7 +1052,7 @@ export const VirtualList = Html.component({
           }px)`
           : "",
         !absolute && !tr && gap !== undefined
-          ? `margin-block-start:${plan.gaps[gap]}px`
+          ? `margin-block-start:${gap}px`
           : ""
       ].filter((declarations) => declarations !== "").join(";")
       return (b as Div)
@@ -1098,15 +1093,13 @@ export const VirtualList = Html.component({
     ): ReadonlyArray<View.Node<any>> => [
       ...spacer("before", before + inset),
       ...children.flatMap((child) => {
-        const gap = child._tag === "Element" && child.attrs[itemAttr] === id
-          ? gaps.get(Number(child.attrs["data-index"]))
-          : undefined
+        const index = child._tag === "Element" && child.attrs[itemAttr] === id
+          ? Number(child.attrs["data-index"])
+          : -1
+        const gap = gaps.get(index)
         return gap === undefined
           ? [child]
-          : [
-            ...spacer("between" + (gap === 0 ? "" : gap), plan.gaps[gap]!),
-            child
-          ]
+          : [...spacer("between:" + index, gap), child]
       }),
       ...spacer("after", after)
     ]

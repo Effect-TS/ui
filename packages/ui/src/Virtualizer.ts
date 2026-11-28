@@ -24,7 +24,15 @@ import * as UiSchema from "./UiSchema.ts"
 import * as UiStruct from "./UiStruct.ts"
 
 const defaultOverscan = 3
-const defaultEndThreshold = 1
+
+/**
+ * How close to an edge counts as at it when `followEnd` doesn't say.
+ *
+ * @stability experimental
+ * @category constants
+ * @since 0.1.0
+ */
+export const edgeThreshold = 1
 
 /**
  * Where a scroll request goes: an item by index or by key, a distance from the
@@ -465,9 +473,24 @@ export const sameScrollTo: (a: ScrollTo, b: ScrollTo) => boolean = Schema
 
 const sameVisible = Schema.toEquivalence(Visible)
 
-const same = (a: number, b: number): boolean => Math.abs(a - b) < 0.5
+/**
+ * Whether two offsets or sizes are the same, give or take half a unit.
+ *
+ * @stability experimental
+ * @category predicates
+ * @since 0.1.0
+ */
+export const same = (a: number, b: number): boolean => Math.abs(a - b) < 0.5
 
-const sameTracked = (a: Tracked, b: Tracked): boolean =>
+/**
+ * Whether two reports of the scroll offset, viewport size and length are the
+ * same.
+ *
+ * @stability experimental
+ * @category predicates
+ * @since 0.1.0
+ */
+export const sameTracked = (a: Tracked, b: Tracked): boolean =>
   same(a.offset, b.offset) && same(a.height, b.height) &&
   same(a.length, b.length)
 
@@ -489,7 +512,14 @@ const countOf = (props: Props): number =>
 export const keyOf = (props: Props, index: number): string | null =>
   props.keys?.[index] ?? null
 
-const sizeKey = (props: Props, index: number): string =>
+/**
+ * The key the Model keeps the size of the item at `index` under.
+ *
+ * @stability experimental
+ * @category getters
+ * @since 0.1.0
+ */
+export const sizeKey = (props: Props, index: number): string =>
   keyOf(props, index) ?? String(index)
 
 /**
@@ -504,17 +534,8 @@ export const endThreshold = (props: Props): number | null =>
   props.followEnd === undefined || props.followEnd === false
     ? null
     : props.followEnd === true
-    ? defaultEndThreshold
-    : props.followEnd.threshold ?? defaultEndThreshold
-
-/**
- * How close to an edge counts as at it when `followEnd` doesn't say.
- *
- * @stability experimental
- * @category constants
- * @since 0.1.0
- */
-export const edgeThreshold = defaultEndThreshold
+    ? edgeThreshold
+    : props.followEnd.threshold ?? edgeThreshold
 
 const current = <M extends Model>(model: M, props: Props): M => {
   const dataset = props.dataset ?? null
@@ -530,6 +551,7 @@ const resolve = (
 ): number | null => {
   const count = countOf(props)
   if (ref.key !== null) {
+    if (props.keys?.[ref.index] === ref.key) return ref.index
     const at = props.keys?.indexOf(ref.key) ?? -1
     if (at >= 0) return at
     if (!fallback) return null
@@ -643,13 +665,31 @@ const sameRequest = (
 const latestOf = (model: Model): ScrollTo | null =>
   model.scroll?.scrollTo ?? null
 
-const waitingOf = (model: Model): ScrollTo | null =>
+const heldOf = (model: Model): ScrollTo | null =>
   model.scroll === null || model.scroll.done ? null : model.scroll.scrollTo
 
-const freshOf = (model: Model, props: Props): ScrollTo | null =>
+/**
+ * A `scrollTo` prop the Model hasn't recorded yet, to send back as
+ * `RequestedScroll`.
+ *
+ * @stability experimental
+ * @category getters
+ * @since 0.1.0
+ */
+export const freshOf = (model: Model, props: Props): ScrollTo | null =>
   props.scrollTo === undefined || sameRequest(props.scrollTo, latestOf(model))
     ? null
     : props.scrollTo
+
+/**
+ * The request that is waiting to be scrolled to, if any.
+ *
+ * @stability experimental
+ * @category getters
+ * @since 0.1.0
+ */
+export const waitingOf = (model: Model, props: Props): ScrollTo | null =>
+  freshOf(model, props) ?? heldOf(model)
 
 const pendingOf = (
   scrollTo: ScrollTo | null,
@@ -784,9 +824,10 @@ const keep = (
 
 interface Window {
   readonly ranges: ReadonlyArray<readonly [number, number]>
+  readonly window: readonly [number, number]
   readonly before: number
   readonly after: number
-  readonly gaps: ReadonlyArray<number>
+  readonly gaps: ReadonlyMap<number, number>
   readonly visible: readonly [number, number] | null
 }
 
@@ -829,19 +870,26 @@ const windowOf = (
     keep(rows, [row, row + 1])
   }
   const last = rows[rows.length - 1]![1]
+  const ranges = rows.map(([start, end]) =>
+    [
+      start * layout.lanes,
+      Math.min(layout.count, end * layout.lanes)
+    ] as const
+  )
   return {
-    ranges: rows.map(([start, end]) =>
-      [
-        start * layout.lanes,
-        Math.min(layout.count, end * layout.lanes)
-      ] as const
-    ),
+    ranges,
+    window: ranges[
+      rows.findIndex(([start, end]) => start <= startRow && endRow <= end)
+    ]!,
     before: layout.offsets[rows[0]![0]]!,
     after: last >= layout.rows
       ? 0
       : layout.offsets[layout.rows]! - layout.offsets[last]!,
-    gaps: rows.slice(1).map(([start], i) =>
-      layout.offsets[start]! - layout.offsets[rows[i]![1]]!
+    gaps: new Map(
+      rows.slice(1).map(([start], i) => [
+        start * layout.lanes,
+        layout.offsets[start]! - layout.offsets[rows[i]![1]]!
+      ])
     ),
     visible
   }
@@ -1122,21 +1170,20 @@ export const update = <M extends Model>(
  *
  * **Details**
  *
- * - `items`: the indices to render, in order, made of `ranges` of indices
- *   from `start` up to `end`. There's one range around the viewport, and
- *   more for the focused item and the active `sticky` item when they're
+ * - `items`: the indices to render, in order. They're in one range around
+ *   the viewport, `window`, from its first index up to its end, and more
+ *   ranges for the focused item and the active `sticky` item when they're
  *   outside it.
- * - `before`, `gaps` and `after`: the space before the first range,
- *   between each range and the one before it, and after the last.
+ * - `before`, `gaps` and `after`: the space before the first item, before
+ *   each later range by its first index, and after the last item.
  * - `total`: the list's length.
  * - `first` and `last`: the offsets the first and last visible rows cover.
  *   While the viewport's start and end stay within them, the same items are
  *   visible.
  * - `fresh`: a `scrollTo` prop the Model hasn't recorded yet, to send back
  *   as `RequestedScroll`.
- * - `request`: the request to scroll to, resolved, and `target`, where it
- *   puts the viewport's start. `waiting` is `true` while a request is
- *   waiting, even one whose item isn't in the list yet.
+ * - `request`: the request to scroll to, resolved. `waiting` is `true`
+ *   while a request is waiting, even one whose item isn't in the list yet.
  *
  * @stability experimental
  * @category models
@@ -1149,15 +1196,14 @@ export interface Plan {
   readonly gap: number
   readonly total: number
   readonly items: Array<number>
-  readonly ranges: ReadonlyArray<readonly [number, number]>
+  readonly window: readonly [number, number]
   readonly before: number
-  readonly gaps: ReadonlyArray<number>
+  readonly gaps: ReadonlyMap<number, number>
   readonly after: number
   readonly first: Bounds
   readonly last: Bounds
   readonly fresh: ScrollTo | null
   readonly request: ScrollRequest | null
-  readonly target: number | null
   readonly waiting: boolean
   /** The offset of the row that holds the item at `index`. */
   readonly offsetOf: (index: number) => number
@@ -1175,12 +1221,12 @@ export const plan = (stored: Model, props: Props): Plan => {
   const layout = layoutOf(model, props)
   const resting = restingBand(model, props, layout)
   const fresh = freshOf(model, props)
-  const waiting = fresh ?? waitingOf(model)
+  const waiting = fresh ?? heldOf(model)
   const request = pendingOf(waiting, props, layout)
   const band = request === null
     ? resting
     : pendingBand(model, layout, request, resting)
-  const { after, before, gaps, ranges, visible } = windowOf(
+  const { after, before, gaps, ranges, visible, window } = windowOf(
     model,
     props,
     layout,
@@ -1196,7 +1242,7 @@ export const plan = (stored: Model, props: Props): Plan => {
     items: ranges.flatMap(([start, end]) =>
       Array.from({ length: end - start }, (_, i) => start + i)
     ),
-    ranges,
+    window,
     before,
     gaps,
     after,
@@ -1204,15 +1250,14 @@ export const plan = (stored: Model, props: Props): Plan => {
     last: visible === null ? null : boundsOf(layout, visible[1]),
     fresh,
     request,
-    target: request === null ? null : band!.start,
     waiting: waiting !== null,
     offsetOf: (index) => layout.offsets[rowOf(layout, index)]!
   }
 }
 
 /**
- * Where a request puts the viewport's start, as `plan`'s `target` does for
- * the waiting one, or `null` when its item isn't in the list.
+ * Where a request puts the viewport's start, or `null` when its item isn't
+ * in the list.
  *
  * @stability experimental
  * @category getters

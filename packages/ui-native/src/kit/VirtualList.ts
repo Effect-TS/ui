@@ -165,9 +165,6 @@ const Model = Schema.Struct({
   aimed: Schema.NullOr(
     Schema.Struct({ to: Schema.Number, content: Schema.Number })
   ),
-  // Counts drags, so a settle timer knows when a newer drag began.
-  drag: Schema.Number,
-  ended: Schema.Boolean,
   momentum: Schema.Boolean
 })
 
@@ -195,7 +192,7 @@ const Message = UiSchema.TaggedEnum({
   DragEnded: {},
   MomentumBegan: {},
   MomentumEnded: {},
-  Settled: { drag: Schema.Number }
+  Settled: {}
 })
 
 type Message = typeof Message.Type
@@ -231,7 +228,15 @@ const ScrollEnd = Command.make(
   () => withRoot((host, node) => host.scrollToEnd(node, false))
 )
 
-const coreOf = (props: VirtualListProps): Virtualizer.Props => ({
+// Waits out the momentum that may follow a drag.
+const Settle = Command.make(
+  "VirtualList.settle",
+  { args: {}, mode: "switch" },
+  () => Effect.as(Effect.sleep(scrollEndDelay), Message.Settled())
+)
+
+// The props with the native defaults, which are also the core's props.
+const withDefaults = (props: VirtualListProps): VirtualListProps => ({
   ...props,
   initialCount: props.initialCount ?? 10,
   // At least one row before the viewport, so the leading spacer never
@@ -239,51 +244,53 @@ const coreOf = (props: VirtualListProps): Virtualizer.Props => ({
   overscan: Math.max(1, Math.floor(props.overscan ?? 3))
 })
 
-const same = (a: number, b: number): boolean => Math.abs(a - b) < 0.5
-
-const sizeKey = (props: Virtualizer.Props, index: number): string =>
-  Virtualizer.keyOf(props, index) ?? String(index)
+const reserveOf = (props: VirtualListProps): number =>
+  Math.max(0, props.reserveStart ?? 0)
 
 const originOf = (model: Model, props: VirtualListProps): number =>
-  model.spacer + Math.max(0, props.reserveStart ?? 0)
+  model.spacer + reserveOf(props)
 
-const atEndOf = (model: Model, core: Virtualizer.Props): boolean =>
-  model.content >= 0 &&
-  model.content - model.scrollOffset - model.viewport <=
-    (Virtualizer.endThreshold(core) ?? Virtualizer.edgeThreshold)
+const atEndOf = (
+  at: Pick<Model, "scrollOffset" | "viewport" | "content">,
+  props: VirtualListProps
+): boolean =>
+  at.content >= 0 &&
+  at.content - at.scrollOffset - at.viewport <=
+    (Virtualizer.endThreshold(props) ?? Virtualizer.edgeThreshold)
+
+const following = (model: Model, props: VirtualListProps): boolean =>
+  Virtualizer.endThreshold(props) !== null && model.atEnd
 
 // Whether native keeps the first visible item in place as the content
 // above it changes.
 const anchoredOf = (props: VirtualListProps): boolean =>
   props.measure !== false || props.keys !== undefined
 
-// The range around the viewport: the longest, as a sticky item's range is
-// one item and native sends no focus.
-const mainOf = (plan: Virtualizer.Plan): readonly [number, number] =>
-  plan.ranges.reduce((a, b) => b[1] - b[0] > a[1] - a[0] ? b : a)
-
-// The viewport's start in the core's layout. Measured from the first item of
-// the range around the viewport where native placed it, since the core's
-// estimates for the items before it can change before native lays out the
-// spacer they size.
+// The start of a viewport scrolled to `offset`, in the core's layout.
+// Measured from the first item of the plan's window where native placed it,
+// since the core's estimates for the items before it can change before
+// native lays out the spacer they size.
 const startOf = (
   model: Model,
   props: VirtualListProps,
-  core: Virtualizer.Props,
-  plan = Virtualizer.plan(model, core)
+  offset = model.scrollOffset,
+  given?: Virtualizer.Plan
 ): number => {
   const { placed } = model
-  const fallback = model.scrollOffset - originOf(model, props)
+  const fallback = offset - originOf(model, props)
   if (placed === null) return fallback
-  const [from, to] = mainOf(plan)
+  const plan = given ?? Virtualizer.plan(model, props)
+  const [from, to] = plan.window
   let index = placed.index
-  if (sizeKey(core, index) !== placed.key) {
+  if (Virtualizer.sizeKey(props, index) !== placed.key) {
     index = from
-    while (index < to && sizeKey(core, index) !== placed.key) index++
+    while (index < to && Virtualizer.sizeKey(props, index) !== placed.key) {
+      index++
+    }
   }
-  // A row outside the range, or gone from the list, has no placement to use.
+  // A row outside the window, or gone from the list, has no placement to use.
   return index >= from && index < to
-    ? plan.offsetOf(index) + model.scrollOffset - placed.at
+    ? plan.offsetOf(index) + offset - placed.at
     : fallback
 }
 
@@ -294,20 +301,19 @@ const startOf = (
 const moved = (
   model: Model,
   props: VirtualListProps,
-  core: Virtualizer.Props,
   kept = false
 ): Virtualizer.Updated<Model> => {
   if (model.viewport === 0) return { model, events: [] }
   const origin = originOf(model, props)
   return Virtualizer.update(
     model,
-    core,
+    props,
     Virtualizer.Message.MovedViewport({
-      start: kept ? model.scrollOffset - origin : startOf(model, props, core),
+      start: kept ? model.scrollOffset - origin : startOf(model, props),
       height: model.viewport,
       anchor: kept && anchoredOf(props) ? model.position : null,
       atStart: model.scrollOffset <= Virtualizer.edgeThreshold,
-      atEnd: atEndOf(model, core),
+      atEnd: atEndOf(model, props),
       overflowing: model.content > model.viewport + 0.5,
       length: Math.max(0, model.content - origin),
       scrolled: null
@@ -320,7 +326,6 @@ const moved = (
 const aim = (
   model: Model,
   props: VirtualListProps,
-  core: Virtualizer.Props,
   follow: boolean
 ): {
   readonly model: Model
@@ -330,20 +335,23 @@ const aim = (
     | null
 } => {
   if (model.viewport === 0) return { model, command: null }
-  const plan = Virtualizer.plan(model, core)
-  let to: number
-  if (plan.waiting && plan.request !== null) {
-    to = plan.request.scrollTo.target._tag === "End"
-      ? -1
-      : Math.max(0, Math.round(originOf(model, props) + plan.target!))
-  } else if (follow) to = -1
-  else return { model, command: null }
+  let to = follow ? -1 : null
+  const waiting = Virtualizer.waitingOf(model, props)
+  if (waiting !== null) {
+    const target = Virtualizer.targetOf(model, props, waiting)
+    if (target !== null) {
+      to = waiting.target._tag === "End"
+        ? -1
+        : Math.max(0, Math.round(originOf(model, props) + target))
+    }
+  }
+  if (to === null) return { model, command: null }
   const reached = to === -1
-    ? atEndOf(model, core)
-    : same(model.scrollOffset, to)
+    ? atEndOf(model, props)
+    : Virtualizer.same(model.scrollOffset, to)
   if (
     model.aimed !== null && model.aimed.to === to &&
-    (reached || same(model.aimed.content, model.content))
+    (reached || Virtualizer.same(model.aimed.content, model.content))
   ) return { model, command: null }
   return {
     model: { ...model, aimed: { to, content: model.content } },
@@ -362,11 +370,11 @@ type Update = Component.Update<
 
 const finish = (
   $: Update,
+  props: VirtualListProps,
   { events, model }: Virtualizer.Updated<Model>,
   follow = false
 ) => {
-  const core = coreOf($.props)
-  const { command, model: next } = aim(model, $.props, core, follow)
+  const { command, model: next } = aim(model, props, follow)
   const step = next === $.model ? $ : $.set(next)
   const emitted = events.length === 0 ? step : step.emit(...events)
   return command === null ? emitted : emitted.run(command)
@@ -374,12 +382,12 @@ const finish = (
 
 const scrolling = (
   model: Model,
-  core: Virtualizer.Props,
+  props: VirtualListProps,
   on: boolean
 ): Virtualizer.Updated<Model> =>
   model.scrolling === on ? { model, events: [] } : Virtualizer.update(
     model,
-    core,
+    props,
     Virtualizer.Message.ScrolledViewport({
       offset: model.offset,
       height: model.height,
@@ -387,16 +395,6 @@ const scrolling = (
       scrolling: on
     })
   )
-
-const freshOf = (
-  model: Model,
-  props: VirtualListProps
-): Virtualizer.ScrollTo | null =>
-  props.scrollTo === undefined ||
-    (model.scroll !== null &&
-      Virtualizer.sameScrollTo(props.scrollTo, model.scroll.scrollTo))
-    ? null
-    : props.scrollTo
 
 type ItemOf<B extends View.PartTarget<"view">> = ReturnType<B["attr"]>
 
@@ -428,7 +426,7 @@ export const VirtualList = Native.component({
   restore: false
 }).make({
   init: ($) => ({
-    ...Virtualizer.init(coreOf($.props)),
+    ...Virtualizer.init(withDefaults($.props)),
     // Native reports an item's layout only when it changes, so the core's
     // reset of every size at a new cross size would lose sizes that are never
     // reported again. The core's width stays fixed, and the list drops the
@@ -441,19 +439,21 @@ export const VirtualList = Native.component({
     spacer: 0,
     placed: null,
     aimed: null,
-    drag: 0,
-    ended: false,
     momentum: false
   }),
   update: ($, message) => {
-    const { model, props } = $
-    const core = coreOf(props)
+    const { model } = $
+    const props = withDefaults($.props)
     switch (message._tag) {
       case "LaidOutViewport": {
         let sizes = model.sizes
-        if (model.cross !== 0 && !same(model.cross, message.cross)) {
+        if (
+          model.cross !== 0 && !Virtualizer.same(model.cross, message.cross)
+        ) {
           const rendered = new Set(
-            Virtualizer.plan(model, core).items.map((i) => sizeKey(core, i))
+            Virtualizer.plan(model, props).items.map((i) =>
+              Virtualizer.sizeKey(props, i)
+            )
           )
           sizes = Object.fromEntries(
             Object.entries(sizes).filter(([key]) => rendered.has(key))
@@ -461,16 +461,17 @@ export const VirtualList = Native.component({
         }
         return finish(
           $,
+          props,
           moved(
             { ...model, sizes, viewport: message.size, cross: message.cross },
-            props,
-            core
+            props
           )
         )
       }
       case "Scrolled":
         return finish(
           $,
+          props,
           moved(
             {
               ...model,
@@ -478,33 +479,32 @@ export const VirtualList = Native.component({
               viewport: message.viewport,
               content: message.content
             },
-            props,
-            core
+            props
           )
         )
       case "ResizedContent": {
-        const follow = Virtualizer.endThreshold(core) !== null && model.atEnd &&
-          model.viewport > 0
         const next = { ...model, content: message.content }
         // Following the end, the list stays at it until the scroll gets there.
-        return follow
-          ? finish($, { model: next, events: [] }, true)
-          : finish($, moved(next, props, core, true))
+        return following(model, props)
+          ? finish($, props, { model: next, events: [] }, true)
+          : finish($, props, moved(next, props, true))
       }
       case "PlacedSpacer":
         return finish(
           $,
-          moved({ ...model, spacer: message.at }, props, core, true)
+          props,
+          moved({ ...model, spacer: message.at }, props, true)
         )
       case "LaidOutItem": {
         const { at, epoch, first, index, key, size } = message
         return finish(
           $,
+          props,
           Virtualizer.update(
             first
               ? { ...model, placed: { index, key: key ?? String(index), at } }
               : model,
-            core,
+            props,
             Virtualizer.Message.MeasuredItems({
               epoch,
               width: model.width,
@@ -517,77 +517,66 @@ export const VirtualList = Native.component({
               }]
             })
           ),
-          Virtualizer.endThreshold(core) !== null && model.atEnd
+          following(model, props)
         )
       }
       case "Requested":
         return finish(
           $,
+          props,
           Virtualizer.update(
             model,
-            core,
+            props,
             Virtualizer.Message.RequestedScroll({ scrollTo: message.scrollTo })
           )
         )
       case "DragBegan": {
         const dropped = Virtualizer.update(
           model,
-          core,
+          props,
           Virtualizer.Message.ScrolledByUser()
         ).model
         return finish(
           $,
-          scrolling({ ...dropped, ended: false, aimed: null }, core, true)
-        )
+          props,
+          scrolling({ ...dropped, aimed: null }, props, true)
+        ).run(Command.interrupt(Settle))
       }
       case "DragEnded":
-        return $.set({ ...model, ended: true, drag: model.drag + 1 })
+        return model.momentum ? $ : $.run(Settle.make())
       case "MomentumBegan":
-        return $.set({ ...model, ended: false, momentum: true })
+        return $.set({ ...model, momentum: true })
+          .run(Command.interrupt(Settle))
       case "MomentumEnded":
         return finish(
           $,
-          scrolling({ ...model, ended: false, momentum: false }, core, false)
+          props,
+          scrolling({ ...model, momentum: false }, props, false)
         )
       case "Settled":
-        return message.drag !== model.drag || model.momentum
+        return model.momentum
           ? $
-          : finish($, scrolling({ ...model, ended: false }, core, false))
+          : finish($, props, scrolling(model, props, false))
     }
   },
   subscriptions: ({ model, props }) => {
-    const fresh = freshOf(model, props)
+    const fresh = Virtualizer.freshOf(model, props)
     return [
       fresh !== null &&
       Subscription.make(
         "VirtualList.scrollTo",
         JSON.stringify(fresh),
         () => Stream.make(Message.Requested({ scrollTo: fresh }))
-      ),
-      model.ended && !model.momentum &&
-      Subscription.make(
-        "VirtualList.settle",
-        model.drag,
-        (drag) =>
-          Stream.fromEffect(
-            Effect.as(Effect.sleep(scrollEndDelay), Message.Settled({ drag }))
-          )
       )
     ]
   },
   parts: (p, model) => {
-    const props = p.props
-    const core = coreOf(props)
-    const plan = Virtualizer.plan(model, core)
+    const props = withDefaults(p.props)
+    const plan = Virtualizer.plan(model, props)
     const horizontal = props.horizontal === true
     const axis = horizontal ? "width" : "height"
-    const reserve = Math.max(0, props.reserveStart ?? 0)
-    // The space before each range after the first, by its first index.
-    const gaps = new Map(
-      plan.ranges.slice(1).map(([start], i) => [start, plan.gaps[i]!])
-    )
     const anchored = anchoredOf(props)
-    const anchor = mainOf(plan)[0]
+    const anchor = plan.window[0]
     const main = (rect: Native.Rect) => horizontal ? rect.x : rect.y
     const length = (
       rect: { readonly width: number; readonly height: number }
@@ -597,18 +586,18 @@ export const VirtualList = Native.component({
       const offset = horizontal ? event.x : event.y
       const viewport = length(event)
       const content = horizontal ? event.contentWidth : event.contentHeight
-      const next = { ...model, scrollOffset: offset, viewport, content }
-      const start = startOf(next, props, core, plan)
+      const start = startOf(model, props, offset, plan)
       // Most scroll events leave the same items visible and send nothing.
       // A waiting request's plan is around its target, not the viewport, so
       // the scroll that reaches the target is sent.
       return props.trackScroll !== true && plan.request === null &&
-          same(viewport, model.viewport) &&
-          same(content, model.content) &&
+          Virtualizer.same(viewport, model.viewport) &&
+          Virtualizer.same(content, model.content) &&
           Virtualizer.within(plan.first, start) &&
           Virtualizer.within(plan.last, start + viewport) &&
           (offset <= Virtualizer.edgeThreshold) === model.atStart &&
-          atEndOf(next, core) === model.atEnd
+          atEndOf({ scrollOffset: offset, viewport, content }, props) ===
+            model.atEnd
         ? undefined
         : Message.Scrolled({ offset, viewport, content })
     }
@@ -616,10 +605,13 @@ export const VirtualList = Native.component({
     const spacerPart = p.part(
       "view",
       (b) =>
-        b.on("layout", ({ layout }) =>
-          same(main(layout), model.spacer)
-            ? undefined
-            : Message.PlacedSpacer({ at: main(layout) }))
+        b.on(
+          "layout",
+          ({ layout }) =>
+            Virtualizer.same(main(layout), model.spacer)
+              ? undefined
+              : Message.PlacedSpacer({ at: main(layout) })
+        )
     )
 
     const spacer = (name: string, size: number, placed = false) => {
@@ -639,17 +631,17 @@ export const VirtualList = Native.component({
         const size = props.sizes?.[index] ?? props.itemSize
         return b.forward((node) => node.style({ [axis]: size }))
       }
-      const key = Virtualizer.keyOf(core, index)
-      const known = model.sizes[key ?? String(index)]
+      const key = Virtualizer.keyOf(props, index)
+      const known = model.sizes[Virtualizer.sizeKey(props, index)]
       // The first item around the viewport also reports where it moves to.
       const first = index === anchor
       const { placed } = model
       return b.on("layout", ({ layout }) => {
         const size = length(layout)
         const at = main(layout)
-        return known !== undefined && same(known, size) &&
+        return known !== undefined && Virtualizer.same(known, size) &&
             (!first || (placed !== null && placed.index === index &&
-              same(placed.at, at)))
+              Virtualizer.same(placed.at, at)))
           ? undefined
           : Message.LaidOutItem({
             epoch: plan.epoch,
@@ -667,17 +659,16 @@ export const VirtualList = Native.component({
       owner: View.Owner | undefined
     ): ReadonlyArray<View.Node<any, any>> => {
       const out: Array<View.Node<any, any>> = []
-      const before = spacer("before", plan.before + reserve, true)
+      const before = spacer("before", plan.before + reserveOf(props), true)
       let k = 0
       for (const child of children) {
         const item = child._tag === "Element" &&
           child.owned?.some((layer) => layer.owner === owner) === true
         if (item) {
-          const index = plan.items[k]
+          const index = plan.items[k]!
+          const gap = plan.gaps.get(index)
           if (k === 0) out.push(before)
-          else if (index !== undefined && gaps.has(index)) {
-            out.push(spacer("between:" + index, gaps.get(index)!))
-          }
+          else if (gap !== undefined) out.push(spacer("between:" + index, gap))
           k++
         }
         out.push(child)
@@ -698,8 +689,11 @@ export const VirtualList = Native.component({
       list: p.part("scroll", (b) =>
         b.ref(Root)
           .on("layout", ({ layout }) =>
-            same(length(layout), model.viewport) &&
-              same(horizontal ? layout.height : layout.width, model.cross)
+            Virtualizer.same(length(layout), model.viewport) &&
+              Virtualizer.same(
+                horizontal ? layout.height : layout.width,
+                model.cross
+              )
               ? undefined
               : Message.LaidOutViewport({
                 size: length(layout),
@@ -707,7 +701,7 @@ export const VirtualList = Native.component({
               }))
           .on("scroll", onScroll)
           .on("contentSizeChange", (size) =>
-            same(length(size), model.content)
+            Virtualizer.same(length(size), model.content)
               ? undefined
               : Message.ResizedContent({ content: length(size) }))
           .on("scrollBeginDrag", Message.DragBegan())
