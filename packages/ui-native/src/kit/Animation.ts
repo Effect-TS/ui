@@ -358,7 +358,10 @@ const hasKey = (o: object): boolean => {
 /**
  * Names a scroll view as the source of `scroll` expressions. Make the name
  * with `h.id`, which is unique to the component instance, and pass it to the
- * elements that follow the scroll, in this component or another.
+ * elements that follow the scroll, in this component or another. Setting
+ * `scrollEventThrottle` to 17 ms or more (or a negative value on iOS) on the
+ * scroll view throttles the native driver too, because both platforms drop
+ * throttled events before delivering them to animated nodes.
  *
  * @stability experimental
  * @category combinators
