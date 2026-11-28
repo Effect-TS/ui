@@ -29,6 +29,7 @@ import * as Layer from "effect/Layer"
 import * as Predicate from "effect/Predicate"
 import type * as Http from "node:http"
 import type * as DevTools from "../DevTools.ts"
+import type * as Inspector from "../Inspector.ts"
 import { metaName } from "../internal/control.ts"
 import * as DevToolsServer from "./DevToolsServer.ts"
 import * as hotExports from "./internal/hotExports.ts"
@@ -42,7 +43,7 @@ import * as hotExports from "./internal/hotExports.ts"
  */
 export interface OverlayOptions {
   readonly position?: DevTools.Position | undefined
-  readonly exclude?: ReadonlyArray<string> | undefined
+  readonly exclude?: ReadonlyArray<string | Inspector.Exclusion> | undefined
   readonly webMcp?: boolean | DevTools.WebMcpOptions | undefined
 }
 

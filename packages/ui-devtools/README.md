@@ -52,13 +52,13 @@ The overlay keeps the raw entries, alongside the Wire frames, to paint from. The
 
 It follows the latest entry until one is selected, and remembers whether the panel is open and its size in `localStorage`. **Clear** empties the timeline while keeping mounted instances, the next entry's diff, and Time travel accurate (disabled while the page is paused).
 
-`DevTools.layer` accepts `position`, `size` (1,000 shown entries by default) and `exclude` (message `_tag` values matched across every component). Excluded updates add no rows and coalesce per instance between shown entries so high-frequency bursts do not evict the buffer, while keeping the next shown entry's Model diff and Time travel state accurate. `exclude` is not a way to hide sensitive data: later entries still carry whatever an excluded message changed in the Model — use `Schema.Redacted` for sensitive values.
+`DevTools.layer` accepts `position`, `size` (1,000 shown entries by default) and `exclude`: message `_tag` strings matched across every component, or rules such as `{ tag: "Ticked", component: "Kit" }`, `{ component: "Menu" }` and `{ path: "/LaunchPage/Kit[]" }` (that instance and everything below it). A tag rule also excludes the `PropsChanged` entries its updates cause. Excluded entries add no rows and take no slots, so high-frequency bursts do not evict the buffer, while the next shown entry's Model diff and Time travel state stay accurate. `exclude` is not a way to hide sensitive data: later entries still carry whatever an excluded message changed in the Model — use `Schema.Redacted` for sensitive values.
 
 Use `DevTools.layer({ fields: ["commandId"] })` to show top-level message and Command argument values on timeline rows. Only string, number and boolean values are shown; redacted values are omitted. Click a value to filter by its field name and value across instances. Click it again, or click the chip under the filters, to clear the field filter. Other filters still apply.
 
-`exclude` sets the initial recording policy. To change it while the app runs, select an update and click **Stop recording** to exclude future updates with its message `_tag`. The **Not recording** strip under the filters lists stopped tags, including configured exclusions. Click a tag to resume recording it.
+`exclude` sets the initial recording policy. To change it while the app runs, select an entry and pick from **Stop recording**: its message in its component, every instance of its component, or its instance or an ancestor and everything below. Rows already in the timeline that match are hidden at once. The **Not recording** strip under the filters lists stopped rules, including configured exclusions. Click one to resume recording and show its hidden rows again; entries logged while it was stopped can't be recovered.
 
-These choices override `exclude` for the selected tags and persist through reloads until the tab closes. They affect future updates, not existing entries, and cannot recover evicted history. Excluded Wire frames carry the same policy to the Node server and its agent tools.
+These choices override `exclude` and persist through reloads until the tab closes. Excluded Wire frames carry the same policy to the Node server and its agent tools.
 
 It is mounted in an iframe with `MessageLog.noop`, so the page's styles don't reach it, a key pressed or a click in it never reaches the app's document and window listeners, and it never logs its own updates. Its theme follows `prefers-color-scheme`.
 
@@ -99,7 +99,7 @@ The plugin starts the server with `vite dev` only and adds a `<meta>` tag with i
 | `diff_state`         | what an entry changed in its instance's Model                                                 |
 | `show_entry`         | paints the page at an entry, as Time travel does                                              |
 | `resume`             | shows the live page again                                                                     |
-| `set_recording`      | stops or starts recording a message `_tag`, as the panel's Stop recording does                |
+| `set_recording`      | stops or starts recording by message `_tag`, component or subtree, as Stop recording does     |
 | `get_message_schema` | dispatch JSON Schema and per-tag examples, templates, or reasons no safe example is available |
 | `find_instances`     | the instances that rendered the elements matching a CSS selector, 20 at most                  |
 | `get_picked`         | the element last picked with Pick in a session, and the instance that rendered it             |

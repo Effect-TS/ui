@@ -94,24 +94,91 @@ const isDirty = (dirty: ReadonlySet<string>, path: string) => {
   return false
 }
 
+const keyOf = (entry: Entry): string | undefined => {
+  switch (entry._tag) {
+    case "Waiting":
+    case "Mounted":
+    case "Update":
+      return "state"
+    case "PropsChanged":
+      return "props"
+    case "QueryChanged":
+      return "query:" + entry.name
+  }
+}
+
+// A state entry without query results keeps those of the one it replaces,
+// with any result that changed after it.
+type StateEntry = Extract<
+  Entry,
+  { readonly _tag: "Waiting" | "Mounted" | "Update" }
+>
+
+const carryQueries = (
+  entry: StateEntry,
+  replaced: StateEntry,
+  kept: ReadonlyMap<string, Entry>
+): Entry => {
+  if (entry.queries !== undefined) return entry
+  let queries: unknown = replaced.queries
+  for (const changed of kept.values()) {
+    if (changed._tag === "QueryChanged" && changed.seq > replaced.seq) {
+      queries = merge(queries, changed.name, changed.result)
+    }
+  }
+  return queries === undefined ? entry : { ...entry, queries } as Entry
+}
+
 const makeSession = (size: number) => {
   const base = new Map<number, Held>()
   const entries: Array<Entry> = []
   const shown = new Map<number, Entry>()
-  const coalesced = new Map<number, Entry>()
+  // Excluded entries since the last shown one, by instance: only the latest
+  // state, props and result of each query matter to the next shown entry.
+  const coalesced = new Map<number, Map<string, Entry>>()
   // Ranges of seqs that never arrived, kept until older than the entries held.
   const gaps: Array<readonly [number, number]> = []
   let floor = -Infinity
   let last = -Infinity
+  // Instance numbers grow, so one above `settled` mounted since the last shown entry.
+  let newest = -1
+  let settled = -1
   const drop = () => {
     const oldest = entries.shift()!
     floor = oldest.seq
     shown.delete(oldest.seq)
-    if (oldest._tag === "Update" && coalesced.get(oldest.instance) === oldest) {
-      coalesced.delete(oldest.instance)
+    if ("instance" in oldest) {
+      const kept = coalesced.get(oldest.instance)
+      for (const [key, entry] of kept ?? []) {
+        if (entry === oldest) kept!.delete(key)
+      }
     }
     apply(base, oldest, false)
     while (gaps.length > 0 && gaps[0]![1] < floor) gaps.shift()
+  }
+  const remove = (entry: Entry) => {
+    entries.splice(entries.lastIndexOf(entry), 1)
+  }
+  const exclude = (entry: Entry & { readonly instance: number }) => {
+    let kept = coalesced.get(entry.instance)
+    if (entry._tag === "Unmounted") {
+      // An instance that came and went between shown entries leaves no trace.
+      if (entry.instance > settled) {
+        for (const replaced of kept?.values() ?? []) remove(replaced)
+        coalesced.delete(entry.instance)
+      } else entries.push(entry)
+      return
+    }
+    const key = keyOf(entry)
+    if (key === undefined) return
+    if (kept === undefined) coalesced.set(entry.instance, kept = new Map())
+    const replaced = kept.get(key)
+    if (replaced !== undefined) remove(replaced)
+    const held = key === "state" && replaced !== undefined
+      ? carryQueries(entry as StateEntry, replaced as StateEntry, kept)
+      : entry
+    kept.set(key, held)
+    entries.push(held)
   }
   const fold = (seq: number) => {
     const states = new Map(base)
@@ -128,22 +195,12 @@ const makeSession = (size: number) => {
         gaps.push([last + 1, entry.seq - 1])
       }
       last = entry.seq
-      if (entry._tag === "Update" && entry.excluded === true) {
-        const replaced = coalesced.get(entry.instance)
-        if (replaced !== undefined) {
-          entries.splice(entries.lastIndexOf(replaced), 1)
-        }
-        const queries = replaced !== undefined && "queries" in replaced
-          ? replaced.queries
-          : undefined
-        const merged = entry.queries === undefined && queries !== undefined
-          ? { ...entry, queries } as Entry
-          : entry
-        entries.push(merged)
-        coalesced.set(entry.instance, merged)
-        return
+      if ("instance" in entry) {
+        newest = Math.max(newest, entry.instance)
+        if (entry.excluded === true) return exclude(entry)
       }
       coalesced.clear()
+      settled = newest
       entries.push(entry)
       shown.set(entry.seq, entry)
       while (shown.size > size) drop()

@@ -21,8 +21,9 @@ import * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import * as Inspector from "../Inspector.ts"
-import { Paused, type Picked } from "./control.ts"
+import { Paused, type Picked, Rule } from "./control.ts"
 import * as Read from "./read.ts"
+import * as Rules from "./rules.ts"
 
 export const Position = Schema.Literals([
   "TopLeft",
@@ -43,12 +44,14 @@ export interface Feed {
   readonly open: boolean
   readonly position: () => Position
   readonly fields: ReadonlyArray<string>
-  /** The message tags not recorded, when the page has a recorder to change. */
-  readonly notRecording?: (() => ReadonlyArray<string>) | undefined
-  /** The message tag of an `Update`, while the recorder records it. */
-  readonly stoppable?:
+  /** The rules not recorded, when the page has a recorder to change. */
+  readonly notRecording?: (() => ReadonlyArray<Rule>) | undefined
+  /** The raw message tag of an `Update`. */
+  readonly messageTag?:
     | ((session: string, seq: number) => string | undefined)
     | undefined
+  /** Whether a rule not recorded matches an entry recorded before it. */
+  readonly stopped?: ((session: string, seq: number) => boolean) | undefined
   /** While pulled, the page's input picks an element: the pick, or `undefined` for Escape. */
   readonly pick?: Stream.Stream<Picked | undefined> | undefined
   /** Whether the session's root is still mounted on the page. */
@@ -64,7 +67,7 @@ export class Pages extends Context.Service<Pages, {
   readonly clear: (session: string) => Effect.Effect<void>
   readonly setOpen: (open: boolean) => Effect.Effect<void>
   readonly setRecording: (
-    tag: string,
+    rule: Rule,
     recording: boolean
   ) => Effect.Effect<void>
   readonly setPosition: (position: Position) => Effect.Effect<void>
@@ -147,7 +150,7 @@ const OverlayMessage = UiSchema.TaggedEnum({
   ScrubbedPage: { seq: Schema.Number },
   ClickedResume: {},
   ClickedClear: {},
-  ClickedRecording: { tag: Schema.String, recording: Schema.Boolean },
+  ClickedRecording: { rule: Rule, recording: Schema.Boolean },
   Cleared: {},
   Painted: Paused.fields,
   FailedPaint: Page.fields,
@@ -238,15 +241,15 @@ export class SaveOpen extends Command.Service<SaveOpen>()(
 export class SetRecording extends Command.Service<SetRecording>()(
   "devtools/SetRecording",
   {
-    args: { tag: Schema.String, recording: Schema.Boolean },
+    args: { rule: Rule, recording: Schema.Boolean },
     success: Component.Noop
   }
 ) {
   static readonly layer = this.toLayer(
     Effect.gen(function*() {
       const pages = yield* Pages
-      return ({ recording, tag }) =>
-        Effect.as(pages.setRecording(tag, recording), Component.noop)
+      return ({ recording, rule }) =>
+        Effect.as(pages.setRecording(rule, recording), Component.noop)
     })
   )
 }
@@ -957,22 +960,92 @@ const FieldButtons = (
     })
   )
 
-const NotRecording = (h: H, tags: ReadonlyArray<string>) =>
-  tags.length === 0 ? null : h.div.class("stopped").attr("role", "group").attr(
+const NotRecording = (h: H, rules: ReadonlyArray<Rule>) =>
+  rules.length === 0 ? null : h.div.class("stopped").attr("role", "group").attr(
     "aria-label",
     "Not recording"
   ).children(
     h.span.children("Not recording"),
-    tags.map((tag) =>
-      h.button.key(tag).class("code").attr(
+    rules.map((rule) => {
+      const label = Rules.labelOf(rule)
+      return h.button.key(Rules.keyOf(rule)).class("code").attr(
         "aria-label",
-        "Start recording " + tag
-      ).attr("title", "Start recording " + tag).on(
+        "Start recording " + label
+      ).attr("title", "Start recording " + (rule.path ?? label)).on(
         "click",
-        OverlayMessage.ClickedRecording({ tag, recording: true })
-      ).children(tag)
+        OverlayMessage.ClickedRecording({ rule, recording: true })
+      ).children(label)
+    })
+  )
+
+// What the selected entry offers to stop: its message in its component (for
+// `PropsChanged`, the message it follows from), its component, and each
+// instance from its own up to the root's child with everything below.
+const stopChoices = (
+  feed: Feed,
+  session: Session,
+  entry: Entry,
+  self: Inspector.Summary | undefined
+): ReadonlyArray<Rule> => {
+  const stopped = feed.notRecording?.()
+  if (stopped === undefined || !("instance" in entry)) return []
+  const cause = entry._tag === "PropsChanged" && entry.causedBy !== undefined
+    ? session.resolve(entry.causedBy)
+    : entry
+  const tag = cause._tag === "Update" &&
+      (cause === entry || cause.causedBy === undefined)
+    ? feed.messageTag?.(session.id, cause.seq)
+    : undefined
+  const choices: Array<Rule> = []
+  if (tag !== undefined && cause._tag === "Update") {
+    choices.push({ tag, component: cause.component })
+  }
+  choices.push({ component: entry.component })
+  if (self !== undefined) {
+    for (const { parent, path } of lineage(session, self).reverse()) {
+      if (parent !== undefined) choices.push({ path })
+    }
+  }
+  const keys = new Set(stopped.map(Rules.keyOf))
+  return choices.filter((rule) => !keys.has(Rules.keyOf(rule)))
+}
+
+// Keyed by the entry and the rules, so it starts closed after either changes.
+const StopMenu = (h: H, key: string, choices: ReadonlyArray<Rule>) =>
+  choices.length === 0 ? null : h.details.key(key).class("stop").children(
+    h.summary.attr(
+      "title",
+      "Stop recording entries like this one, so a burst of them can't push others out"
+    )
+      .children("Stop recording"),
+    h.div.class("stop-menu").attr("role", "group").attr(
+      "aria-label",
+      "Stop recording"
+    ).children(
+      choices.map((rule) => {
+        const label = Rules.labelOf(rule)
+        return h.button.key(Rules.keyOf(rule)).attr(
+          "aria-label",
+          "Stop recording " + label
+        ).attr("title", rule.path ?? label).on(
+          "click",
+          OverlayMessage.ClickedRecording({ rule, recording: false })
+        ).children(label)
+      })
     )
   )
+
+const launcherCount = (feed: Feed, session: Session | undefined) =>
+  session === undefined ? 0 : shownEntries(feed, session).length
+
+// The entries held, less those a rule now stopped matches.
+const shownEntries = (feed: Feed, session: Session) => {
+  const entries = session.entries()
+  const stopped = feed.stopped
+  return stopped === undefined || feed.notRecording?.().length === 0
+    ? entries
+    : entries.filter((entry) => !stopped(entry.session, entry.seq))
+}
 
 const scrollOf = (model: OverlayModel, keys: ReadonlyArray<string>) =>
   model.reveal !== null
@@ -1874,7 +1947,7 @@ const Inspected = (
     : entry._tag
   const paintable = feed.paintable(entry.session, entry.seq)
   const shown = shows(model, entry.session, entry.seq)
-  const tag = feed.stoppable?.(entry.session, entry.seq)
+  const choices = stopChoices(feed, session, entry, self)
   return [
     h.section.class("ehead").children(
       h.div.class("ehead-top").children(
@@ -1882,17 +1955,11 @@ const Inspected = (
           Name(h, entry, label.text),
           label.detail === undefined ? null : " " + label.detail
         ),
-        tag !== undefined
-          ? h.button.class("stop").attr("aria-label", "Stop recording " + tag)
-            .attr(
-              "title",
-              "Stop recording " + tag +
-                " updates, so a burst of them can't push other entries out"
-            ).on(
-              "click",
-              OverlayMessage.ClickedRecording({ tag, recording: false })
-            ).children("Stop recording")
-          : null,
+        StopMenu(
+          h,
+          entry.seq + ":" + (feed.notRecording?.().length ?? 0),
+          choices
+        ),
         h.button.class("show", shown && "on").attr(
           "aria-pressed",
           String(shown)
@@ -1943,7 +2010,7 @@ const Panel = (h: H, model: OverlayModel) => {
       )
     )
   }
-  const entries = session.entries()
+  const entries = shownEntries(feed, session)
   const scope = model.scope
   const within = new Map<number, boolean>()
   const isWithin = (instance: number): boolean => {
@@ -2076,7 +2143,7 @@ const Launcher = (h: H, model: OverlayModel) => {
       .children(
         h.span.class("lockup").attr("aria-hidden", "true"),
         h.span.class("launcher-count").children(
-          String(sessionOf(h.props.feed, model)?.entries().length ?? 0)
+          String(launcherCount(h.props.feed, sessionOf(h.props.feed, model)))
         )
       ),
     PickButton(h, model),
@@ -2266,8 +2333,8 @@ export const Overlay = Html.component({
         .run(Paint.make(page))
     },
     ClickedResume: ($) => $.evolve(resumed).run(resumePage()),
-    ClickedRecording: ($, { recording, tag }) =>
-      $.run(SetRecording.make({ tag, recording })),
+    ClickedRecording: ($, { recording, rule }) =>
+      $.run(SetRecording.make({ rule, recording })),
     ClickedClear: ($) => {
       const session = sessionOf($.props.feed, $.model)
       return pageAt($.model) !== null || session === undefined

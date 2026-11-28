@@ -37,6 +37,7 @@
 import type * as MessageLog from "@effect/ui/MessageLog"
 import type * as Schema from "effect/Schema"
 import * as internal from "./internal/inspector.ts"
+import * as Rules from "./internal/rules.ts"
 
 /**
  * What `Session.resolve` gives for a `seq` the session doesn't hold: the
@@ -178,7 +179,7 @@ export interface Instance {
  * - `latest` is the `seq` of the instance's latest `Update`, `Failed`,
  *   `CommandStarted`, `CommandAwaiting`, `CommandEnded`,
  *   `CommandInterrupted` or `CommandDropped` that `entries` holds, absent
- *   when it holds none. An excluded `Update` doesn't count.
+ *   when it holds none. An excluded entry doesn't count.
  * - `parent` is the `instance` this one is under: the closest whose
  *   `path` this one's is under, and of those at that path the latest that
  *   came before it. So an instance that mounts again at a path gets its own
@@ -400,18 +401,43 @@ export const diff: (
 ) => ReadonlyArray<Change> = internal.diff
 
 /**
+ * What `exclude` stops recording. Every field given must match, and at
+ * least one must be given.
+ *
+ * **Details**
+ *
+ * - `tag` matches an `Update` whose message has that `_tag`, and the
+ *   `PropsChanged` entries that follow from it when it's a fact: the props
+ *   it passed down. Without `tag`, a rule matches every entry of an
+ *   instance.
+ * - `component` matches the instances of the component with that name.
+ * - `path` matches the instance at that path and every instance below it.
+ *
+ * A string in `exclude` is short for `{ tag }`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Exclusion {
+  readonly tag?: string | undefined
+  readonly component?: string | undefined
+  readonly path?: string | undefined
+}
+
+/**
  * Makes an inspector whose sessions each hold their last `size` shown entries
  * (1,000 by default).
  *
  * **Details**
  *
- * `exclude` lists message `_tag` values, matched across every component. An
- * `Update` whose message has one of those tags is omitted from `entries`, and
- * a run of them takes one slot per instance: each replaces the instance's
- * earlier excluded entry while no shown entry of any instance sits between
- * them. Links to a replaced entry resolve to `Outside`. The next shown entry
- * is still compared with the latest excluded state. `Update` frames marked
- * `excluded: true` by `DevTools.layer` are also excluded.
+ * An entry an `exclude` rule matches, or one marked `excluded: true` by
+ * `DevTools.layer`, is omitted from `entries` and takes no slot. Of an
+ * instance's excluded `Update`, `Mounted` and `Waiting` entries, only
+ * the latest since the last shown entry of any instance is kept, so the next
+ * shown entry is still compared with the latest excluded state. Other
+ * excluded entries update the instance's records and are not kept. Links to
+ * an entry not kept resolve to `Outside`.
  *
  * `exclude` is not a way to hide sensitive data: later entries still carry
  * whatever an excluded message changed in the Model. Use `Schema.Redacted`
@@ -423,9 +449,13 @@ export const diff: (
  */
 export const make = (options?: {
   readonly size?: number | undefined
-  readonly exclude?: ReadonlyArray<string> | undefined
-}): Inspector =>
-  internal.make({
+  readonly exclude?: ReadonlyArray<string | Exclusion> | undefined
+}): Inspector => {
+  const rules = Rules.normalize(options?.exclude)
+  return internal.make({
     size: options?.size,
-    isExcluded: internal.matchTags(new Set(options?.exclude))
+    isExcluded: rules.length === 0
+      ? undefined
+      : (entry, resolve) => Rules.excludes(rules, entry, resolve)
   })
+}

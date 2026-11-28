@@ -8,6 +8,7 @@ import * as Control from "./control.ts"
 import type * as History from "./history.ts"
 import { diff } from "./inspector.ts"
 import * as Read from "./read.ts"
+import * as Rules from "./rules.ts"
 
 export interface RequestError {
   readonly lost: boolean
@@ -16,7 +17,7 @@ export interface RequestError {
 
 export interface Page {
   readonly paused: Control.Paused | null
-  readonly notRecording: ReadonlyArray<string>
+  readonly notRecording: ReadonlyArray<Control.Rule>
   readonly request: (
     request: Control.Request
   ) => Effect.Effect<Schema.Json, RequestError>
@@ -103,7 +104,7 @@ const ListSessions = read(Tool.make("list_sessions", {
   description:
     "Lists the sessions the server holds. A session is one mounted root: a page load, a server render, or a terminal app. " +
     "Shows whether its page is connected, whether it can be controlled (show_entry, resume, set_recording, " +
-    "dispatch), where it is paused, and the message _tags its page is not recording.",
+    "dispatch), where it is paused, and the rules its page is not recording.",
   success: Result,
   failure: ToolError
 }))
@@ -191,7 +192,8 @@ const GetState = read(Tool.make("get_state", {
     session: SessionParam,
     instance: Schema.Number,
     at: Schema.optionalKey(Schema.Number).annotate({
-      description: "The seq to read the state at. Defaults to the latest."
+      description:
+        "The seq to read the state at. Defaults to the latest, a stopped entry's included."
     }),
     path: Path
   }),
@@ -233,13 +235,24 @@ const Resume = control(Tool.make("resume", {
 
 const SetRecording = control(Tool.make("set_recording", {
   description:
-    "Stops or starts recording the updates of a message _tag on the session's page, from its next update. " +
-    "Stopped updates get no rows and coalesce into one slot per instance between shown entries. " +
-    "The choice overrides the page's exclude and lasts until the tab " +
-    "closes. Returns the tags the page is not recording.",
+    "Stops or starts recording, on the session's page, the entries a rule matches: give at least one of tag, " +
+    "component and path, and every one given must match. With tag, the rule matches updates of that message " +
+    "_tag and the PropsChanged entries they cause; without it, every entry of the matched instances. " +
+    "Stopped entries get no rows and take no slots. " +
+    "The choice overrides the page's exclude and lasts until the tab closes. " +
+    "Returns the rules the page is not recording.",
   parameters: Schema.Struct({
     session: SessionParam,
-    tag: Schema.String.annotate({ description: "A message _tag." }),
+    tag: Schema.optional(Schema.String).annotate({
+      description: "A message _tag."
+    }),
+    component: Schema.optional(Schema.String).annotate({
+      description: "A component name, as list_instances shows it."
+    }),
+    path: Schema.optional(Schema.String).annotate({
+      description:
+        "An instance path: the rule matches it and every instance below it."
+    }),
     recording: Schema.Boolean
   }),
   success: Result,
@@ -356,7 +369,7 @@ export const instructions =
   "Inspects a running Effect UI app in development. Start with list_sessions and list_instances. " +
   "list_entries and get_chain explain what happened and why; get_state and diff_state show state at any entry. " +
   "show_entry paints the page at an entry, resume returns to the live page. set_recording stops or resumes " +
-  "recording a message _tag. find_instances and get_picked find the instance that rendered an element. " +
+  "recording by message _tag, component or subtree. find_instances and get_picked find the instance that rendered an element. " +
   "dispatch sends messages when " +
   "enabled, and wait lets the Commands they start finish."
 
@@ -662,7 +675,7 @@ export const handlers = (server: Backend) => {
     }),
     get_state: Effect.fnUntraced(function*({ at, instance, path, session }) {
       const s = yield* sessionOf(session)
-      const seq = at ?? s.entries().at(-1)?.seq ?? -1
+      const seq = at ?? history.latest(s.id) ?? -1
       const held = history.instanceAt(s.id, seq, instance)
       if (held === "outside") {
         return yield* fail(
@@ -746,10 +759,16 @@ export const handlers = (server: Backend) => {
       yield* ask(s, { _tag: "Resume" })
       return ok({ resumed: true })
     }),
-    set_recording: Effect.fnUntraced(function*({ recording, session, tag }) {
-      const s = yield* sessionOf(session)
-      return ok(yield* ask(s, { _tag: "SetRecording", tag, recording }))
-    }),
+    set_recording: Effect.fnUntraced(
+      function*({ component, path, recording, session, tag }) {
+        const rule = Rules.clean({ tag, component, path })
+        if (!Rules.isRule(rule)) {
+          return yield* fail("Give a tag, a component or a path.")
+        }
+        const s = yield* sessionOf(session)
+        return ok(yield* ask(s, { _tag: "SetRecording", rule, recording }))
+      }
+    ),
     get_message_schema: Effect.fnUntraced(
       function*({ instance, session, tag }) {
         const s = yield* sessionOf(session)
@@ -848,7 +867,7 @@ export const handlers = (server: Backend) => {
             "logged by the page, but the server can't show them: a skipped " +
             "entry was dropped from the page's buffer before it was sent, " +
             "an evicted one is older than the entries kept, and an excluded " +
-            "one's message _tag is not being recorded.",
+            "one matched a rule the page is not recording.",
         reply.paused === null
           ? undefined
           : "The page is paused: resume to see the live page."

@@ -9,12 +9,14 @@ import * as Queue from "effect/Queue"
 import * as Semaphore from "effect/Semaphore"
 import * as Socket from "effect/socket/Socket"
 import * as Stream from "effect/Stream"
+import type * as Inspector from "../Inspector.ts"
 import * as Control from "./control.ts"
 import * as History from "./history.ts"
 import * as InspectorInternal from "./inspector.ts"
 import { type Feed, mountOverlay, Pages, type Position } from "./overlay.ts"
 import { fieldNames, isFailure, tagOf } from "./read.ts"
 import * as Remote from "./remote.ts"
+import * as Rules from "./rules.ts"
 import { styles } from "./styles.ts"
 import * as Tools from "./tools.ts"
 import * as WebMcp from "./webmcp.ts"
@@ -49,7 +51,7 @@ interface Attached {
 export interface Options {
   readonly position?: Position | undefined
   readonly size?: number | undefined
-  readonly exclude?: ReadonlyArray<string> | undefined
+  readonly exclude?: ReadonlyArray<string | Inspector.Exclusion> | undefined
   readonly server?: string | undefined
   readonly webMcp?: boolean | WebMcpOptions | undefined
   readonly fields?: ReadonlyArray<string> | undefined
@@ -216,24 +218,34 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
           return
         }
       }
-      const chosen = load(recordingKey, "sessionStorage")
-      const choices = new Map<string, boolean>()
-      const stopped = new Set(options.exclude)
-      const choose = (tag: string, recording: boolean) => {
-        choices.set(tag, recording)
-        if (recording) stopped.delete(tag)
-        else stopped.add(tag)
+      // Choices made at runtime override `exclude` until the tab closes.
+      const choices = new Map<string, readonly [Control.Rule, boolean]>()
+      const stopped = new Map<string, Control.Rule>()
+      const choose = (rule: Control.Rule, recording: boolean) => {
+        const key = Rules.keyOf(rule)
+        choices.set(key, [rule, recording])
+        if (recording) stopped.delete(key)
+        else stopped.set(key, rule)
       }
-      if (typeof chosen === "object" && chosen !== null) {
-        for (const [tag, recording] of Object.entries(chosen)) {
-          if (typeof recording === "boolean") choose(tag, recording)
-        }
+      for (const rule of Rules.normalize(options.exclude)) {
+        stopped.set(Rules.keyOf(rule), rule)
       }
-      const isStopped = InspectorInternal.matchTags(stopped)
-      const notRecording = () => Array.from(stopped)
-      const setRecording = (tag: string, recording: boolean) => {
-        choose(tag, recording)
-        save(recordingKey, Object.fromEntries(choices), "sessionStorage")
+      for (
+        const [rule, recording] of Control.decodeChoices(
+          load(recordingKey, "sessionStorage")
+        )
+      ) if (Rules.isRule(rule)) choose(rule, recording)
+      const isStopped = (entry: Rules.Entry) =>
+        stopped.size > 0 &&
+        Rules.excludes(
+          stopped.values(),
+          entry,
+          (seq) => history.entry(entry.session, seq)
+        )
+      const notRecording = () => Array.from(stopped.values())
+      const setRecording = (rule: Control.Rule, recording: boolean) => {
+        choose(rule, recording)
+        save(recordingKey, Array.from(choices.values()), "sessionStorage")
         changed()
       }
       const unpause: Effect.Effect<void> = Effect.suspend(() => {
@@ -325,12 +337,13 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
           fields,
           notRecording,
           // The raw message's tag: an encoded one may be under another key.
-          stoppable: (session, seq) => {
+          messageTag: (session, seq) => {
             const entry = history.entry(session, seq)
-            const tag = entry?._tag === "Update"
-              ? tagOf(entry.message)
-              : undefined
-            return tag === undefined || stopped.has(tag) ? undefined : tag
+            return entry?._tag === "Update" ? tagOf(entry.message) : undefined
+          },
+          stopped: (session, seq) => {
+            const entry = history.entry(session, seq)
+            return entry !== undefined && isStopped(entry)
           },
           mounted: (session) => roots.has(session),
           pick: Stream.callback<Control.Picked | undefined>((queue) =>
@@ -413,8 +426,8 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
               notify()
             }),
           setOpen: (open) => Effect.sync(() => save(openKey, open)),
-          setRecording: (tag, recording) =>
-            Effect.sync(() => setRecording(tag, recording)),
+          setRecording: (rule, recording) =>
+            Effect.sync(() => setRecording(rule, recording)),
           setPosition: (next) => Effect.sync(() => setPosition(next)),
           highlight: (session, instance) =>
             Effect.sync(() => {
@@ -715,8 +728,8 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         enabled: true,
         record: (entry) =>
           log.record(
-            entry._tag === "Update" && isStopped(entry)
-              ? { ...entry, excluded: true }
+            isStopped(entry)
+              ? { ...entry, excluded: true } as MessageLog.Entry
               : entry
           )
       }

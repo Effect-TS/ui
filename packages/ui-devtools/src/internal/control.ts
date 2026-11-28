@@ -1,12 +1,32 @@
 import * as MessageLog from "@effect/ui/MessageLog"
 import * as Effect from "effect/Effect"
+import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
+
+// What a recording rule matches: every field given must match.
+export const Rule = Schema.Struct({
+  tag: Schema.optionalKey(Schema.String),
+  component: Schema.optionalKey(Schema.String),
+  path: Schema.optionalKey(Schema.String)
+})
+
+export type Rule = typeof Rule.Type
+
+const decodeChoicesOption = Schema.decodeUnknownOption(
+  Schema.Array(Schema.Tuple([Rule, Schema.Boolean]))
+)
+
+// The runtime recording choices a tab saved, oldest first.
+export const decodeChoices = (
+  value: unknown
+): ReadonlyArray<readonly [Rule, boolean]> =>
+  decodeChoicesOption(value).pipe(Option.getOrElse(() => []))
 
 export const Request = Schema.Union([
   Schema.TaggedStruct("Show", { session: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Resume", {}),
   Schema.TaggedStruct("SetRecording", {
-    tag: Schema.String,
+    rule: Rule,
     recording: Schema.Boolean
   }),
   Schema.TaggedStruct("MessageSchema", {
@@ -60,7 +80,7 @@ export const ToServer = Schema.Union([
   Schema.TaggedStruct("State", {
     sessions: Schema.Array(Schema.String),
     paused: Schema.NullOr(Paused),
-    notRecording: Schema.Array(Schema.String),
+    notRecording: Schema.Array(Rule),
     // The last pick of each session.
     picks: Schema.Array(Picked)
   }),

@@ -17,8 +17,8 @@ export interface Controller {
     seq: number
   ) => Effect.Effect<BrowserHost.Painted | undefined>
   readonly resume: Effect.Effect<void>
-  readonly notRecording: () => ReadonlyArray<string>
-  readonly setRecording: (tag: string, recording: boolean) => void
+  readonly notRecording: () => ReadonlyArray<Control.Rule>
+  readonly setRecording: (rule: Control.Rule, recording: boolean) => void
   readonly picks: () => ReadonlyArray<Control.Picked>
   readonly changes: Stream.Stream<void>
 }
@@ -343,7 +343,7 @@ export const makeHandler = (
         return Effect.as(controller.resume, null)
       case "SetRecording":
         return Effect.sync(() => {
-          controller.setRecording(request.tag, request.recording)
+          controller.setRecording(request.rule, request.recording)
           return controller.notRecording()
         })
       case "MessageSchema":

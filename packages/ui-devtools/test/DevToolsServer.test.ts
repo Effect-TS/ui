@@ -375,7 +375,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
 
         assert.notInclude(yield* labels, "UpdatedDraft")
         const [session] = yield* agent.call("list_sessions")
-        assert.deepStrictEqual(session.notRecording, ["UpdatedDraft"])
+        assert.deepStrictEqual(session.notRecording, [{ tag: "UpdatedDraft" }])
 
         assert.deepStrictEqual(
           yield* agent.call("set_recording", {
@@ -526,6 +526,84 @@ describe("DevToolsServer", { concurrent: false }, () => {
         const state = yield* agent.call("get_state", { instance: 1 })
         assert.deepStrictEqual(state.props, { id: "c" })
         assert.strictEqual(state.queries.note[2], "Note c")
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
+    "keeps the query results of a stopped mount that a stopped update without them replaced",
+    () =>
+      Effect.gen(function*() {
+        const { agent, url } = yield* serve()
+        const page = yield* Layer.build(
+          MessageLog.socket(url.replace("http", "ws") + "/log").pipe(
+            Layer.provide(Socket.layerWebSocketConstructorGlobal)
+          )
+        )
+        const log = Context.get(page, MessageLog.MessageLog)
+        const def = Query.defOf(GetNote)
+        const base = (seq: number) => ({
+          seq,
+          at: 0,
+          session: "s",
+          path: "/Note",
+          instance: 1,
+          component: Note,
+          excluded: true
+        })
+        for (
+          const entry of [
+            {
+              _tag: "SessionStarted",
+              seq: 0,
+              at: 0,
+              session: "s",
+              app: "Note"
+            },
+            {
+              _tag: "Mounted",
+              ...base(1),
+              props: { id: "a" },
+              model: {},
+              queries: {
+                note: Query.makeSnapshot(
+                  def,
+                  "note",
+                  { args: { id: "a" }, argsKey: def.argsKey({ id: "a" }) },
+                  AsyncResult.success("Note a", { timestamp: 0 })
+                )
+              },
+              commands: [],
+              events: [],
+              adopted: false
+            },
+            {
+              _tag: "Update",
+              ...base(2),
+              source: { _tag: "Dispatch" },
+              message: { _tag: "Click" },
+              props: { id: "a" },
+              model: {},
+              commands: [],
+              events: [],
+              lists: [],
+              sends: []
+            }
+          ] as ReadonlyArray<MessageLog.Entry>
+        ) log.record(entry)
+
+        // Stopped entries don't move `last`, but they count as instances.
+        yield* agent.call<ReadonlyArray<any>>("list_sessions").pipe(
+          Effect.filterOrFail(([session]) => session?.instances === 1),
+          Effect.retry(Schedule.spaced("10 millis")),
+          Effect.timeout("5 seconds")
+        )
+        const state = yield* agent.call<any>("get_state", { instance: 1 }).pipe(
+          Effect.filterOrFail((state) => state.at === 2),
+          Effect.retry(Schedule.spaced("10 millis")),
+          Effect.timeout("5 seconds")
+        )
+        assert.strictEqual(state.queries.note[2], "Note a")
       }).pipe(Effect.scoped),
     30_000
   )

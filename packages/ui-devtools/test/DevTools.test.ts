@@ -73,6 +73,17 @@ const click = Effect.fnUntraced(function*(element: Element) {
   yield* settle
 })
 
+// Opens the selected entry's Stop recording menu and picks a rule from it.
+const stopRecording = Effect.fnUntraced(function*(
+  root: HTMLElement,
+  label: string
+) {
+  yield* click(root.querySelector(".stop > summary")!)
+  yield* click(
+    HtmlLocator.getByRole(root, "button", { name: "Stop recording " + label })
+  )
+})
+
 const showActive = (root: HTMLElement) =>
   click(
     HtmlLocator.getByRole(root, "button", { name: "Show active instances" })
@@ -308,16 +319,15 @@ describe("DevTools overlay", { concurrent: false }, () => {
         )
         yield* click(move)
         yield* click(root.querySelector(".row-button")!)
-        yield* click(
-          HtmlLocator.getByRole(root, "button", { name: "Stop recording Move" })
-        )
+        yield* stopRecording(root, "Move in Encoded")
         assert.isDefined(
           HtmlLocator.getByRole(root, "button", {
-            name: "Start recording Move"
+            name: "Start recording Move in Encoded"
           })
         )
       }))
       localStorage.clear()
+      sessionStorage.clear()
 
       const PairMoveMessage = UiSchema.TaggedEnum({ Move: {}, Commit: {} })
       const Peer = Html.component({
@@ -393,7 +403,10 @@ describe("DevTools overlay", { concurrent: false }, () => {
           })
         )
         assert.strictEqual(headline(root), "Move")
-        HtmlLocator.getByRole(root, "button", { name: "Stop recording Move" })
+        yield* click(root.querySelector(".stop > summary")!)
+        HtmlLocator.getByRole(root, "button", {
+          name: "Stop recording Move in Peer"
+        })
 
         yield* click(commitB)
         yield* click(commitB)
@@ -476,11 +489,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
         const { app, root, ticks } = yield* session()
         yield* ticks(1)
         yield* click(updates(root, "Ticked")[0]!)
-        yield* click(
-          HtmlLocator.getByRole(root, "button", {
-            name: "Stop recording Ticked"
-          })
-        )
+        yield* stopRecording(root, "Ticked in Clock")
         yield* click(HtmlLocator.getByRole(app, "button", { name: "Click" }))
         yield* ticks(5)
         assert.lengthOf(updates(root, "Clicked"), 1)
@@ -493,6 +502,142 @@ describe("DevTools overlay", { concurrent: false }, () => {
         assert.lengthOf(updates(root, "Ticked"), 0)
       }))
     }))
+
+  it.live("stops recording a tag in one component or a whole subtree, hiding and restoring the rows already held", () =>
+    Effect.gen(function*() {
+      const Tile = Html.component({
+        name: "Tile",
+        props: Schema.Struct({ on: Schema.Boolean }),
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.output.attr("data-tile", "").children(String(h.props.on))
+      })
+      const WallMessage = UiSchema.TaggedEnum({ Ticked: {} })
+      const Wall = Html.component({
+        name: "Wall",
+        model: Schema.Struct({ n: Schema.Number }),
+        message: WallMessage
+      }).make({
+        init: () => ({ n: 0 }),
+        update: { Ticked: ($) => $.evolve({ n: $.model.n + 1 }) },
+        view: (h, model) =>
+          h.div(
+            h.button.on("click", WallMessage.Ticked()).children("Tick wall"),
+            Tile(h, { key: "a", props: { on: model.n % 2 === 1 } }),
+            Tile(h, { key: "b", props: { on: model.n % 2 === 0 } })
+          )
+      })
+      const CounterMessage = UiSchema.TaggedEnum({ Ticked: {}, Clicked: {} })
+      const Counter = Html.component({
+        name: "Counter",
+        model: Schema.Number,
+        message: CounterMessage
+      }).make({
+        init: () => 0,
+        update: {
+          Ticked: ($) => $.model + 1,
+          Clicked: ($) => $.model
+        },
+        view: (h) =>
+          h.div(
+            h.button.on("click", CounterMessage.Ticked()).children(
+              "Tick counter"
+            ),
+            h.button.on("click", CounterMessage.Clicked()).children("Click")
+          )
+      })
+      const App = Html.component({
+        name: "App",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          h.main(
+            Wall(h, { key: "w", props: {} }),
+            Counter(h, { key: "c", props: {} })
+          )
+      })
+      localStorage.clear()
+      sessionStorage.clear()
+      const app = document.body.appendChild(document.createElement("div"))
+      yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+      yield* Layer.build(DevTools.layer({ size: 6 })).pipe(
+        Effect.flatMap((services) =>
+          BrowserHost.mountEffect(App, {}, app).pipe(Effect.provide(services))
+        )
+      )
+      yield* settle
+      const root = overlay()
+      yield* open(root)
+      const press = (name: string, times = 1) =>
+        Effect.forEach(
+          Array.from({ length: times }),
+          () => click(HtmlLocator.getByRole(app, "button", { name })),
+          { discard: true }
+        )
+      const rows = (pattern: RegExp) =>
+        Array.from(root.querySelectorAll(".row")).filter((row) =>
+          pattern.test(text(row))
+        )
+      const select = (pattern: RegExp) =>
+        click(rows(pattern)[0]!.querySelector(".row-button")!)
+
+      yield* press("Tick wall")
+      yield* press("Tick counter")
+      yield* select(/TickedWall/)
+      yield* stopRecording(root, "Ticked in Wall")
+      assert.lengthOf(rows(/TickedWall/), 0)
+      assert.lengthOf(rows(/TickedCounter/), 1)
+
+      // Each stopped tick re-renders both tiles, and neither the tick nor
+      // the PropsChanged it causes takes a slot from the click.
+      yield* press("Click")
+      yield* press("Tick wall", 3)
+      assert.lengthOf(rows(/ClickedCounter/), 1)
+      assert.lengthOf(rows(/TickedCounter/), 1)
+      yield* click(
+        HtmlLocator.getByRole(root, "button", {
+          name: "Start recording Ticked in Wall"
+        })
+      )
+      assert.lengthOf(rows(/TickedWall/), 1)
+
+      yield* select(/TickedWall/)
+      yield* stopRecording(root, "Wall[w] and below")
+      assert.lengthOf(rows(/Wall|Tile/), 0)
+      yield* press("Tick wall", 2)
+      yield* press("Click")
+      assert.lengthOf(rows(/ClickedCounter/), 2)
+      assert.lengthOf(rows(/Wall|Tile/), 0)
+
+      // Time travel paints the wall as it was at an entry from before the stop.
+      yield* select(/TickedCounter/)
+      yield* click(
+        HtmlLocator.getByRole(root, "button", { name: "Time travel" })
+      )
+      assert.deepStrictEqual(
+        Array.from(
+          app.nextElementSibling!.querySelectorAll("[data-tile]"),
+          (tile) => tile.textContent
+        ),
+        ["true", "false"]
+      )
+      assert.deepStrictEqual(
+        Array.from(
+          app.querySelectorAll("[data-tile]"),
+          (tile) => tile.textContent
+        ),
+        ["false", "true"]
+      )
+      yield* click(
+        HtmlLocator.getByRole(root, "button", { name: "Resume the live page" })
+      )
+    }).pipe(Effect.scoped))
 
   it.live("shows the page at an earlier entry beside the live tree, and Resume brings the live tree back", () =>
     Effect.gen(function*() {
