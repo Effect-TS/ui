@@ -1,8 +1,6 @@
 /**
- * Preloaded by `NativeVitest.plugin` in each test worker. It registers Node loader hooks
- * that resolve React Native's platform files and compile its Flow sources
- * to CommonJS, as Metro and Jest do, and sets the globals its modules read
- * as they load.
+ * Installs React Native loader hooks and globals before Vitest starts
+ * in each worker.
  *
  * @internal
  */
@@ -17,7 +15,6 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 const native =
   /[\\/]node_modules[\\/](?:react-native|@react-native[\\/][^\\/]+)[\\/](?!node_modules[\\/])/
 
-// The plugin passes its options in this module's URL.
 const options = new URL(import.meta.url).searchParams
 const platform = options.get("platform") ?? "ios"
 const cache = options.get("cache") ?? undefined
@@ -63,12 +60,12 @@ const compile = (file: string): string => {
     try {
       return Fs.readFileSync(cached, "utf8")
     } catch {
-      // Not compiled yet.
+      // A missing or unreadable cache entry falls back to compilation.
     }
   }
   const code = compilerOf()(Fs.readFileSync(file, "utf8"), file)
   if (cached !== undefined) {
-    // Written aside and renamed, as other workers may read it meanwhile.
+    // Rename atomically so other workers never read a partial file.
     Fs.mkdirSync(cache!, { recursive: true })
     const temp = `${cached}.${process.pid}.${Math.random()}`
     Fs.writeFileSync(temp, code)
@@ -77,7 +74,6 @@ const compile = (file: string): string => {
   return code
 }
 
-// Metro's order: the platform's file, then `.native`, then the plain one.
 const variants = [`.${platform}.js`, ".native.js"]
 const relative = [...variants, ".js", "", "/index.js"]
 

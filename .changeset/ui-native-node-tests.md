@@ -2,4 +2,4 @@
 "@effect/ui-native": patch
 ---
 
-Load the kit in Node tests without mocks: add `NativeVitest.plugin` to `@effect/ui-native/node`, and replace `NativeHost.make`'s `os` and `processColor` options with `device`.
+Add `NativeVitest.plugin()` to load the kit in Node tests without mocking React Native imports. `NativeHost.make` now takes `device` instead of `os` and `processColor`.

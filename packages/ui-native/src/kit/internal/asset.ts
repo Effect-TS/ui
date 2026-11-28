@@ -118,7 +118,7 @@ const resolvePackagerAsset = (
   }
 }
 
-// By device, as the URL depends on it. Asset ids count up from 1.
+// Asset URLs and scales depend on the device. Asset ids count up from 1.
 const caches = new WeakMap<Device, Array<ResolvedAsset | undefined>>()
 
 export const resolveAsset = (

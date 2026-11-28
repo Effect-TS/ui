@@ -1,16 +1,13 @@
 /**
  * Vitest configuration for testing an `@effect/ui-native` app in Node.
  *
- * Some kit modules load React Native's own code: `Css` its style
- * processors, and `Image` its asset registry. Those are Flow sources
- * that Node can't load. {@link plugin} compiles them as Node loads them,
- * as React Native's Jest preset does, so a test imports the kit as the app
- * does, without mocks.
+ * {@link plugin} compiles the React Native Flow sources used by `Css` and
+ * `Image`, so tests can import the kit without mocking React Native imports.
+ * It supports the kit's non-React dependencies, not React Native's React
+ * components.
  *
- * Only React Native's modules without React components load: the ones the
- * kit uses do. The compilers, `flow-remove-types` and `sucrase`, are
- * optional peer dependencies for the app to install. Node 22.15 or later is
- * required.
+ * Requires Node 22.15 or later. Install `flow-remove-types` and `sucrase`
+ * as dev dependencies before using the plugin.
  *
  * @example
  * ```ts
@@ -36,9 +33,9 @@ import { fileURLToPath, pathToFileURL } from "node:url"
  */
 export interface Options {
   /**
-   * Which of React Native's platform files load, which decides, for example,
-   * what `Css.color` returns. `"ios"` by default, as in React Native's Jest
-   * preset. The kit's own platform checks read `Native.Device`'s `os`.
+   * Selects React Native's platform files, affecting values such as
+   * `Css.color("red")`. Defaults to `"ios"`. Does not change the OS
+   * that kit components read from `Native.Device`.
    */
   readonly platform?: "android" | "ios" | undefined
 }
@@ -66,15 +63,15 @@ export interface Plugin {
 }
 
 /**
- * A Vitest plugin that loads React Native's modules in Node.
+ * Returns a Vitest plugin that compiles the kit's React Native dependencies
+ * for Node tests.
  *
  * **Details**
  *
- * React Native is left to Node, which compiles its files through loader
- * hooks. Each test worker installs them with `--import` before Vitest
- * starts, so they apply to the app's own setup files too.
- * `@effect/ui-native` is inlined so Vitest resolves its imports of React
- * Native. Compiled files are cached in
+ * Each test worker installs Node loader hooks before Vitest starts, so
+ * the app's setup files can import the kit too. React Native dependencies
+ * load through Node; `@effect/ui-native` is inlined for Vitest's CommonJS
+ * interop. Compiled files are cached in
  * `node_modules/.cache/@effect/ui-native/vitest` under the project's root.
  * `NativeApp` loads without its Fast Refresh client, which needs Metro.
  *
