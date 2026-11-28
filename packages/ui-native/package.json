@@ -36,6 +36,7 @@
   "imports": {
     "#dev": {
       "production": "./src/internal/devOff.ts",
+      "node": "./src/internal/devOff.ts",
       "default": "./src/internal/devOn.ts"
     }
   },
@@ -72,6 +73,7 @@
     "imports": {
       "#dev": {
         "production": "./dist/internal/devOff.js",
+        "node": "./dist/internal/devOff.js",
         "default": "./dist/internal/devOn.js"
       }
     },

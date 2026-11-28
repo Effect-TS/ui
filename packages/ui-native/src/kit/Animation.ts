@@ -487,13 +487,13 @@ const install = () => {
   commits.add(flush)
 }
 
-const driverOf = (host: Native.ViewHost): Driver | undefined => {
+const driverOf = (host: Native.ViewHost): Driver | null => {
   let d = drivers.get(host)
   if (d === undefined) {
     // Bridgeless iOS registers the module under its TurboModule name.
-    const module: AnimatedModule | undefined =
-      (host.os === "ios" ? host.module("NativeAnimatedTurboModule") : null) ??
-        host.module("NativeAnimatedModule")
+    const module: AnimatedModule | undefined = (host.os === "ios"
+      ? host.device.module("NativeAnimatedTurboModule")
+      : null) ?? host.device.module("NativeAnimatedModule")
     drivers.set(
       host,
       d = module == null ? null : {
@@ -504,13 +504,13 @@ const driverOf = (host: Native.ViewHost): Driver | undefined => {
       }
     )
   }
-  return d ?? undefined
+  return d
 }
 
 const setSpec = (n: NativeNode, value: unknown, host: Native.ViewHost) => {
   const spec = value as Spec | undefined
   const d = driverOf(host)
-  if (d === undefined) {
+  if (d === null) {
     // Without a native driver, the view shows its targets.
     for (const key in plain.get(n)) {
       if (spec?.[key] === undefined) host.set(n, key, undefined)
@@ -557,7 +557,7 @@ const setSpec = (n: NativeNode, value: unknown, host: Native.ViewHost) => {
 
 const setSource = (n: NativeNode, name: unknown, host: Native.ViewHost) => {
   const d = driverOf(host)
-  if (d === undefined) return
+  if (d === null) return
   for (const s of d.sources.values()) if (s.node === n) s.node = undefined
   if (typeof name === "string") sourceOf(d, name).node = n
 }

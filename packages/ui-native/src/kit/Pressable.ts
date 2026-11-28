@@ -132,8 +132,20 @@ export type PressableElement<Msg> = Native.Element<Msg, any, any, any, any>
 // The ripple goes through kit-private props, whose setters process its
 // colour, so the native props given directly stay as written.
 const setRipple =
-  (name: string) => (n: NativeNode, value: any, host: Native.ViewHost) =>
-    host.set(n, name, value && { ...value, color: host.color(value.color) })
+  (name: string) => (n: NativeNode, ripple: any, host: Native.ViewHost) =>
+    host.set(
+      n,
+      name,
+      ripple && {
+        type: "RippleAndroid",
+        color: host.color(ripple.color),
+        borderless: ripple.borderless === true,
+        rippleRadius: ripple.radius,
+        alpha: ripple.alpha ?? null
+      }
+    )
+const background = /* @__PURE__ */ setRipple("nativeBackgroundAndroid")
+const foreground = /* @__PURE__ */ setRipple("nativeForegroundAndroid")
 
 /**
  * Makes an element pressable. Call it with the caller's `h`, then chain
@@ -187,6 +199,8 @@ export const Pressable = <
   } = {}
 ): B => {
   touch.press = press
+  setters.set("ripple:background", background)
+  setters.set("ripple:foreground", foreground)
   const element: any = options.element ?? h.view
   const props = options.props ?? {}
   return element.forward((node: any) => {
@@ -224,21 +238,11 @@ export const Pressable = <
       } satisfies PressOptions
     )
     if (hitSlop !== undefined) out = out.prop("hitSlop", hitSlop)
-    if (!rippled) return out
-    const name = ripple.foreground === true
-      ? "nativeForegroundAndroid"
-      : "nativeBackgroundAndroid"
-    const key = "ripple:" + name
-    if (!setters.has(key)) setters.set(key, setRipple(name))
-    return out.prop(
-      key,
-      {
-        type: "RippleAndroid",
-        color: ripple.color,
-        borderless: ripple.borderless === true,
-        rippleRadius: ripple.radius,
-        alpha: ripple.alpha ?? null
-      }
-    )
+    return rippled
+      ? out.prop(
+        ripple.foreground === true ? "ripple:foreground" : "ripple:background",
+        ripple
+      )
+      : out
   })
 }

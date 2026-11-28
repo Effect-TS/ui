@@ -1,5 +1,5 @@
 import { getAssetByID, type PackagerAsset } from "react-native/asset-registry"
-import type { ViewHost } from "../../Native.ts"
+import type { Device } from "../../Native.ts"
 
 export { getAssetByID }
 
@@ -74,18 +74,18 @@ const localScriptDir = (
   return dir.includes("://") ? dir : `file://${dir}`
 }
 
-const deviceScale = (host: ViewHost): number => {
-  const dims = host.module("DeviceInfo")?.getConstants()?.Dimensions
+const deviceScale = (device: Device): number => {
+  const dims = device.module("DeviceInfo")?.getConstants()?.Dimensions
   return (dims?.window ?? dims?.windowPhysicalPixels)?.scale ?? 1
 }
 
 const resolvePackagerAsset = (
   asset: PackagerAsset,
-  host: ViewHost
+  device: Device
 ): ResolvedAsset => {
-  const os = host.os
-  const scale = pickScale(asset.scales, deviceScale(host))
-  const url: string | null | undefined = host.module("SourceCode")
+  const os = device.os
+  const scale = pickScale(asset.scales, deviceScale(device))
+  const url: string | null | undefined = device.module("SourceCode")
     ?.getConstants()?.scriptURL
   const serverURL = url?.match(/^https?:\/\/.*?\//)?.[0] ?? null
   let uri: string
@@ -118,17 +118,17 @@ const resolvePackagerAsset = (
   }
 }
 
-// By host, as the URL depends on its device. Asset ids count up from 1.
-const caches = new WeakMap<ViewHost, Array<ResolvedAsset | undefined>>()
+// By device, as the URL depends on it. Asset ids count up from 1.
+const caches = new WeakMap<Device, Array<ResolvedAsset | undefined>>()
 
 export const resolveAsset = (
   id: number,
-  host: ViewHost
+  device: Device
 ): ResolvedAsset | undefined => {
-  let cache = caches.get(host)
-  if (cache === undefined) caches.set(host, cache = [])
+  let cache = caches.get(device)
+  if (cache === undefined) caches.set(device, cache = [])
   const cached = cache[id]
   if (cached !== undefined) return cached
   const asset = getAssetByID(id)
-  return asset && (cache[id] = resolvePackagerAsset(asset, host))
+  return asset && (cache[id] = resolvePackagerAsset(asset, device))
 }

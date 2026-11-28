@@ -266,7 +266,7 @@ export const make = (options: Options): {
     ui,
     set: setNative,
     color,
-    module: device.module,
+    device,
     command,
     fire,
     commit,

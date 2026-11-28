@@ -199,18 +199,13 @@ export const touch = (
 
 export const byName = (name: string) => (n: ShadowNode) => n.viewName === name
 
-const noop = () => {}
-
 /**
- * A device for a host: Android, with colours as written and no native
- * modules, unless `device` says otherwise.
+ * A device for a host: `Native.Device`'s default on Android, unless
+ * `device` says otherwise.
  */
 export const device = (device: Partial<Native.Device> = {}): Native.Device => ({
+  ...Native.Device.defaultValue(),
   os: "android",
-  on: () => noop,
-  module: noop,
-  blur: noop,
-  color: (color) => color,
   ...device
 })
 

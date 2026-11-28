@@ -57,8 +57,12 @@ const compile = (file: string): string => {
       .update(`${version}\0${file}\0${mtimeMs}\0${size}`)
       .digest("hex") + ".js"
   )
-  if (cached !== undefined && isFile(cached)) {
-    return Fs.readFileSync(cached, "utf8")
+  if (cached !== undefined) {
+    try {
+      return Fs.readFileSync(cached, "utf8")
+    } catch {
+      // Not compiled yet.
+    }
   }
   const code = compilerOf()(Fs.readFileSync(file, "utf8"), file)
   if (cached !== undefined) {
@@ -71,14 +75,18 @@ const compile = (file: string): string => {
   return code
 }
 
-const variantOf = (url: string): string => {
-  const base = fileURLToPath(url).slice(0, -3)
-  for (const suffix of [platform, "native"]) {
-    const file = `${base}.${suffix}.js`
-    if (isFile(file)) return pathToFileURL(file).href
+// Metro's order: the platform's file, then `.native`, then the plain one.
+const variants = [`.${platform}.js`, ".native.js"]
+const relative = [...variants, ".js", "", "/index.js"]
+
+const pick = (base: string, suffixes: ReadonlyArray<string>) => {
+  for (const suffix of suffixes) {
+    if (isFile(base + suffix)) return pathToFileURL(base + suffix).href
   }
-  return url
 }
+
+const isNative = (url: string) =>
+  url.startsWith("file:") && native.test(url) && url.endsWith(".js")
 
 const install = () => {
   if (typeof Module.registerHooks !== "function") {
@@ -93,48 +101,29 @@ const install = () => {
   Module.registerHooks({
     resolve(specifier, context, next) {
       const parent = context.parentURL
-      // Metro's order for a relative import: the platform's file, then
-      // `.native`, then the plain one.
       if (
         specifier[0] === "." && parent !== undefined && native.test(parent)
       ) {
-        const base = Path.resolve(
-          Path.dirname(fileURLToPath(parent)),
-          specifier
+        const url = pick(
+          Path.resolve(Path.dirname(fileURLToPath(parent)), specifier),
+          relative
         )
-        for (
-          const suffix of [
-            `.${platform}.js`,
-            ".native.js",
-            ".js",
-            "",
-            "/index.js"
-          ]
-        ) {
-          if (isFile(base + suffix)) {
-            return {
-              url: pathToFileURL(base + suffix).href,
-              shortCircuit: true
-            }
-          }
-        }
+        if (url !== undefined) return { url, shortCircuit: true }
       }
       const found = next(specifier, context)
-      return native.test(found.url) && found.url.endsWith(".js")
-        ? { ...found, url: variantOf(found.url) }
-        : found
+      const url = isNative(found.url)
+        ? pick(fileURLToPath(found.url).slice(0, -3), variants)
+        : undefined
+      return url === undefined ? found : { ...found, url }
     },
     load(url, context, next) {
-      if (
-        !url.startsWith("file:") || !native.test(url) || !url.endsWith(".js")
-      ) {
-        return next(url, context)
-      }
-      return {
-        format: "commonjs",
-        source: compile(fileURLToPath(url)),
-        shortCircuit: true
-      }
+      return isNative(url)
+        ? {
+          format: "commonjs",
+          source: compile(fileURLToPath(url)),
+          shortCircuit: true
+        }
+        : next(url, context)
     }
   })
 }

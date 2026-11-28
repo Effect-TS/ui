@@ -234,7 +234,7 @@ const emptyHeaders: Readonly<Record<string, string>> = {}
 
 const normalizeSources = (
   value: unknown,
-  host: Native.ViewHost
+  device: Native.Device
 ): ReadonlyArray<ImageURISource> | undefined => {
   if (value === undefined) return undefined
   const out: Array<ImageURISource> = []
@@ -244,7 +244,7 @@ const normalizeSources = (
     >
   ) {
     const one = typeof source === "number"
-      ? resolveAsset(source, host)
+      ? resolveAsset(source, device)
       : typeof source === "string"
       ? { uri: source }
       : source
@@ -323,7 +323,7 @@ const image = Native.defineView(
         host.set(n, "resizeMode", value ?? "cover"),
       overflow: (n, value, host) => host.set(n, "overflow", value ?? "hidden"),
       source(n, value, host) {
-        const sources = normalizeSources(value, host)
+        const sources = normalizeSources(value, host.device)
         if (same(n.props.source, sources)) return
         host.set(n, "source", sources)
         if (host.os === "android") {

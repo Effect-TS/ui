@@ -164,7 +164,7 @@ export const press: Recognizer = (phase, target, payload) => {
     !(longPressed && n.events?.handlers.longPress !== undefined)
   ) {
     if (options.sound && n.host.os === "android") {
-      n.host.module("SoundManager")?.playTouchSound()
+      n.host.device.module("SoundManager")?.playTouchSound()
     }
     fire(n, "press", { x, y })
   }
