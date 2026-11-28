@@ -13,7 +13,7 @@ import {
   Stream
 } from "effect"
 import type { Duration } from "effect"
-import { AsyncResult } from "effect/reactivity"
+import { AsyncResult, Reactivity } from "effect/reactivity"
 import { TestClock } from "effect/testing"
 
 const Note = Schema.Struct({ id: Schema.String, title: Schema.String })
@@ -52,6 +52,9 @@ interface NoteStream {
 const makeNotes = (options: {
   readonly idleTimeToLive?: Duration.Input
   readonly refetchInterval?: Duration.Input
+  readonly reactivityKeys?: (
+    args: { readonly id: string }
+  ) => Reactivity.KeysInput
 } = {}) => {
   const streams: Array<NoteStream> = []
   class GetNote extends Query.StreamService<GetNote>()(
@@ -291,5 +294,36 @@ describe("Stream queries", () => {
       assert.strictEqual(streams.length, 2)
       assert.isTrue((yield* TestQuery.entry(GetNote, { id: "err" }))?.stale)
     }).pipe(provide)
+  })
+
+  it.effect("reactivityKeys restarts a watched stream and closes an unwatched one", () => {
+    const { GetNote, provide, streams } = makeNotes({
+      reactivityKeys: ({ id }) => [`notes:${id}`]
+    })
+    return Effect.gen(function*() {
+      const watched = yield* watch(GetNote.changes({ id: "1" }))
+      yield* GetNote.prefetch({ id: "2" })
+      yield* flush
+      streams[0].emit("v1")
+      streams[1].emit("u1")
+      yield* flush
+
+      // Watched entry: closes the old stream, marks waiting, and opens a new one.
+      yield* Reactivity.invalidate(["notes:1"])
+      yield* flush
+      assert.isTrue(streams[0].closed)
+      assert.isFalse(streams[1].closed)
+      assert.deepStrictEqual(watched.seen, ["v1", "v1 waiting"])
+      streams[2].emit("v2")
+      yield* flush
+      assert.deepStrictEqual(watched.seen, ["v1", "v1 waiting", "v2"])
+
+      // Unwatched entry: closes and stays closed until asked for again.
+      yield* Reactivity.invalidate(["notes:2"])
+      yield* flush
+      assert.isTrue(streams[1].closed)
+      assert.strictEqual(streams.length, 3)
+      assert.isTrue((yield* TestQuery.entry(GetNote, { id: "2" }))?.stale)
+    }).pipe(provide, Effect.provide(Reactivity.layer))
   })
 })

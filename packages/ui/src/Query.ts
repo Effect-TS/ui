@@ -1300,6 +1300,11 @@ export interface StreamService<
  *   is collected, `idleTimeToLive` after it was last watched or asked for.
  * - `invalidate` closes the stream, waits for its cleanup, and a watched
  *   entry opens a new one.
+ * - `reactivityKeys` has the same effect as calling `invalidate(args)` when a
+ *   matching key is published. Use it for changes the stream can't observe
+ *   (such as a session or filter change); to rerun a read on publication
+ *   instead, return `reactivity.stream(keys, read)` without declaring
+ *   `reactivityKeys`.
  * - A typed failure is stored over the last value and closes the stream.
  *   Completion keeps the last value. Either way nothing reopens the stream
  *   until the entry is asked for again.
@@ -1382,10 +1387,12 @@ export const StreamService: <Self>() => <
       readonly error?: Error | undefined
       readonly idleTimeToLive?: Duration.Input | undefined
       readonly tags?: ReadonlyArray<Tag> | undefined
+      readonly reactivityKeys?:
+        | ((args: Service.ArgsSchema<Args>["Type"]) => Reactivity.KeysInput)
+        | undefined
       readonly staleTime?: never
       readonly refetchInterval?: never
       readonly persist?: never
-      readonly reactivityKeys?: never
     }
 ) => StreamService<
   Self,
@@ -1402,18 +1409,13 @@ export const StreamService: <Self>() => <
     readonly error?: Schema.Top | undefined
     readonly idleTimeToLive?: Duration.Input | undefined
     readonly tags?: ReadonlyArray<Tag> | undefined
+    readonly reactivityKeys?: ((args: any) => Reactivity.KeysInput) | undefined
   }
 ): any =>
   queryClass(makeDef(
     name,
     // Overridden, not left out: an options variable can still hold them.
-    {
-      ...options,
-      staleTime: 0,
-      refetchInterval: undefined,
-      persist: false,
-      reactivityKeys: undefined
-    },
+    { ...options, staleTime: 0, refetchInterval: undefined, persist: false },
     undefined,
     liveOps
   ))
