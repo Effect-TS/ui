@@ -56,7 +56,7 @@ const Counter = Native.component({
           Message.Scrolled({ event: "momentumScrollEnd", y }))
         .on("contentSizeChange", ({ height }) =>
           Message.Scrolled({ event: "contentSizeChange", y: height }))
-        .children(h.text.children("Row")),
+        .children(h.text.on("press", Message.Pressed()).children("Row")),
       h.text.children(`y ${model.y} ${model.events.join(",")}`)
     )
 })
@@ -95,6 +95,25 @@ describe("NativeHost", () => {
     await settle()
     assert.include(printed(), "<RCTText>Count 0</>")
     touch(fabric, label, "topTouchEnd", { pageX: 50, pageY: 59 })
+    await settle()
+    assert.include(printed(), "<RCTText>Count 1</>")
+  })
+
+  it("leaves a press to a scroll view that drags under it or is coasting", async () => {
+    const { fabric, find, printed, settle } = await setup()
+    const row = find(FakeFabric.byText("Row"))
+    const scroll = find(FakeFabric.byName("RCTScrollView"))
+    fabric.emit(row, "topTouchStart", {})
+    fabric.emit(scroll, "topScrollBeginDrag", {})
+    fabric.emit(row, "topTouchEnd", {})
+    fabric.emit(scroll, "topMomentumScrollBegin", {})
+    touch(fabric, row)
+    fabric.emit(scroll, "topMomentumScrollEnd", {})
+    touch(fabric, row)
+    await settle()
+    assert.include(printed(), "<RCTText>Count 0</>")
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    touch(fabric, row)
     await settle()
     assert.include(printed(), "<RCTText>Count 1</>")
   })
@@ -359,10 +378,12 @@ describe("NativeHost", () => {
   })
 
   it("renders a view another module defines, and sends its events only to it", () => {
+    const fired: Array<unknown> = []
     Native.defineView(() => new Native.Element("toggle"), {
       viewName: (_, host) => host.os === "ios" ? "RCTSwitch" : "AndroidSwitch",
       defaults: { enabled: true, thumbTintColor: 0x7fff0000 },
-      props: { checked: (n, value, host) => host.set(n, "value", value) }
+      props: { checked: (n, value, host) => host.set(n, "value", value) },
+      events: { topTouchMove: (_, payload) => fired.push(["hook", payload]) }
     })
     const fabric = FakeFabric.make()
     const { host, root } = NativeHost.make({
@@ -371,7 +392,6 @@ describe("NativeHost", () => {
       os: "ios",
       processColor: (c) => `processed ${c}`
     })
-    const fired: Array<unknown> = []
     const dispatch = (name: string, handler: unknown, payload: unknown) =>
       fired.push([name, handler, payload]) > 0
     const box = host.createElement("view")
@@ -398,7 +418,12 @@ describe("NativeHost", () => {
     assert.strictEqual(shadow().props.thumbTintColor, 0x7fff0000)
 
     fabric.emit(shadow(), "topValueChange", { value: false })
-    assert.deepStrictEqual(fired, [["valueChange", "toggle", { value: false }]])
+    // The touch recognizer doesn't hide touches from a kind's hooks.
+    fabric.emit(shadow(), "topTouchMove", { touches: [] })
+    assert.deepStrictEqual(fired, [
+      ["valueChange", "toggle", { value: false }],
+      ["hook", { touches: [] }]
+    ])
 
     host.setEvents(toggle, {}, dispatch, {})
     host.setProp(toggle, "enabled", false)
@@ -412,7 +437,7 @@ describe("NativeHost", () => {
       value: true
     })
     fabric.emit(shadow(), "topValueChange", { value: true })
-    assert.strictEqual(fired.length, 1)
+    assert.strictEqual(fired.length, 2)
   })
 
   it("hands a wrapped node's layout from one wrapper kind to another", () => {
@@ -639,10 +664,12 @@ describe("NativeHost", () => {
           h.input
             .on("selectionChange", ({ selection }) =>
               record(["selection", selection.start, selection.end]))
-            .on("keyPress", ({ key }) => record(["key", key]))
+            .on("keyPress", ({ key }) =>
+              record(["key", key]))
             .on("contentSizeChange", ({ contentSize }) =>
               record(["size", contentSize.width, contentSize.height]))
-            .on("endEditing", ({ value }) => record(["endEditing", value]))
+            .on("endEditing", ({ value }) =>
+              record(["endEditing", value]))
         )
     })
     const { close, fabric, find, settle } = await FakeFabric.mount(

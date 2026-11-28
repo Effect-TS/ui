@@ -13,7 +13,7 @@ import * as Renderer from "@effect/ui/Renderer"
 import * as View from "@effect/ui/View"
 import * as Context from "effect/Context"
 import { kinds } from "./internal/kinds.ts"
-import type { NativeNode } from "./NativeHost.ts"
+import type { NativeNode, UIManager } from "./NativeHost.ts"
 
 /**
  * A colour as React Native parses it: a CSS colour string or a number.
@@ -1134,6 +1134,8 @@ export const setSelection = (
 export interface ViewHost {
   /** `Platform.OS` of the running app. */
   readonly os: string
+  /** Fabric's UIManager, for calls the host doesn't wrap. */
+  readonly ui: UIManager
   /** Sets a Fabric prop for the next commit, processing `*Color` values. */
   readonly set: (node: NativeNode, name: string, value: unknown) => void
   /** Converts a colour for Fabric, for colours nested inside a prop. */
@@ -1146,6 +1148,8 @@ export interface ViewHost {
   ) => void
   /** Dispatches `event` to the node's own handler, if bound. */
   readonly fire: (node: NativeNode, event: string, payload: unknown) => void
+  /** Commits the surface's changes now, outside a render. */
+  readonly commit: () => void
 }
 
 /**
