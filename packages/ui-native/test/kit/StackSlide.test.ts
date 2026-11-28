@@ -1,3 +1,4 @@
+import * as Animation from "@effect/ui-native/kit/Animation"
 import { Pressable } from "@effect/ui-native/kit/Pressable"
 import { Stack } from "@effect/ui-native/kit/Stack"
 import * as StackSlide from "@effect/ui-native/kit/StackSlide"
@@ -62,42 +63,50 @@ const AppMessage = UiSchema.TaggedEnum({
   Navigated: { navigation: NativeRouter.Navigation(AppRoute) }
 })
 
-const App = Native.component({
-  name: "App",
-  props: Schema.Struct({ stack: NativeRouter.Stack(AppRoute) }),
-  model: NativeRouter.Stack(AppRoute),
-  message: AppMessage
-}).make({
-  init: ($) => $.props.stack,
-  update: {
-    Navigated: ($, { navigation }) =>
-      $.set(NativeRouter.follow(AppRoute, $.model, navigation))
-  },
-  subscriptions: ({ model }) => [
-    NativeRouter.subscription(
-      AppRoute,
-      model,
-      (navigation) => AppMessage.Navigated({ navigation })
-    )
-  ],
-  view: (h, stack) =>
-    Stack(h, {
-      entries: stack,
-      screen: (s, { route }) =>
-        AppRoute.match(route, {
-          Home: () => s.text("home"),
-          Person: ({ params }) =>
-            Person(s, { key: "person", props: { id: params.id } })
-        }),
-      transition: StackSlide.slide({ swipeBack: StackSwipe.swipeBack() })
-    })
-})
+const makeApp = (
+  transition: ReturnType<typeof StackSlide.slide<Router.Router>>
+) =>
+  Native.component({
+    name: "App",
+    props: Schema.Struct({ stack: NativeRouter.Stack(AppRoute) }),
+    model: NativeRouter.Stack(AppRoute),
+    message: AppMessage
+  }).make({
+    init: ($) => $.props.stack,
+    update: {
+      Navigated: ($, { navigation }) =>
+        $.set(NativeRouter.follow(AppRoute, $.model, navigation))
+    },
+    subscriptions: ({ model }) => [
+      NativeRouter.subscription(
+        AppRoute,
+        model,
+        (navigation) => AppMessage.Navigated({ navigation })
+      )
+    ],
+    view: (h, stack) =>
+      Stack(h, {
+        entries: stack,
+        screen: (s, { route }) =>
+          AppRoute.match(route, {
+            Home: () => s.text("home"),
+            Person: ({ params }) =>
+              Person(s, { key: "person", props: { id: params.id } })
+          }),
+        transition
+      })
+  })
+
+const App = makeApp(StackSlide.slide({ swipeBack: StackSwipe.swipeBack() }))
 
 const idle = async () => {
   for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0))
 }
 
-const start = async (os = "ios") => {
+const start = async (
+  os = "ios",
+  options?: { readonly app?: typeof App; readonly measured?: boolean }
+) => {
   let router: Router.Router | undefined
   const fake = FakeDevice.make(os, {})
   const mounted = await FakeFabric.mount(
@@ -109,7 +118,7 @@ const start = async (os = "ios") => {
         router = Context.get(context, Router.Router)
         return yield* Effect.flatMap(
           NativeRouter.props(AppRoute),
-          (props) => Renderer.mount(App, props, container)
+          (props) => Renderer.mount(options?.app ?? App, props, container)
         ).pipe(Effect.provide(context))
       }).pipe(Effect.provideService(Native.Device, fake.device)),
     undefined,
@@ -117,10 +126,13 @@ const start = async (os = "ios") => {
   )
   const { fabric, find } = mounted
   const stack = () => find((n) => n.props.overflow === "hidden")
-  fabric.emit(stack(), "topLayout", {
-    layout: { x: 0, y: 0, width: 300, height: 600 }
-  })
-  await idle()
+  const measure = async () => {
+    fabric.emit(stack(), "topLayout", {
+      layout: { x: 0, y: 0, width: 300, height: 600 }
+    })
+    await idle()
+  }
+  if (options?.measured !== false) await measure()
   // Each screen's translateX and opacity, bottom first.
   const screens = () =>
     stack().children.map((n) => {
@@ -157,7 +169,16 @@ const start = async (os = "ios") => {
     animated.finish()
     await idle()
   }
-  return { ...mounted, router: router!, screens, swipe, run, finish }
+  return {
+    ...mounted,
+    router: router!,
+    stack,
+    measure,
+    screens,
+    swipe,
+    run,
+    finish
+  }
 }
 
 // A runtime recognizes one touch at a time, so the tests take turns.
@@ -190,6 +211,48 @@ describe("StackSlide", { concurrent: false }, () => {
     assert.strictEqual(app.router.location().index, 0)
     await app.finish()
     assert.deepStrictEqual(app.screens(), [[0, 1]])
+    await app.close()
+  })
+
+  it("goes back only on the surface that was swiped", async () => {
+    const a = await start()
+    const b = await start()
+    await a.run(a.router.navigate("/people/1"))
+    await a.finish()
+    await b.run(b.router.navigate("/people/1"))
+    await b.finish()
+    await a.swipe(10, [60, 210])
+    assert.deepStrictEqual(
+      [a.router.location().index, b.router.location().index],
+      [0, 1]
+    )
+    await a.close()
+    await b.close()
+  })
+
+  it("takes a second swipe after an immediate spring back", async () => {
+    const app = await start("ios", {
+      app: makeApp(StackSlide.slide({
+        transition: Animation.immediate,
+        swipeBack: StackSwipe.swipeBack()
+      }))
+    })
+    await app.run(app.router.navigate("/people/1"))
+    await app.swipe(10, [60, 110])
+    assert.strictEqual(app.router.location().index, 1)
+    await app.swipe(10, [60, 210])
+    assert.strictEqual(app.router.location().index, 0)
+    await app.close()
+  })
+
+  it("drops a screen popped before the stack is measured", async () => {
+    const app = await start("ios", { measured: false })
+    await app.run(app.router.navigate("/people/1"))
+    await app.run(app.router.navigate("/people/2"))
+    await app.run(app.router.back)
+    await app.measure()
+    await app.finish()
+    assert.deepStrictEqual(app.screens(), [[-90, 0], [0, 1]])
     await app.close()
   })
 

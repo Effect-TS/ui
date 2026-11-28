@@ -88,13 +88,22 @@ const Message = UiSchema.TaggedEnum({
   Measured: { width: Schema.Number },
   Drew: {},
   Ended: { id: Schema.Number },
-  Started: {}
+  Started: {},
+  Scoped: { scope: Schema.String }
 })
 
+let scopes = 0
+
+// Names the stack's screens apart from another mounted copy's, whose
+// `h.id`s are the same, then reports each draw.
 const Drawn = Mount.makeStream(
   "StackSlide",
   { args: { ids: Schema.String } },
-  (_node, _args, changes) => Stream.map(changes, () => Message.Drew())
+  (_node, _args, changes) =>
+    Stream.concat(
+      Stream.succeed(Message.Scoped({ scope: String(scopes += 1) })),
+      Stream.map(changes, () => Message.Drew())
+    )
 )
 
 const fill = {
@@ -128,20 +137,31 @@ const Slide = Native.component({
     // The entries drawn at the last render, popped ones included.
     shown: Schema.Array(EntrySchema),
     // The top screen has arrived.
-    settled: Schema.Boolean
+    settled: Schema.Boolean,
+    // Unique to this mounted stack, once it is mounted.
+    scope: Schema.String
   }),
   message: Message,
   restore: false
 }).make({
-  init: ($) => ({ width: 0, shown: $.props.entries, settled: true }),
+  init: ($) => ({
+    width: 0,
+    shown: $.props.entries,
+    settled: true,
+    scope: ""
+  }),
   update: {
     Measured: ($, { width }) => $.evolve({ width: () => width }),
     Drew: ($) => {
       const { entries } = $.props
       const top = entries[entries.length - 1]
       const fresh = !$.model.shown.some((e) => e.id === top?.id)
+      // With no width, a popped screen isn't drawn, so it has no slide to end.
       return $.evolve({
-        shown: () => [...entries, ...leavingOf(entries, $.model.shown)],
+        shown: () =>
+          $.model.width === 0
+            ? entries
+            : [...entries, ...leavingOf(entries, $.model.shown)],
         settled: (settled) => $.model.width === 0 || (settled && !fresh)
       })
     },
@@ -154,7 +174,8 @@ const Slide = Native.component({
         ? $.evolve({ settled: () => true })
         : $.model
     },
-    Started: ($) => $.evolve({ settled: () => false })
+    Started: ($) => $.evolve({ settled: () => false }),
+    Scoped: ($, { scope }) => $.evolve({ scope: () => scope })
   },
   view: (h, model) => {
     const { draw, entries } = h.props
@@ -165,7 +186,8 @@ const Slide = Native.component({
     const leaving = width === 0 ? [] : leavingOf(entries, model.shown)
     const fresh = !model.shown.some((e) => e.id === entries[top]?.id)
     const moving = !model.settled || fresh || leaving.length > 0
-    const name = (entry: Entry | undefined) => h.id(String(entry?.id ?? "none"))
+    const { scope } = model
+    const name = (entry: Entry | undefined) => h.id(scope, entry?.id ?? "none")
     const screen = (entry: Entry, index: number, gone: boolean) => {
       const x = gone ? width : index === top ? 0 : under * width
       const shown = gone || index === top || (index === top - 1 && moving)
@@ -191,7 +213,10 @@ const Slide = Native.component({
             }
           })
         )
-      if (swipe === undefined || gone || index !== top || top === 0) {
+      if (
+        swipe === undefined || gone || index !== top || top === 0 ||
+        scope === ""
+      ) {
         return element
       }
       const below = name(entries[top - 1])

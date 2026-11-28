@@ -385,7 +385,9 @@ export const source: {
 
 /**
  * Names the element, so `set` can move it without a render. Make the name
- * with `h.id`.
+ * with `h.id`. A name is shared by every surface, and two mounted copies of
+ * a component make the same `h.id`s, so a component that can be mounted
+ * twice adds something unique to each copy.
  *
  * @stability experimental
  * @category combinators
@@ -452,6 +454,8 @@ export const set = (
     m.setAnimatedNodeValue(t.tag, value as number)
   })
   finish(n.host)
+  // An immediate transition has arrived once every value is set.
+  if (transition !== undefined && idle(e)) settle(e)
 }
 
 type Transforms = NonNullable<Style["transform"]>
