@@ -92,7 +92,13 @@ export default defineConfig({
         test: { execArgv: ffi }
       }),
       ...project("@effect/ui-native", "packages/ui-native", true, {
-        plugins: [NativeVitest.plugin()]
+        plugins: [NativeVitest.plugin()],
+        // A setup file loading the kit, in order, checks that the plugin's
+        // hooks are installed before any setup file runs.
+        test: {
+          setupFiles: ["test/utils/setup.ts"],
+          sequence: { setupFiles: "list" }
+        }
       }),
       ...example("auth"),
       ...example("canvas-art"),

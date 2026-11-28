@@ -1,5 +1,5 @@
 /**
- * The setup file of `NativeVitest.plugin`. It registers Node loader hooks
+ * Preloaded by `NativeVitest.plugin` in each test worker. It registers Node loader hooks
  * that resolve React Native's platform files and compile its Flow sources
  * to CommonJS, as Metro and Jest do, and sets the globals its modules read
  * as they load.
@@ -17,8 +17,10 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 const native =
   /[\\/]node_modules[\\/](?:react-native|@react-native[\\/][^\\/]+)[\\/](?!node_modules[\\/])/
 
-const platform = process.env.EFFECT_UI_NATIVE_PLATFORM ?? "ios"
-const cache = process.env.EFFECT_UI_NATIVE_CACHE
+// The plugin passes its options in this module's URL.
+const options = new URL(import.meta.url).searchParams
+const platform = options.get("platform") ?? "ios"
+const cache = options.get("cache") ?? undefined
 // Bump when the compiled output changes.
 const version = "1"
 
@@ -128,9 +130,4 @@ const install = () => {
   })
 }
 
-// Setup files run before each test file, in workers that may be reused.
-const installed = Symbol.for("@effect/ui-native/NativeVitest")
-if ((globalThis as any)[installed] !== true) {
-  ;(globalThis as any)[installed] = true
-  install()
-}
+install()

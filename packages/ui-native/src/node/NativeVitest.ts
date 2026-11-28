@@ -25,7 +25,7 @@
  * @since 0.1.0
  */
 import * as Path from "node:path"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 
 /**
  * Options accepted by {@link plugin}.
@@ -54,8 +54,7 @@ export interface Plugin {
   readonly name: string
   readonly config: (config: { readonly root?: string | undefined }) => {
     readonly test: {
-      readonly setupFiles: Array<string>
-      readonly env: Record<string, string>
+      readonly execArgv: Array<string>
       readonly server: {
         readonly deps: {
           readonly external: Array<RegExp>
@@ -72,8 +71,10 @@ export interface Plugin {
  * **Details**
  *
  * React Native is left to Node, which compiles its files through loader
- * hooks, and `@effect/ui-native` is inlined so Vitest resolves its imports
- * of them. Compiled files are cached in
+ * hooks. Each test worker installs them with `--import` before Vitest
+ * starts, so they apply to the app's own setup files too.
+ * `@effect/ui-native` is inlined so Vitest resolves its imports of React
+ * Native. Compiled files are cached in
  * `node_modules/.cache/@effect/ui-native/vitest` under the project's root.
  * `NativeApp` loads without its Fast Refresh client, which needs Metro.
  *
@@ -85,14 +86,16 @@ export const plugin = (options?: Options | undefined): Plugin => ({
   name: "@effect/ui-native/vitest",
   config: (config) => ({
     test: {
-      setupFiles: [setup],
-      env: {
-        EFFECT_UI_NATIVE_PLATFORM: options?.platform ?? "ios",
-        EFFECT_UI_NATIVE_CACHE: Path.resolve(
-          config.root ?? "",
-          "node_modules/.cache/@effect/ui-native/vitest"
-        )
-      },
+      execArgv: [
+        "--import",
+        `${loader}?${new URLSearchParams({
+          platform: options?.platform ?? "ios",
+          cache: Path.resolve(
+            config.root ?? "",
+            "node_modules/.cache/@effect/ui-native/vitest"
+          )
+        })}`
+      ],
       server: {
         deps: {
           external: [
@@ -106,7 +109,6 @@ export const plugin = (options?: Options | undefined): Plugin => ({
 })
 
 const self = fileURLToPath(import.meta.url)
-const setup = Path.join(
-  Path.dirname(self),
-  "internal/vitest" + Path.extname(self)
-)
+const loader = pathToFileURL(
+  Path.join(Path.dirname(self), "internal/vitest" + Path.extname(self))
+).href
