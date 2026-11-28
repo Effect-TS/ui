@@ -220,11 +220,11 @@ describe("Image and ImageBackground", () => {
       os: string,
       scriptURL: string | null,
       dimensions: Record<string, unknown>,
-      asset: PackagerAsset
+      asset: PackagerAsset | number
     ) => {
       state.scriptURL = scriptURL
       state.dimensions = dimensions
-      const id = registerAsset(asset)
+      const id = typeof asset === "number" ? asset : registerAsset(asset)
       const fabric = FakeFabric.make()
       const { host, root } = NativeHost.make({
         ui: fabric.ui,
@@ -327,6 +327,24 @@ describe("Image and ImageBackground", () => {
         }
       ).uri,
       "src_vec"
+    )
+
+    // One asset on two hosts resolves for each host's device.
+    const shared = registerAsset({
+      httpServerLocation: "/assets",
+      width: 8,
+      height: 8,
+      scales: [1],
+      hash: "h5",
+      name: "shared",
+      type: "png"
+    })
+    const apk = "assets://index.android.bundle"
+    const scale = { window: { scale: 1 } }
+    assert.strictEqual(resolve("android", apk, scale, shared).uri, "shared")
+    assert.strictEqual(
+      resolve("ios", null, scale, shared).uri,
+      "file://assets/shared.png"
     )
   })
 

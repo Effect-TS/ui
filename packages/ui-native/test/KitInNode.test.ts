@@ -61,11 +61,6 @@ describe("the kit in Node", () => {
         width: 24,
         height: 16
       })
-      // The host processes the ripple's colour, so the view holds it as written.
-      assert.deepInclude(
-        scene.get(Locator.tag("view")).props?.nativeBackgroundAndroid,
-        { color: "red" }
-      )
       const open = Linking.Open.make({ url: "https://effect.website" })
       scene.fire(Locator.tag("view"), "press", { x: 0, y: 0 })
         .expectExact(open)

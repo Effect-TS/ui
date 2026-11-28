@@ -15,6 +15,9 @@ const device = {
       : undefined
 }
 
+// A native prop given directly, which a Pressable's ripple leaves alone.
+const raw = { type: "RippleAndroid", color: 0xffff0000 }
+
 const Message = UiSchema.TaggedEnum({ Got: { event: Schema.String } })
 const got = (event: string) => Message.Got({ event })
 
@@ -48,7 +51,8 @@ const Rows = Native.component({
       Pressable(h, {
         onPress: got("disabled"),
         props: { disabled: true }
-      }).children(h.text("Off"))
+      }).children(h.text("Off")),
+      h.view.prop("testID", "raw").prop("nativeBackgroundAndroid", raw)
     )
 })
 
@@ -89,6 +93,10 @@ describe("Pressable", { concurrent: false }, () => {
       rippleRadius: undefined,
       alpha: null
     })
+    assert.deepStrictEqual(
+      find((n) => n.props.testID === "raw").props.nativeBackgroundAndroid,
+      raw
+    )
     assert.deepStrictEqual(fabric.commands, [
       [row().tag, "hotspotUpdate", [10, 10]],
       [row().tag, "setPressed", [true]],

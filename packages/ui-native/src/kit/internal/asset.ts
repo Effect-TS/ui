@@ -118,13 +118,15 @@ const resolvePackagerAsset = (
   }
 }
 
-// Asset ids count up from 1.
-const cache: Array<ResolvedAsset | undefined> = []
+// By host, as the URL depends on its device. Asset ids count up from 1.
+const caches = new WeakMap<ViewHost, Array<ResolvedAsset | undefined>>()
 
 export const resolveAsset = (
   id: number,
   host: ViewHost
 ): ResolvedAsset | undefined => {
+  let cache = caches.get(host)
+  if (cache === undefined) caches.set(host, cache = [])
   const cached = cache[id]
   if (cached !== undefined) return cached
   const asset = getAssetByID(id)

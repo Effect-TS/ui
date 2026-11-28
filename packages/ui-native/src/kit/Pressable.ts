@@ -129,12 +129,11 @@ export interface PressableProps {
  */
 export type PressableElement<Msg> = Native.Element<Msg, any, any, any, any>
 
-// The host processes the ripple's colour, so the element holds it as written.
+// The ripple goes through kit-private props, whose setters process its
+// colour, so the native props given directly stay as written.
 const setRipple =
   (name: string) => (n: NativeNode, value: any, host: Native.ViewHost) =>
     host.set(n, name, value && { ...value, color: host.color(value.color) })
-const background = setRipple("nativeBackgroundAndroid")
-const foreground = setRipple("nativeForegroundAndroid")
 
 /**
  * Makes an element pressable. Call it with the caller's `h`, then chain
@@ -226,12 +225,13 @@ export const Pressable = <
     )
     if (hitSlop !== undefined) out = out.prop("hitSlop", hitSlop)
     if (!rippled) return out
-    setters.set("nativeBackgroundAndroid", background)
-    setters.set("nativeForegroundAndroid", foreground)
+    const name = ripple.foreground === true
+      ? "nativeForegroundAndroid"
+      : "nativeBackgroundAndroid"
+    const key = "ripple:" + name
+    if (!setters.has(key)) setters.set(key, setRipple(name))
     return out.prop(
-      ripple.foreground === true
-        ? "nativeForegroundAndroid"
-        : "nativeBackgroundAndroid",
+      key,
       {
         type: "RippleAndroid",
         color: ripple.color,

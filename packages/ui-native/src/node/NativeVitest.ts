@@ -90,7 +90,10 @@ export const plugin = (options?: Options | undefined): Plugin => ({
   name: "@effect/ui-native/vitest",
   enforce: "pre",
   resolveId: (source, importer) =>
-    source === "#dev" && importer?.startsWith(root) ? devOff : undefined,
+    source === "#dev" && importer !== undefined &&
+      slashed(importer).startsWith(root + "/")
+      ? devOff
+      : undefined,
   config: (config) => ({
     test: {
       setupFiles: [setup],
@@ -116,5 +119,8 @@ export const plugin = (options?: Options | undefined): Plugin => ({
 const self = fileURLToPath(import.meta.url)
 const extension = Path.extname(self)
 const setup = Path.join(Path.dirname(self), "internal/vitest" + extension)
-const root = Path.dirname(Path.dirname(self)) + Path.sep
-const devOff = Path.join(root, "internal/devOff" + extension)
+const dist = Path.dirname(Path.dirname(self))
+const devOff = Path.join(dist, "internal/devOff" + extension)
+// Vite's ids use `/` on Windows too.
+const slashed = (path: string) => path.replaceAll("\\", "/")
+const root = slashed(dist)
