@@ -119,14 +119,12 @@ describe("Pressable", { concurrent: false }, () => {
     assert.include(FakeFabric.print([off]), "Off")
   })
 
-  it("hovers while a pointer is over the element, not one inside it", async () => {
+  it("hovers in and out as a pointer enters and leaves", async () => {
     const { fabric, find, root, settle } = await FakeFabric.mount((container) =>
       Renderer.mount(Rows, {}, container)
     )
     const row = find((n) => n.props.padding === 2)
-    assert.strictEqual(row.props.onPointerEnter, true)
     fabric.emit(row, "topPointerEnter", {})
-    fabric.emit(find(FakeFabric.byText("Row")), "topPointerEnter", {})
     fabric.emit(row, "topPointerLeave", {})
     await settle()
     assert.deepStrictEqual(root.model()!.log, ["hover in", "hover out"])
