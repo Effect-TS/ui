@@ -5021,19 +5021,27 @@ const buildCache = (
 
   const now = (): number => clock.currentTimeMillisUnsafe()
   const runFork = Effect.runForkWith(context)
-  /** A fetch's span: named after the query, it parents the spans the fetcher opens. */
+  /**
+   * A fetch's span: named after the query, it parents the spans the fetcher opens. It continues
+   * `parent`, or the caller's span for `"caller"`. Otherwise the fetch starts its own trace: the
+   * cache's context is the mount's, stale for a later fetch. A server cache lives for one request,
+   * so its fetches stay under the request's span.
+   */
   const traced = <A, E>(
     def: QueryDef,
     trigger: Trigger,
     body: () => Effect.Effect<A, E>,
-    parent?: queryCore.SpanContext | undefined
+    parent?: queryCore.SpanContext | "caller" | undefined
   ): Effect.Effect<A, E> =>
     Effect.useSpan(
       def.name,
-      {
-        attributes: { trigger },
-        parent: parent && Tracer.externalSpan(parent)
-      },
+      parent === "caller"
+        ? { attributes: { trigger } }
+        : {
+          attributes: { trigger },
+          parent: parent && Tracer.externalSpan(parent),
+          root: !settleOnce
+        },
       (span) => Effect.provideService(body(), Tracer.ParentSpan, span)
     )
   /** Runs `f` one scheduler step later. */
@@ -6207,7 +6215,7 @@ const buildCache = (
                 ? 1
                 : Math.max(list.ops.heldPages(existing).length, 1),
               (page, cursor) => event({ page, cursor })
-            ))
+            ), "caller")
       }
       const entry = ensureEntry(registered, args, argsKey)
       const result = entry.result

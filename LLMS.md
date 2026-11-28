@@ -368,13 +368,15 @@ $.run(
 `Command.SpanContext` is the Schema for the Model field. No span or fiber
 stays open while the user decides, so the trace shows the wait as a gap
 between the two runs. A Command without `withParentSpan` starts its own
-trace, even when it is issued while handling another Command's result.
+trace, even when it is issued while handling another Command's result or
+the app runs under a span.
 
 Refetches caused by a run's `invalidates`, or by `Query.invalidate` inside
 its work, are children of the run's span. When several runs invalidate one
 entry before it refetches, the refetch is a child of the latest one. A fetch
-nothing invalidated, such as a stream query reopened by an invalidation,
-starts its own trace. In the message log, `CommandStarted` and
+nothing invalidated, such as a watch or a stream query reopened by an
+invalidation, starts its own trace. On the server, fetches stay under the
+request's span. In the message log, `CommandStarted` and
 `FetchStarted` carry the parent span id.
 
 ### Changing the Model

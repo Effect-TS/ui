@@ -115,6 +115,8 @@ export interface Ack<Msg> {
   readonly mounts: ReadonlyArray<LiveMount>
   /** The view `mounts` were taken from, `undefined` before the first render or after `given`. */
   readonly tree: View.Node<any, any> | undefined
+  /** How many Commands were issued since `init` or `given`: numbers each run's span, so a story's spans are deterministic. */
+  readonly spanSeq: number
 }
 
 /**
@@ -143,7 +145,8 @@ export const noAck: Ack<never> = {
   ignored: false,
   acted: false,
   mounts: [],
-  tree: undefined
+  tree: undefined,
+  spanSeq: 0
 }
 
 /** @internal */
@@ -1457,8 +1460,13 @@ export const apply = <Props, Model, Msg, Events>(
           command,
           status: decision.action === "start" ? "running" : "queued"
         }
+        const spanSeq = out.ack.spanSeq + 1
         livePatches.set(entry, registeredPatches(out, command))
-        out = update(out, { pending: [...out.pending, entry] })
+        spans.set(entry, makeSpan(command, spanSeq))
+        out = update(out, {
+          pending: [...out.pending, entry],
+          ack: { ...out.ack, spanSeq }
+        })
         if (entry.status === "queued") out = startNext(out, entry)
         break
       }
@@ -1492,6 +1500,7 @@ const startNext = <Props, Model, Msg, Events>(
   if (next === undefined) return story
   const running: Pending<Msg> = { command: next.command, status: "running" }
   livePatches.set(running, livePatches.get(next) ?? [])
+  carrySpan(next, running)
   return update(story, {
     pending: story.pending.map((other) => other === next ? running : other),
     ack: carryKept(story.ack, new Map([[next, running]]))
@@ -1520,6 +1529,7 @@ export const exited = <Props, Model, Msg, Events>(
       message: held.message,
       awaiting: held.awaiting
     }
+  if (awaiting !== undefined) carrySpan(entry, awaiting)
   const pending = story.pending.flatMap((other) =>
     other !== entry ? [other] : awaiting === undefined ? [] : [awaiting]
   )
@@ -1568,6 +1578,7 @@ export const settleWaits = <Props, Model, Msg, Events>(
       ...entry,
       awaiting: entry.awaiting.filter((awaited) => !settled(awaited))
     }
+    carrySpan(entry, rest)
     out = update(out, {
       pending: out.pending.map((other) => other === entry ? rest : other),
       ack: carryKept(out.ack, new Map([[entry, rest]]))
@@ -2445,31 +2456,34 @@ export const acknowledgeSent = <Props, Model, Msg, Events>(
   return update(story, { sent: story.sent.slice(1) })
 }
 
+/** Each run's span, from when it was issued: its stream elements and its settle all read it. */
+const spans = new WeakMap<Pending<any>, Command.SpanContext>()
+
+const carrySpan = (from: Pending<any>, to: Pending<any>): void => {
+  const span = spans.get(from)
+  if (span !== undefined) spans.set(to, span)
+}
+
 const hex = (n: number, width: number): string =>
   n.toString(16).padStart(width, "0")
 
-const rootSpan: Command.SpanContext = {
-  traceId: hex(1, 32),
-  spanId: hex(1, 16),
-  sampled: true
-}
+/** The `seq`th run's span: in its parent's trace when it continues one, else in a trace of its own. */
+const makeSpan = (
+  command: Pending<any>["command"],
+  seq: number
+): Command.SpanContext => ({
+  traceId: command.parentSpan?.traceId ?? hex(seq, 32),
+  spanId: hex(seq, 16),
+  sampled: command.parentSpan?.sampled ?? true
+})
 
 /**
- * A story run's span: a fixed root, or the next span id in its parent's
- * trace, so the spans a story hands its mappings are deterministic.
+ * The span a pending run's mappings receive.
  *
  * @internal
  */
-export const spanOf = (
-  command: Pending<any>["command"]
-): Command.SpanContext => {
-  const parent = command.parentSpan
-  return parent === undefined ? rootSpan : {
-    traceId: parent.traceId,
-    spanId: hex(parseInt(parent.spanId.slice(-8), 16) + 1, 16),
-    sampled: parent.sampled
-  }
-}
+export const spanOf = (entry: Pending<any>): Command.SpanContext =>
+  spans.get(entry) ?? makeSpan(entry.command, 0)
 
 // Pending Commands are stored with their Source erased; `findRunning` matched `target`, so
 // `result` is the Source of this entry's Command.
@@ -2478,14 +2492,14 @@ export const resolveWith = (entry: Pending<any>, result: unknown): any =>
   (entry.command.resolve as (
     result: unknown,
     span: Command.SpanContext
-  ) => unknown)(result, spanOf(entry.command))
+  ) => unknown)(result, spanOf(entry))
 
 /** @internal */
 export const failWith = (entry: Pending<any>, error: unknown): any =>
   (entry.command.reject as (
     error: unknown,
     span: Command.SpanContext
-  ) => unknown)(error, spanOf(entry.command))
+  ) => unknown)(error, spanOf(entry))
 
 /** @internal */
 export const findStream = (

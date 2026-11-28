@@ -210,7 +210,12 @@ class Runs implements Kernel.Runs {
     const parentSpan = command.parentSpan
     const program = Effect.useSpan(
       command.name,
-      { attributes, parent: parentSpan && Tracer.externalSpan(parentSpan) },
+      // Without a parent the run starts its own trace: the runtime's span is the mount's, stale for a click.
+      {
+        attributes,
+        parent: parentSpan && Tracer.externalSpan(parentSpan),
+        root: true
+      },
       (span): Effect.Effect<unknown, unknown, any> => {
         if (run.done || inst.closed) return Effect.interrupt
         const spanContext = queryCore.spanContextOf(span)
@@ -224,9 +229,9 @@ class Runs implements Kernel.Runs {
               issued: run.issued,
               spanId: span.spanId,
               traceId: span.traceId,
-              ...(parentSpan === undefined
-                ? undefined
-                : { parentSpanId: parentSpan.spanId })
+              ...(Option.isSome(span.parent)
+                ? { parentSpanId: span.parent.value.spanId }
+                : undefined)
             })
           )
         }

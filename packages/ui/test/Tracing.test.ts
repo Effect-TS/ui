@@ -94,6 +94,7 @@ const Checkout = Component.define({
 
 describe("tracing", () => {
   it.effect("continues a preflight's trace through confirmation, refetches and the server", () => {
+    // The app runs under a span, which no click or watch fetch inherits.
     const spans: Array<Tracer.Span> = []
     return Effect.gen(function*() {
       const tracer = yield* Effect.tracer
@@ -101,12 +102,21 @@ describe("tracing", () => {
         const root = yield* TestHost.mount(Checkout, {})
         yield* TestHost.settle
         const watched = spans.length
+        const app = spans[0]
+        assert.deepStrictEqual(
+          spans.filter((span) => Option.isNone(span.parent)).map((span) =>
+            span.name
+          ),
+          ["app", "shop/GetCart", "shop/GetStock"]
+        )
         root.send(Message.Check())
         yield* TestHost.settle
         const preflight = spans[watched]
         assert.strictEqual(preflight.name, "shop/Preflight")
         // Nothing stays open while the dialog waits.
-        assert.isTrue(spans.every((span) => span.status._tag === "Ended"))
+        assert.isTrue(
+          spans.every((span) => span === app || span.status._tag === "Ended")
+        )
         yield* TestClock.adjust("1 minute")
         root.send(Message.Confirm())
         yield* TestHost.settle
@@ -140,6 +150,7 @@ describe("tracing", () => {
           ]
         )
         assert.isTrue(flow.every((span) => span.traceId === preflight.traceId))
+        assert.notStrictEqual(preflight.traceId, app.traceId)
         const unrelated = spans[settled]
         assert.notStrictEqual(unrelated.traceId, preflight.traceId)
 
@@ -167,16 +178,19 @@ describe("tracing", () => {
           ["shop/GetStock", preflight.traceId, release.spanId],
           ["shop/Preflight", unrelated.traceId, undefined]
         ])
-      }).pipe(Effect.provideService(
-        Tracer.Tracer,
-        Tracer.make({
-          span: (options) => {
-            const span = tracer.span(options)
-            spans.push(span)
-            return span
-          }
-        })
-      ))
+      }).pipe(
+        Effect.withSpan("app"),
+        Effect.provideService(
+          Tracer.Tracer,
+          Tracer.make({
+            span: (options) => {
+              const span = tracer.span(options)
+              spans.push(span)
+              return span
+            }
+          })
+        )
+      )
     }).pipe(
       Effect.provide(
         Layer.mergeAll(
@@ -194,22 +208,39 @@ describe("tracing", () => {
   })
 
   it("Story hands each run a span, and a continued run names its parent", () => {
-    const checked = Story.start(Checkout, {})
+    const first = Story.start(Checkout, {})
       .loaded("cart", undefined)
       .loaded("stock", undefined)
       .send(Message.Check())
+      .keepPending(Preflight)
+      .send(Message.Check())
       .resolve(Preflight, undefined)
-    const span = checked.current.model.confirming
-    assert.deepStrictEqual(span, {
-      traceId: "00000000000000000000000000000001",
-      spanId: "0000000000000001",
-      sampled: true
-    })
+    const span = first.current.model.confirming!
+    const checked = first.resolve(Preflight, undefined)
+    const other = checked.current.model.confirming!
+    assert.notStrictEqual(other.traceId, span.traceId)
+    assert.notStrictEqual(other.spanId, span.spanId)
     const confirmed = checked.send(Message.Confirm())
     assert.deepStrictEqual(
       confirmed.current.pending.map(({ command }) => command.parentSpan),
-      [span ?? undefined]
+      [other]
     )
     confirmed.resolve(Release, undefined)
   })
+
+  it.effect("a mapping outside any trace gets a span withParentSpan ignores", () =>
+    Effect.gen(function*() {
+      const span = yield* Preflight.make().pipe(
+        Command.map((_, span) => span)
+      ).effect
+      assert.isUndefined(
+        Release.make().pipe(Command.withParentSpan(span)).parentSpan
+      )
+    }).pipe(
+      Effect.provide(
+        Preflight.layer.pipe(
+          Layer.provide(Layer.succeed(HttpClient.HttpClient, server))
+        )
+      )
+    ))
 })

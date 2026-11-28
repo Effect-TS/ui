@@ -1823,8 +1823,8 @@ export const afterRefetch: {
  * **Details**
  *
  * Works on issued and unmatched Commands of both `"Effect"` and `"Stream"`
- * kinds, on either side of `match` and `map`. Passing `null` or `undefined`
- * is a no-op. Sets `parentSpan` on the issued Command data so a Story test
+ * kinds, on either side of `match` and `map`. Passing `null`, `undefined`
+ * or the all-zero span a mapping gets outside any trace is a no-op. Sets `parentSpan` on the issued Command data so a Story test
  * can assert it without running anything.
  *
  * **Example** (Continuing a preflight trace after confirmation)
@@ -1860,7 +1860,10 @@ export const withParentSpan: {
 } = dual(
   2,
   (self: Awaitable, span: SpanContext | null | undefined): any => {
-    if (span == null) return self
+    if (
+      span == null || span.traceId === noSpan.traceId ||
+      span.spanId === noSpan.spanId
+    ) return self
     return makeIssued(
       {
         ...(self as unknown as Fields),
