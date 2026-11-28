@@ -231,7 +231,17 @@ describe("a query without onChange", { concurrent: false }, () => {
   it.effect("hydrates the server's { model, queries } state without refetching", () => {
     const app = makeApp()
     return Effect.gen(function*() {
+      const request = yield* Effect.currentSpan
       const result = yield* ssr(app.Note, { id: "1" })
+      // The server's fetch stays under the request's span, and its log entry says so.
+      assert.deepStrictEqual(
+        result.serverLog.flatMap((entry) =>
+          entry._tag === "FetchStarted"
+            ? [[entry.traceId, entry.parentSpanId]]
+            : []
+        ),
+        [[request.traceId, request.spanId]]
+      )
       // The page state of a component with queries: its Model and its results, a result as its snapshot tuple.
       const state = result.state["/Note"] as {
         readonly model: unknown
@@ -264,6 +274,7 @@ describe("a query without onChange", { concurrent: false }, () => {
       assert.deepStrictEqual(result.root.model(), { clicks: 1, last: "Note 1" })
       assert.strictEqual(app.server.calls, 1)
     }).pipe(
+      Effect.withSpan("request"),
       Effect.provide(app.layer),
       Effect.scoped,
       Effect.provide(TestHost.layer())

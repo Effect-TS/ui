@@ -5021,17 +5021,21 @@ const buildCache = (
 
   const now = (): number => clock.currentTimeMillisUnsafe()
   const runFork = Effect.runForkWith(context)
+  // A server cache lives for one request: a fetch nothing else parents stays under the request's span.
+  const requestSpan = settleOnce
+    ? Context.getOrUndefined(context, Tracer.ParentSpan)
+    : undefined
+  const requestParent = requestSpan && queryCore.spanContextOf(requestSpan)
   /**
    * A fetch's span: named after the query, it parents the spans the fetcher opens. It continues
    * `parent`, or the caller's span for `"caller"`. Otherwise the fetch starts its own trace: the
-   * cache's context is the mount's, stale for a later fetch. A server cache lives for one request,
-   * so its fetches stay under the request's span.
+   * cache's context is the mount's, stale for a later fetch.
    */
   const traced = <A, E>(
     def: QueryDef,
     trigger: Trigger,
     body: () => Effect.Effect<A, E>,
-    parent?: queryCore.SpanContext | "caller" | undefined
+    parent: queryCore.SpanContext | "caller" | undefined
   ): Effect.Effect<A, E> =>
     Effect.useSpan(
       def.name,
@@ -5040,7 +5044,7 @@ const buildCache = (
         : {
           attributes: { trigger },
           parent: parent && Tracer.externalSpan(parent),
-          root: !settleOnce
+          root: true
         },
       (span) => Effect.provideService(body(), Tracer.ParentSpan, span)
     )
@@ -5605,7 +5609,9 @@ const buildCache = (
     // A stream still open closes: its successor waits for its cleanup.
     if (entry.live !== undefined) dropFetch(entry)
     // A stream's span lasts as long as the stream, so it never joins a Command's trace.
-    const effectiveParent = entry.def.live === undefined ? parent : undefined
+    const effectiveParent =
+      (entry.def.live === undefined ? parent : undefined) ??
+        requestParent
     const fetch: FetchRec = {
       trigger,
       build,
@@ -5893,7 +5899,7 @@ const buildCache = (
       Math.max(entry.def.list.ops.heldPages(entry).length, 1),
       (page, cursor) => {
         if (shared.fiber === fiber) {
-          emitFetch(entry, "get", false, false, { page, cursor })
+          emitFetch(entry, "get", false, false, { page, cursor }, requestParent)
         }
       }
     )
@@ -5905,7 +5911,9 @@ const buildCache = (
         entry.def,
         "get",
         () =>
-          walk ?? fetchOnce(entry.def, build, entry.args, () => logKeyOf(entry))
+          walk ??
+            fetchOnce(entry.def, build, entry.args, () => logKeyOf(entry)),
+        requestParent
       )
     ))
     shared.fiber = fiber
