@@ -203,7 +203,9 @@ export type SearchPatch<R> = [R] extends [{ readonly search: infer Q }] ?
  * undeclared params, only a new `#hash` is written and no sequence is bumped.
  * `changes` emits the current location again, so the root hears that a link
  * to its own page was followed. `push` and `replace` of the current route
- * emit nothing.
+ * emit nothing, unless a push writes a new entry for the `#hash`. Back and
+ * forward to another entry of the same route emit the current location
+ * again too, with that entry's `index`.
  *
  * @stability experimental
  * @category models
@@ -715,8 +717,8 @@ export const props = <U extends Routes>(
  * and served at `/some/old-link`.
  * Later locations are always delivered, and the held route is delivered
  * again when a link to it is followed.
- * `f` also gets the location, whose `action` and `index` tell a push from
- * a move back, as a screen stack needs.
+ * `f` also gets the location, whose `index` is the history entry's, as a
+ * screen stack needs.
  * The key stays stable as the held route changes. A subset only sees its own
  * routes. On the server the root is checked once without running its Streams,
  * regardless of the navigation sequence.
@@ -1904,9 +1906,9 @@ const build = (
         if (changed || (source === "href" && hash !== "")) {
           options.onHash?.(hash, "push", index)
         }
-        // A followed href delivers the location again, with the same sequence: a navigation that is
-        // still settling is left as it is.
-        if (source === "href") publish(current)
+        // A followed href, or a new entry, delivers the location again with the same sequence: a
+        // navigation that is still settling is left as it is.
+        if (source === "href" || (changed && !replace)) publish(current)
         return "navigated"
       }
       // A replace that stays on the page is quiet; a push, such as a `?page=2` link, is loud.
@@ -1990,14 +1992,14 @@ const build = (
       }
       if (Option.isNone(found) || printed === undefined) return
       if (printed === current.url) {
-        if (hash === current.hash) {
-          index = target
-          return
-        }
-        options.onLeave?.(index)
+        // Another entry of the same route: the route doesn't change, but the
+        // location is delivered again with the entry's index.
+        const moved = hash !== current.hash
+        if (moved) options.onLeave?.(index)
         index = target
-        current = { ...current, hash, index }
-        options.onHash?.(hash, "pop", target)
+        current = { ...current, hash, index, action: "pop" }
+        if (moved) options.onHash?.(hash, "pop", target)
+        publish(current)
         return
       }
       leave()

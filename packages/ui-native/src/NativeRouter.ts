@@ -22,7 +22,8 @@
  * `/people/1?tab=a`, and with `"https://example.com"`,
  * `https://example.com/people/1` opens `/people/1`. The app starts at the
  * URL that launched it, or at `/`, and a URL that opens it while it runs
- * is pushed. Without `prefixes` it always starts at `/`. An href the
+ * is pushed. A path the routes don't parse, with no catch-all route, is
+ * ignored. Without `prefixes` it always starts at `/`. An href the
  * routes don't parse, as from `Router.load` or a `Link`, opens with
  * `Linking.openURL`.
  *
@@ -68,6 +69,7 @@ import * as Router from "@effect/ui/Router"
 import type * as Subscription from "@effect/ui/Subscription"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
+import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { handle } from "./kit/internal/back.ts"
@@ -107,8 +109,8 @@ export const Stack = <U extends Router.Routes & Schema.Top>(routes: U) =>
   Schema.Array(Schema.Struct({ id: Schema.Number, route: routes }))
 
 /**
- * A navigation `subscription` reports: the route it went to, how, the
- * index of the history entry it went to, and the `id` a new entry gets.
+ * A navigation `subscription` reports: the route it went to, the index of
+ * the history entry it went to, and the `id` a new entry gets.
  *
  * @stability experimental
  * @category models
@@ -116,7 +118,6 @@ export const Stack = <U extends Router.Routes & Schema.Top>(routes: U) =>
  */
 export interface Navigation<A> {
   readonly route: A
-  readonly action: Router.Action
   readonly index: number
   readonly id: number
 }
@@ -133,7 +134,6 @@ export const Navigation = <U extends Router.Routes & Schema.Top>(
 ) =>
   Schema.Struct({
     route: routes,
-    action: Schema.Literals(["initial", "push", "replace", "pop"]),
     index: Schema.Number,
     id: Schema.Number
   })
@@ -227,9 +227,15 @@ export const layer = (options: Options): Layer.Layer<Router.Services> =>
         Effect.orElseSucceed(() => undefined),
         Effect.provideService(Native.Device, device)
       )
-    const start = launched === undefined
-      ? undefined
-      : pathOf(prefixes!, launched)
+    // A deep link the routes don't parse, with no catch-all, isn't one.
+    const routed = (url: string) => {
+      const path = pathOf(prefixes!, url)
+      return path !== undefined &&
+          Option.isSome(options.routes.resolve(path.split("#")[0]!))
+        ? path
+        : undefined
+    }
+    const start = launched === undefined ? undefined : routed(launched)
     const follow = Layer.effectDiscard(Effect.gen(function*() {
       const router = yield* Router.Router
       // The bottom handler: a BackHandler.onPress gets the press first.
@@ -248,7 +254,7 @@ export const layer = (options: Options): Layer.Layer<Router.Services> =>
         yield* Effect.forkScoped(Stream.runForEach(
           Linking.urls,
           (url) => {
-            const path = pathOf(prefixes, url)
+            const path = routed(url)
             return path === undefined ? Effect.void : router.navigate(path)
           }
         ))
@@ -296,7 +302,7 @@ export const subscription = <U extends Router.Routes, Msg>(
   Router.subscription(
     routes,
     held[held.length - 1]!.route,
-    (route, { action, index, seq }) => f({ route, action, index, id: seq })
+    (route, { index, seq }) => f({ route, index, id: seq })
   )
 
 /**
@@ -304,11 +310,10 @@ export const subscription = <U extends Router.Routes, Msg>(
  *
  * **Details**
  *
- * A push adds an entry. A replace replaces the current one, keeping its
- * `id` when the route is on the same page, such as a `patchSearch`, and so
- * does a followed link to the current route. A pop goes back to an entry
- * the stack holds, which keeps its `id` so its screen stays mounted, or
- * forward to a new one.
+ * The stack keeps the entries before the navigation's `index`. The entry
+ * at the index keeps its `id`, so its screen stays mounted, while its
+ * route is on the same page: after Back, a `patchSearch`, or a link to the
+ * current route. Otherwise it gets a new `id`.
  *
  * @stability experimental
  * @category combinators
@@ -319,15 +324,13 @@ export const follow = <U extends Router.Routes>(
   stack: Stack<U["Type"]>,
   navigation: Navigation<U["Type"]>
 ): Stack<U["Type"]> => {
-  const { action, index, route } = navigation
+  const { index, route } = navigation
   const at = stack[index]
-  const same = at !== undefined &&
-    (action === "pop" ||
-      (at.route._tag === route._tag &&
-        routes.printPath(at.route) === routes.printPath(route)))
+  const same = at !== undefined && at.route._tag === route._tag &&
+    routes.printPath(at.route) === routes.printPath(route)
   const kept = stack.slice(0, index)
-  // A followed link to the current route, or to a `#hash` on it, is
-  // delivered again with its seq, so a new id is never one the stack holds.
+  // A new entry for a `#hash` is delivered with the current seq, so a new
+  // id is never one the stack holds.
   const id = same
     ? at.id
     : Math.max(navigation.id, ...stack.map((entry) => entry.id + 1))

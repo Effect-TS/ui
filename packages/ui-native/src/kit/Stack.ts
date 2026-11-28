@@ -16,7 +16,8 @@
  * whenever the parent renders.
  *
  * A covered screen keeps running its Subscriptions, so a page can gate the
- * work it only needs on top. Its `BackHandler.onPress` takes no press.
+ * work it only needs on top. Its `BackHandler.onPress` takes no press, nor
+ * does one on a stack drawn inside it.
  * When a screen comes to the top after the first, the stack moves the
  * screen reader's focus to it.
  *
@@ -45,6 +46,7 @@ import * as Head from "@effect/ui/Head"
 import * as Mount from "@effect/ui/Mount"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
+import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import * as Native from "../Native.ts"
@@ -156,7 +158,14 @@ const Screen = Component.provide(
         .children(draw(s as Native.H<never>, entry))
     }
   }),
-  () => Layer.sync(ScreenState, () => ({ covered: true }))
+  () =>
+    Layer.effect(
+      ScreenState,
+      Effect.map(Effect.serviceOption(ScreenState), (parent) => ({
+        covered: true,
+        parent: Option.getOrUndefined(parent)
+      }))
+    )
 )
 
 /**

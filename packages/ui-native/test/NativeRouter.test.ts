@@ -9,6 +9,7 @@ import * as Renderer from "@effect/ui/Renderer"
 import * as Route from "@effect/ui/Route"
 import * as Router from "@effect/ui/Router"
 import * as UiSchema from "@effect/ui/UiSchema"
+import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
@@ -102,37 +103,58 @@ const AppMessage = UiSchema.TaggedEnum({
   Navigated: { navigation: NativeRouter.Navigation(AppRoute) }
 })
 
-const App = Native.component({
-  name: "App",
-  props: Schema.Struct({ stack: NativeRouter.Stack(AppRoute) }),
-  model: NativeRouter.Stack(AppRoute),
-  message: AppMessage
+// Home on a stack of its own, inside the outer stack's first screen.
+const Nest = Native.component({
+  name: "Nest",
+  model: Schema.Null,
+  message: Schema.Never
 }).make({
-  init: ($) => $.props.stack,
-  update: {
-    Navigated: ($, { navigation }) =>
-      $.set(NativeRouter.follow(AppRoute, $.model, navigation))
-  },
-  subscriptions: ({ model }) => [
-    NativeRouter.subscription(
-      AppRoute,
-      model,
-      (navigation) => AppMessage.Navigated({ navigation })
-    )
-  ],
-  view: (h, stack) =>
+  init: () => null,
+  update: ($) => $.model,
+  view: (h) =>
     Stack(h, {
-      entries: stack,
-      screen: (s, { route }) =>
-        AppRoute.match(route, {
-          Home: () => Home(s, { key: "home" }),
-          Person: ({ params }) =>
-            Person(s, { key: "person", props: { id: params.id } })
-        })
+      entries: [{ id: 0, route: null }],
+      screen: (s) => Home(s, { key: "home" })
     })
 })
 
-const start = async (launched: string | null = null) => {
+const makeApp = (nested: boolean) =>
+  Native.component({
+    name: "App",
+    props: Schema.Struct({ stack: NativeRouter.Stack(AppRoute) }),
+    model: NativeRouter.Stack(AppRoute),
+    message: AppMessage
+  }).make({
+    init: ($) => $.props.stack,
+    update: {
+      Navigated: ($, { navigation }) =>
+        $.set(NativeRouter.follow(AppRoute, $.model, navigation))
+    },
+    subscriptions: ({ model }) => [
+      NativeRouter.subscription(
+        AppRoute,
+        model,
+        (navigation) => AppMessage.Navigated({ navigation })
+      )
+    ],
+    view: (h, stack) =>
+      Stack(h, {
+        entries: stack,
+        screen: (s, { route }) =>
+          AppRoute.match(route, {
+            Home: () =>
+              nested ? Nest(s, { key: "nest" }) : Home(s, { key: "home" }),
+            Person: ({ params }) =>
+              Person(s, { key: "person", props: { id: params.id } })
+          })
+      })
+  })
+
+const App = makeApp(false)
+const NestedApp = makeApp(true)
+
+const start = async (launched: string | null = null, nested = false) => {
+  let router: Router.Router | undefined
   const titles: Array<string | undefined> = []
   const back = FakeDevice.module()
   const linking = FakeDevice.module({
@@ -154,9 +176,10 @@ const start = async (launched: string | null = null) => {
           onSettled: ({ title }) => titles.push(title)
         })
       )
+      router = Context.get(context, Router.Router)
       return yield* Effect.flatMap(
         NativeRouter.props(AppRoute),
-        (props) => Renderer.mount(App, props, container)
+        (props) => Renderer.mount(nested ? NestedApp : App, props, container)
       ).pipe(Effect.provide(context))
     }).pipe(Effect.provideService(Native.Device, fake.device))
   )
@@ -189,6 +212,11 @@ const start = async (launched: string | null = null) => {
   return {
     ...mounted,
     fake,
+    run: async (effect: Effect.Effect<unknown>) => {
+      Effect.runSync(effect)
+      await settle()
+    },
+    router: router!,
     titles,
     shown,
     press,
@@ -238,24 +266,58 @@ describe("NativeRouter", { concurrent: false }, () => {
     assert.strictEqual(app.fake.listening("hardwareBackPress"), 0)
   })
 
-  it("gives Back to the top screen's handler before a covered screen's, even one started later", async () => {
+  it.each([false, true])(
+    "gives Back to the top screen's handler before a covered screen's, even one started later (nested: %s)",
+    async (nested) => {
+      const app = await start(null, nested)
+      await app.press("Ada")
+      await app.press("take back")
+      // The covered Home starts its handler after Person's.
+      await app.press("count 0")
+      await app.back()
+      assert.isTrue(app.shown("person 1 backs 1"))
+      assert.isTrue(app.shown("home backs 0"))
+
+      await app.press("take back")
+      await app.back()
+      assert.isTrue(app.shown("home backs 0"))
+      assert.isFalse(app.shown("person 1 backs 1"))
+
+      await app.back()
+      assert.isTrue(app.shown("home backs 1"))
+      assert.strictEqual(app.exits(), 0)
+      await app.close()
+    }
+  )
+
+  it("goes back to the screen a replace covered, though its route is the same", async () => {
+    const app = await start()
+    await app.press("count 0")
+    await app.press("count 1")
+    await app.press("Ada")
+    await app.run(app.router.replace(AppRoute.Home()))
+    assert.isTrue(app.shown("count 0"))
+    assert.strictEqual(app.screens().length, 2)
+    await app.back()
+    assert.strictEqual(app.screens().length, 1)
+    assert.isTrue(app.shown("count 2"))
+    await app.back()
+    assert.strictEqual(app.exits(), 1)
+    await app.close()
+  })
+
+  it("adds a screen for a #hash link, which Back removes", async () => {
     const app = await start()
     await app.press("Ada")
-    await app.press("take back")
-    // The covered Home starts its handler after Person's.
-    await app.press("count 0")
+    await app.run(app.router.navigate("/people/1#bio"))
+    assert.strictEqual(app.screens().length, 3)
     await app.back()
-    assert.isTrue(app.shown("person 1 backs 1"))
-    assert.isTrue(app.shown("home backs 0"))
-
-    await app.press("take back")
+    assert.strictEqual(app.screens().length, 2)
     await app.back()
-    assert.isTrue(app.shown("home backs 0"))
-    assert.isFalse(app.shown("person 1 backs 1"))
-
-    await app.back()
-    assert.isTrue(app.shown("home backs 1"))
+    assert.strictEqual(app.screens().length, 1)
     assert.strictEqual(app.exits(), 0)
+    await app.back()
+    assert.strictEqual(app.exits(), 1)
     await app.close()
   })
 
@@ -293,6 +355,36 @@ describe("NativeRouter", { concurrent: false }, () => {
     await app.close()
   })
 
+  it("starts at / for a deep link the routes don't parse, and ignores one that arrives later", async () => {
+    const app = await start("myapp://missing")
+    assert.isTrue(app.shown("count 0"))
+    app.fake.emit("url", { url: "myapp://missing" })
+    await app.settle()
+    assert.strictEqual(app.screens().length, 1)
+    assert.deepStrictEqual(app.opened(), [])
+    await app.close()
+  })
+
+  it("starts a deep link the routes don't parse at their catch-all", async () => {
+    const routes = Route.union({
+      Home: Route.make("/"),
+      NotFound: Route.make("/*")
+    })
+    const linking = FakeDevice.module({
+      getInitialURL: () => Promise.resolve("myapp://missing")
+    })
+    const { device } = FakeDevice.make("android", {
+      IntentAndroid: linking.module
+    })
+    const route = await Effect.runPromise(
+      Router.currentRoute(routes).pipe(
+        Effect.provide(NativeRouter.layer({ routes, prefixes: ["myapp://"] })),
+        Effect.provideService(Native.Device, device)
+      )
+    )
+    assert.strictEqual(route._tag, "NotFound")
+  })
+
   it("starts at / when the launching URL isn't a deep link", async () => {
     const app = await start("exp+app://expo-development-client/?url=x")
     assert.isTrue(app.shown("count 0"))
@@ -321,54 +413,33 @@ describe("NativeRouter", { concurrent: false }, () => {
 })
 
 describe("NativeRouter.follow", () => {
-  const home = AppRoute.Home()
-  const person = (id: number) => AppRoute.Person({ params: { id } })
-  const nav = (
-    action: Router.Action,
-    index: number,
-    id: number,
-    route: typeof AppRoute.Type
-  ) => ({ action, index, id, route })
-
-  it("pushes, replaces, and pops to the entries the stack holds", () => {
-    let stack: NativeRouter.Stack<typeof AppRoute.Type> = [{
-      id: 0,
-      route: home
-    }]
-    stack = NativeRouter.follow(AppRoute, stack, nav("push", 1, 1, person(1)))
-    stack = NativeRouter.follow(AppRoute, stack, nav("push", 2, 2, person(2)))
-    assert.deepStrictEqual(stack.map((e) => e.id), [0, 1, 2])
-    // Another page replaces the top screen, and the same page keeps it.
-    stack = NativeRouter.follow(
-      AppRoute,
-      stack,
-      nav("replace", 2, 3, person(3))
-    )
-    assert.deepStrictEqual(stack.map((e) => e.id), [0, 1, 3])
-    stack = NativeRouter.follow(
-      AppRoute,
-      stack,
-      nav("replace", 2, 4, person(3))
-    )
-    assert.deepStrictEqual(stack.map((e) => e.id), [0, 1, 3])
-    stack = NativeRouter.follow(AppRoute, stack, nav("pop", 0, 5, home))
-    assert.deepStrictEqual(stack, [{ id: 0, route: home }])
-    // Forward again is a new screen.
-    stack = NativeRouter.follow(AppRoute, stack, nav("pop", 1, 6, person(1)))
-    assert.deepStrictEqual(stack.map((e) => e.id), [0, 6])
-  })
-
-  it("keeps the top screen for a followed link to it, and never reuses an id", () => {
+  it("keeps the top entry's id for a route on the same page, and never reuses an id", () => {
+    const person = (id: number) => AppRoute.Person({ params: { id } })
+    const ids = (stack: NativeRouter.Stack<typeof AppRoute.Type>) =>
+      stack.map((entry) => entry.id)
     let stack: NativeRouter.Stack<typeof AppRoute.Type> = [
-      { id: 0, route: home },
+      { id: 0, route: AppRoute.Home() },
       { id: 1, route: person(1) }
     ]
-    // Delivered again, with the push's action and seq.
-    stack = NativeRouter.follow(AppRoute, stack, nav("push", 1, 1, person(1)))
-    assert.deepStrictEqual(stack.map((e) => e.id), [0, 1])
-    // A #hash push on it: a new entry, delivered with the same seq.
-    stack = NativeRouter.follow(AppRoute, stack, nav("push", 2, 1, person(1)))
-    assert.deepStrictEqual(stack.map((e) => e.id), [0, 1, 2])
+    stack = NativeRouter.follow(AppRoute, stack, {
+      index: 1,
+      id: 2,
+      route: person(2)
+    })
+    assert.deepStrictEqual(ids(stack), [0, 2])
+    stack = NativeRouter.follow(AppRoute, stack, {
+      index: 1,
+      id: 3,
+      route: person(2)
+    })
+    assert.deepStrictEqual(ids(stack), [0, 2])
+    // A new entry for a #hash comes with the current seq.
+    stack = NativeRouter.follow(AppRoute, stack, {
+      index: 2,
+      id: 2,
+      route: person(2)
+    })
+    assert.deepStrictEqual(ids(stack), [0, 2, 3])
   })
 })
 

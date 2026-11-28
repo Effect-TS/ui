@@ -31,6 +31,7 @@
 import * as Component from "@effect/ui/Component"
 import * as Mount from "@effect/ui/Mount"
 import * as Router from "@effect/ui/Router"
+import type * as View from "@effect/ui/View"
 import * as Effect from "effect/Effect"
 import * as Stream from "effect/Stream"
 import type * as Native from "../Native.ts"
@@ -79,15 +80,21 @@ export const Link = <
     /** Where the link goes: a path the routes parse, or a URL. */
     readonly href: string
   }
-): B => {
+): View.WithRequirements<B, Router.Router> => {
   const { href } = options
   const link: PressOptions["link"] = (n, pressed) => {
     const router = routers.get(n)
     if (router === undefined) return
     Effect.runSync(pressed ? router.navigate(href) : router.intent(href))
   }
-  const element: any = Pressable(h, { ...options, link } as typeof options)
+  const element: PressableElement<Msg> = Pressable(
+    h,
+    {
+      ...options,
+      link
+    } as typeof options
+  )
   return element
     .prop("accessibilityRole", "link")
-    .onMount(Follow().pipe(Mount.map(() => Component.noop)))
+    .onMount(Follow().pipe(Mount.map(() => Component.noop))) as any
 }

@@ -970,11 +970,19 @@ describe("Router", { concurrent: false }, () => {
       yield* router.replace(AppRoute.Card({ params: { id: 3 } }))
       history.go(-2)
       yield* Effect.yieldNow
+      // Back to another entry of the same route is delivered too.
+      yield* router.push(AppRoute.Person({ params: { id: 1 } }))
+      yield* router.replace(AppRoute.Home())
+      history.go(-1)
+      yield* Effect.yieldNow
       assert.deepStrictEqual(seen, [
         "initial 0",
         "push 1",
         "push 2",
         "replace 2",
+        "pop 0",
+        "push 1",
+        "replace 1",
         "pop 0"
       ])
       assert.strictEqual(router.location().index, 0)
