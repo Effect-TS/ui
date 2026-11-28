@@ -243,13 +243,13 @@ const SetRecording = control(Tool.make("set_recording", {
     "Returns the rules the page is not recording.",
   parameters: Schema.Struct({
     session: SessionParam,
-    tag: Schema.optional(Schema.String).annotate({
+    tag: Schema.optionalKey(Schema.String).annotate({
       description: "A message _tag."
     }),
-    component: Schema.optional(Schema.String).annotate({
+    component: Schema.optionalKey(Schema.String).annotate({
       description: "A component name, as list_instances shows it."
     }),
-    path: Schema.optional(Schema.String).annotate({
+    path: Schema.optionalKey(Schema.String).annotate({
       description:
         "An instance path: the rule matches it and every instance below it."
     }),
@@ -760,8 +760,7 @@ export const handlers = (server: Backend) => {
       return ok({ resumed: true })
     }),
     set_recording: Effect.fnUntraced(
-      function*({ component, path, recording, session, tag }) {
-        const rule = Rules.clean({ tag, component, path })
+      function*({ recording, session, ...rule }) {
         if (!Rules.isRule(rule)) {
           return yield* fail("Give a tag, a component or a path.")
         }

@@ -230,21 +230,19 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
       for (const rule of Rules.normalize(options.exclude)) {
         stopped.set(Rules.keyOf(rule), rule)
       }
-      for (
-        const [rule, recording] of Control.decodeChoices(
-          load(recordingKey, "sessionStorage")
-        )
-      ) if (Rules.isRule(rule)) choose(rule, recording)
+      const saved = load(recordingKey, "sessionStorage")
+      if (Control.isChoices(saved)) {
+        for (const [rule, recording] of saved) {
+          if (Rules.isRule(rule)) choose(rule, recording)
+        }
+      }
+      let rules = Array.from(stopped.values())
       const isStopped = (entry: Rules.Entry) =>
-        stopped.size > 0 &&
-        Rules.excludes(
-          stopped.values(),
-          entry,
-          (seq) => history.entry(entry.session, seq)
-        )
-      const notRecording = () => Array.from(stopped.values())
+        rules.length > 0 && Rules.excludes(rules, entry, history.entry)
+      const notRecording = () => rules
       const setRecording = (rule: Control.Rule, recording: boolean) => {
         choose(rule, recording)
+        rules = Array.from(stopped.values())
         save(recordingKey, Array.from(choices.values()), "sessionStorage")
         changed()
       }

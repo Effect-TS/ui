@@ -1,16 +1,9 @@
 import type * as MessageLog from "@effect/ui/MessageLog"
+import type { Exclusion, Outside } from "../Inspector.ts"
 import type { Rule } from "./control.ts"
 import { nameOf, tagOf } from "./read.ts"
 
 export type Entry = MessageLog.Entry | MessageLog.WireEntry
-
-type Loose = { readonly [K in keyof Rule]?: Rule[K] | undefined }
-
-export const clean = ({ component, path, tag }: Loose): Rule => ({
-  ...(tag === undefined ? undefined : { tag }),
-  ...(component === undefined ? undefined : { component }),
-  ...(path === undefined ? undefined : { path })
-})
 
 export const isRule = (rule: Rule): boolean =>
   rule.tag !== undefined || rule.component !== undefined ||
@@ -18,10 +11,16 @@ export const isRule = (rule: Rule): boolean =>
 
 // Strings are tags, and a rule without fields would match everything.
 export const normalize = (
-  exclude: ReadonlyArray<string | Loose> | undefined
+  exclude: ReadonlyArray<string | Exclusion> | undefined
 ): ReadonlyArray<Rule> =>
-  (exclude ?? []).map((rule) =>
-    typeof rule === "string" ? { tag: rule } : clean(rule)
+  (exclude ?? []).map((rule): Rule =>
+    typeof rule === "string" ? { tag: rule } : {
+      ...(rule.tag === undefined ? undefined : { tag: rule.tag }),
+      ...(rule.component === undefined
+        ? undefined
+        : { component: rule.component }),
+      ...(rule.path === undefined ? undefined : { path: rule.path })
+    }
   ).filter(isRule)
 
 export const keyOf = (rule: Rule): string =>
@@ -47,22 +46,36 @@ const test = (rule: Rule, entry: Entry) =>
     entry.path.startsWith(rule.path + "/"))
 
 /**
+ * The update a `PropsChanged` follows from, when that update is a fact: the
+ * message that passed the props down.
+ */
+export const causeOf = <E extends Entry | Outside>(
+  entry: Entry,
+  resolve: (session: string, seq: number) => E | undefined
+): Extract<E, { readonly _tag: "Update" }> | undefined => {
+  if (entry._tag !== "PropsChanged" || entry.causedBy === undefined) {
+    return undefined
+  }
+  const cause = resolve(entry.session, entry.causedBy)
+  return cause?._tag === "Update" && cause.causedBy === undefined
+    ? cause as Extract<E, { readonly _tag: "Update" }>
+    : undefined
+}
+
+/**
  * Whether a rule matches the entry, or matches by its `tag` the update a
- * `PropsChanged` follows from: the props a stopped message passed down.
+ * `PropsChanged` follows from.
  */
 export const excludes = (
   rules: Iterable<Rule>,
   entry: Entry,
-  resolve: (seq: number) => Entry | undefined
+  resolve: (session: string, seq: number) => Entry | undefined
 ): boolean => {
-  const cause = entry._tag === "PropsChanged" && entry.causedBy !== undefined
-    ? resolve(entry.causedBy)
-    : undefined
+  const cause = causeOf(entry, resolve)
   for (const rule of rules) {
     if (
       test(rule, entry) ||
-      cause?._tag === "Update" && cause.causedBy === undefined &&
-        rule.tag !== undefined && test(rule, cause)
+      cause !== undefined && rule.tag !== undefined && test(rule, cause)
     ) return true
   }
   return false

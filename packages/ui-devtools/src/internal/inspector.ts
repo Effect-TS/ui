@@ -135,7 +135,7 @@ const push = <K, V>(map: Map<K, Array<V>>, key: K, value: V) => {
 
 type IsExcluded = (
   entry: Entry,
-  resolve: (seq: number) => Entry | undefined
+  resolve: (session: string, seq: number) => Entry | undefined
 ) => boolean
 
 const makeSession = (
@@ -161,6 +161,7 @@ const makeSession = (
   // Instance numbers grow, so one above `settled` mounted since the last shown entry.
   let newest = -1
   let settled = -1
+  const resolve = (_: string, seq: number) => entries.get(seq)
 
   const link = (
     from: number,
@@ -598,7 +599,6 @@ const makeSession = (
     ingest: (entry: Entry) => {
       if (entry.seq <= last) return
       last = entry.seq
-      const resolve = (seq: number) => entries.get(seq)
       let transient = false
       if ("instance" in entry) newest = Math.max(newest, entry.instance)
       if (
@@ -609,24 +609,23 @@ const makeSession = (
         hidden.add(entry.seq)
         const state = entry._tag === "Update" || entry._tag === "Mounted" ||
           entry._tag === "Waiting"
-        const fleeting = entry._tag === "Unmounted" && instance > settled
+        const gone = entry._tag === "Unmounted"
+        const fleeting = gone && instance > settled
         // Only the latest state counts, and an instance that came and went
         // between shown entries leaves no trace.
-        if (state || fleeting) {
-          const replaced = coalesced.get(instance)
-          if (replaced !== undefined) {
-            const inst = instances.get(instance)
-            if (inst?.state === replaced.seq) {
-              inst.state = previous.get(replaced.seq)?.seq
-            }
-            evict(replaced.seq, replaced, false)
-            coalesced.delete(instance)
+        const replaced = state || fleeting ? coalesced.get(instance) : undefined
+        if (replaced !== undefined) {
+          const inst = instances.get(instance)
+          if (inst?.state === replaced.seq) {
+            inst.state = previous.get(replaced.seq)?.seq
           }
+          evict(replaced.seq, replaced, false)
         }
         if (state) coalesced.set(instance, entry)
+        else if (fleeting) coalesced.delete(instance)
         // An unmount stays, without a slot, so a late viewer replays it. The
         // rest only changes the instance's records: apply it, keep nothing.
-        else if (fleeting || entry._tag !== "Unmounted") transient = true
+        transient = fleeting || !(state || gone)
       } else {
         // Any shown entry, a fetch too, ends the interval stopped ones coalesce in.
         settled = newest

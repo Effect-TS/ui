@@ -960,22 +960,24 @@ const FieldButtons = (
     })
   )
 
+// Starts or stops recording what a rule matches.
+const RuleButton = (h: H, rule: Rule, recording: boolean) => {
+  const label = Rules.labelOf(rule)
+  const verb = recording ? "Start recording " : "Stop recording "
+  return h.button.key(Rules.keyOf(rule)).class(recording && "code")
+    .attr("aria-label", verb + label)
+    .attr("title", verb + (rule.path ?? label))
+    .on("click", OverlayMessage.ClickedRecording({ rule, recording }))
+    .children(label)
+}
+
 const NotRecording = (h: H, rules: ReadonlyArray<Rule>) =>
   rules.length === 0 ? null : h.div.class("stopped").attr("role", "group").attr(
     "aria-label",
     "Not recording"
   ).children(
     h.span.children("Not recording"),
-    rules.map((rule) => {
-      const label = Rules.labelOf(rule)
-      return h.button.key(Rules.keyOf(rule)).class("code").attr(
-        "aria-label",
-        "Start recording " + label
-      ).attr("title", "Start recording " + (rule.path ?? label)).on(
-        "click",
-        OverlayMessage.ClickedRecording({ rule, recording: true })
-      ).children(label)
-    })
+    rules.map((rule) => RuleButton(h, rule, true))
   )
 
 // What the selected entry offers to stop: its message in its component (for
@@ -985,26 +987,22 @@ const stopChoices = (
   feed: Feed,
   session: Session,
   entry: Entry,
-  self: Inspector.Summary | undefined
+  chain: ReadonlyArray<Inspector.Summary>
 ): ReadonlyArray<Rule> => {
   const stopped = feed.notRecording?.()
   if (stopped === undefined || !("instance" in entry)) return []
-  const cause = entry._tag === "PropsChanged" && entry.causedBy !== undefined
-    ? session.resolve(entry.causedBy)
-    : entry
-  const tag = cause._tag === "Update" &&
-      (cause === entry || cause.causedBy === undefined)
-    ? feed.messageTag?.(session.id, cause.seq)
-    : undefined
+  const update = entry._tag === "Update"
+    ? entry
+    : Rules.causeOf(entry, (_, seq) => session.resolve(seq))
   const choices: Array<Rule> = []
-  if (tag !== undefined && cause._tag === "Update") {
-    choices.push({ tag, component: cause.component })
+  if (update !== undefined) {
+    const tag = feed.messageTag?.(session.id, update.seq)
+    if (tag !== undefined) choices.push({ tag, component: update.component })
   }
   choices.push({ component: entry.component })
-  if (self !== undefined) {
-    for (const { parent, path } of lineage(session, self).reverse()) {
-      if (parent !== undefined) choices.push({ path })
-    }
+  for (let index = chain.length - 1; index >= 0; index--) {
+    const { parent, path } = chain[index]!
+    if (parent !== undefined) choices.push({ path })
   }
   const keys = new Set(stopped.map(Rules.keyOf))
   return choices.filter((rule) => !keys.has(Rules.keyOf(rule)))
@@ -1022,21 +1020,9 @@ const StopMenu = (h: H, key: string, choices: ReadonlyArray<Rule>) =>
       "aria-label",
       "Stop recording"
     ).children(
-      choices.map((rule) => {
-        const label = Rules.labelOf(rule)
-        return h.button.key(Rules.keyOf(rule)).attr(
-          "aria-label",
-          "Stop recording " + label
-        ).attr("title", rule.path ?? label).on(
-          "click",
-          OverlayMessage.ClickedRecording({ rule, recording: false })
-        ).children(label)
-      })
+      choices.map((rule) => RuleButton(h, rule, false))
     )
   )
-
-const launcherCount = (feed: Feed, session: Session | undefined) =>
-  session === undefined ? 0 : shownEntries(feed, session).length
 
 // The entries held, less those a rule now stopped matches.
 const shownEntries = (feed: Feed, session: Session) => {
@@ -1947,7 +1933,8 @@ const Inspected = (
     : entry._tag
   const paintable = feed.paintable(entry.session, entry.seq)
   const shown = shows(model, entry.session, entry.seq)
-  const choices = stopChoices(feed, session, entry, self)
+  const chain = self === undefined ? [] : lineage(session, self)
+  const choices = stopChoices(feed, session, entry, chain)
   return [
     h.section.class("ehead").children(
       h.div.class("ehead-top").children(
@@ -1986,9 +1973,7 @@ const Inspected = (
           ? ""
           : ", " + Read.position(entry.at - origin) + " after start"
       ),
-      self === undefined
-        ? null
-        : Crumbs(h, lineage(session, self), model.scope),
+      self === undefined ? null : Crumbs(h, chain, model.scope),
       Chain(h, steps)
     ),
     Details(h, session, entry, info, model)
@@ -2116,7 +2101,9 @@ const synced = (model: OverlayModel, feed: Feed) => {
 }
 
 const Launcher = (h: H, model: OverlayModel) => {
-  const failures = h.props.feed.failures() - model.failures
+  const feed = h.props.feed
+  const session = sessionOf(feed, model)
+  const failures = feed.failures() - model.failures
   const page = pageAt(model)
   const noun = failures === 1 ? " failure" : " failures"
   return h.div.class("launch").children(
@@ -2143,7 +2130,7 @@ const Launcher = (h: H, model: OverlayModel) => {
       .children(
         h.span.class("lockup").attr("aria-hidden", "true"),
         h.span.class("launcher-count").children(
-          String(launcherCount(h.props.feed, sessionOf(h.props.feed, model)))
+          String(session === undefined ? 0 : shownEntries(feed, session).length)
         )
       ),
     PickButton(h, model),

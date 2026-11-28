@@ -1,6 +1,5 @@
 import * as MessageLog from "@effect/ui/MessageLog"
 import * as Effect from "effect/Effect"
-import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
 
 // What a recording rule matches: every field given must match.
@@ -12,15 +11,10 @@ export const Rule = Schema.Struct({
 
 export type Rule = typeof Rule.Type
 
-const decodeChoicesOption = Schema.decodeUnknownOption(
+// The runtime recording choices a tab saved, oldest first.
+export const isChoices = Schema.is(
   Schema.Array(Schema.Tuple([Rule, Schema.Boolean]))
 )
-
-// The runtime recording choices a tab saved, oldest first.
-export const decodeChoices = (
-  value: unknown
-): ReadonlyArray<readonly [Rule, boolean]> =>
-  decodeChoicesOption(value).pipe(Option.getOrElse(() => []))
 
 export const Request = Schema.Union([
   Schema.TaggedStruct("Show", { session: Schema.String, seq: Schema.Number }),
