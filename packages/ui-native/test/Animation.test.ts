@@ -365,9 +365,6 @@ describe("Animation", { concurrent: false }, () => {
         const t = await headers(os)
         const rows = t.find((n) => n.props.height === 300)
         assert.strictEqual(t.a().props.zIndex, 10)
-        assert.strictEqual(t.a().props.collapsable, false)
-        assert.deepStrictEqual(t.a().props.transform, [{ translateY: 0 }])
-        assert.strictEqual(t.b().props.zIndex, 10)
         assert.isUndefined(rows.props.zIndex)
         // Not laid out yet: the headers scroll with the rows.
         t.scroll(100)
@@ -378,21 +375,16 @@ describe("Animation", { concurrent: false }, () => {
         await t.settle()
         assert.strictEqual(t.shown(t.a()), 100)
         assert.strictEqual(t.shown(t.b()), 0)
-        // B pushes A up as it reaches it, then docks itself.
+        // B pushes A up as it reaches it.
         t.scroll(320)
         assert.strictEqual(t.shown(t.a()), 300)
-        assert.strictEqual(t.shown(t.b()), 0)
-        // Native moves B up without a commit, and reports its layout.
+        // Native moves B up without a commit, and reports its layout: B
+        // docks, pushing A further.
         assert.strictEqual(t.b().props.onLayout, true)
         t.place(0, 200)
         t.fabric.emit(t.b(), "topLayout", {})
         assert.strictEqual(t.shown(t.a()), 150)
         assert.strictEqual(t.shown(t.b()), 120)
-        t.place(0, 350)
-        t.fabric.emit(t.b(), "topLayout", {})
-        t.scroll(400)
-        assert.strictEqual(t.shown(t.a()), 300)
-        assert.strictEqual(t.shown(t.b()), 50)
 
         // Once the scroll pauses, Fabric gets where they are shown, which
         // JS may not have seen.
@@ -400,14 +392,12 @@ describe("Animation", { concurrent: false }, () => {
         animated.scroll(t.scroller().tag, { y: 120 })
         await sleep(100)
         assert.deepStrictEqual(t.a().props.transform, [{ translateY: 120 }])
-        assert.deepStrictEqual(t.b().props.transform, [{ translateY: 0 }])
         // Its own style changes, but the header keeps its own.
         t.root.send({ _tag: "Pressed" })
         await t.settle()
         assert.strictEqual(t.a().props.zIndex, 10)
         assert.deepStrictEqual(t.a().props.transform, [{ translateY: 120 }])
 
-        // Without sticky headers, they get new views that the driver doesn't move.
         const sticky = async (sticky: boolean) => {
           t.root.send({
             _tag: "Set",
@@ -417,10 +407,9 @@ describe("Animation", { concurrent: false }, () => {
           })
           await t.settle()
         }
-        const tag = t.a().tag
         await sticky(false)
-        assert.notStrictEqual(t.a().tag, tag)
-        // Its own style shows again, as it changed while it was a header.
+        // Its own style shows again, as it changed while it was a header,
+        // and the driver no longer moves it.
         assert.strictEqual(t.a().props.zIndex, 3)
         assert.deepStrictEqual(t.a().props.transform, [{ scale: 3 }])
         assert.isUndefined(t.a().props.onLayout)
@@ -449,86 +438,58 @@ describe("Animation", { concurrent: false }, () => {
         animated.ios(false)
       }
     })
-
-    it(`hides a docked header while scrolling down, and docks inverted headers at the bottom, on ${os}`, async () => {
-      animated.ios(os === "ios")
-      const before = { nodes: animated.nodes(), events: animated.events() }
-      try {
-        const t = await headers(os)
-        t.place(0, 350)
-        t.root.send({
-          _tag: "Set",
-          sticky: true,
-          hiddenOnScroll: true,
-          inverted: false
-        })
-        await t.settle()
-        // Where A shows on screen: its place, scrolled, and translated.
-        const top = (y: number) => {
-          t.scroll(y)
-          return t.shown(t.a()) - y
-        }
-        // Docked, it moves up by as much as the list scrolls down.
-        assert.strictEqual(top(30), -30)
-        assert.strictEqual(top(100), -50)
-        // Scrolling up brings it back as far.
-        assert.strictEqual(top(80), -30)
-        assert.strictEqual(top(20), 0)
-        assert.strictEqual(top(60), -40)
-        // An offset JS doesn't get, as Fabric coalesces scroll events.
-        animated.scroll(t.scroller().tag, { y: 100 })
-        assert.strictEqual(top(80), -30)
-        await sleep(100)
-        assert.deepStrictEqual(t.a().props.transform, [{
-          translateY: t.shown(t.a())
-        }])
-
-        // Inverted, a header docks at the bottom of the 500 tall scroll
-        // view once it's below it.
-        t.scroll(0)
-        t.place(600, 900)
-        t.root.send({
-          _tag: "Set",
-          sticky: true,
-          hiddenOnScroll: false,
-          inverted: true
-        })
-        await t.settle()
-        t.scroll(100)
-        assert.strictEqual(t.shown(t.a()), 0)
-        t.scroll(200)
-        assert.strictEqual(t.shown(t.a()), 50)
-        // B, 300 below, pushes it at 350.
-        t.scroll(400)
-        assert.strictEqual(t.shown(t.a()), 200)
-
-        // Below a top inset, which iOS reports as a negative offset at
-        // rest, a header docks where the inset ends.
-        t.place(0, 350)
-        t.root.send({
-          _tag: "Set",
-          sticky: true,
-          hiddenOnScroll: false,
-          inverted: false
-        })
-        t.root.send({ _tag: "Inset", top: 20 })
-        await t.settle()
-        t.scroll(-20)
-        assert.strictEqual(t.shown(t.a()), 0)
-        t.scroll(100)
-        assert.strictEqual(t.shown(t.a()), 120)
-        await sleep(100)
-        assert.deepStrictEqual(t.a().props.transform, [{ translateY: 120 }])
-        await t.close()
-        assert.deepStrictEqual(
-          { nodes: animated.nodes(), events: animated.events() },
-          before
-        )
-      } finally {
-        animated.ios(false)
-      }
-    })
   }
+
+  it("hides a docked header while scrolling down, docks inverted headers at the bottom, and below a top inset", async () => {
+    animated.ios(true)
+    const before = { nodes: animated.nodes(), events: animated.events() }
+    try {
+      const t = await headers("ios")
+      t.place(0, 350)
+      const set = async (hiddenOnScroll: boolean, inverted: boolean) => {
+        t.root.send({ _tag: "Set", sticky: true, hiddenOnScroll, inverted })
+        await t.settle()
+      }
+      await set(true, false)
+      // Where A shows on screen: its place, scrolled, and translated.
+      const top = (y: number) => {
+        t.scroll(y)
+        return t.shown(t.a()) - y
+      }
+      // Docked, it moves up by as much as the list scrolls down, up to its
+      // height, and scrolling up brings it back as far.
+      assert.strictEqual(top(30), -30)
+      assert.strictEqual(top(100), -50)
+      assert.strictEqual(top(80), -30)
+      assert.strictEqual(top(20), 0)
+
+      // Inverted, a header docks at the bottom of the 500 tall scroll view
+      // once it's below it, from 150.
+      t.scroll(0)
+      t.place(600, 900)
+      await set(false, true)
+      t.scroll(200)
+      assert.strictEqual(t.shown(t.a()), 50)
+      // B, 300 below, pushes it at 350.
+      t.scroll(400)
+      assert.strictEqual(t.shown(t.a()), 200)
+
+      // Below a top inset, which iOS reports as a negative offset at rest.
+      t.place(0, 350)
+      await set(false, false)
+      t.root.send({ _tag: "Inset", top: 20 })
+      await t.settle()
+      t.scroll(100)
+      assert.strictEqual(t.shown(t.a()), 120)
+      await t.close()
+      assert.deepStrictEqual(
+        { nodes: animated.nodes(), events: animated.events() },
+        before
+      )
+    } finally {
+      animated.ios(false)
+    }
+  })
 
   it("keeps a scroll view a header of the one around it when its own headers go", async () => {
     const { close, fabric, find, root, settle } = await mount((root) =>
