@@ -4,6 +4,13 @@ import type { NativeNode } from "../NativeHost.ts"
 const horizontal = (n: NativeNode, host: ViewHost): boolean =>
   host.os === "android" && n.props.horizontal === true
 
+/**
+ * Each scroll view's `keyboardShouldPersistTaps`, which only JS reads.
+ *
+ * @internal
+ */
+export const persistTaps = new WeakMap<NativeNode, unknown>()
+
 // Retain the previous content style so updates can remove omitted properties.
 const contentStyles = new WeakMap<NativeNode, Readonly<Record<string, any>>>()
 
@@ -40,6 +47,8 @@ const momentum =
     )
   }
 
+const relayScroll = relay("scroll")
+
 const scroll: ViewKind = {
   viewName: (n, host) =>
     horizontal(n, host) ? "AndroidHorizontalScrollView" : "RCTScrollView",
@@ -75,6 +84,7 @@ const scroll: ViewKind = {
       for (const key in style) host.set(n.inner!, key, style[key])
       direction(n, host)
     },
+    keyboardShouldPersistTaps: (n, value) => persistTaps.set(n, value),
     onMomentumScrollBegin: momentum("onMomentumScrollBegin"),
     onMomentumScrollEnd: momentum("onMomentumScrollEnd"),
     // React Native reports the size the content view is laid out at.
@@ -82,7 +92,10 @@ const scroll: ViewKind = {
       host.set(n.inner!, "onLayout", value)
   },
   events: {
-    topScroll: relay("scroll"),
+    topScroll(n, event, host) {
+      for (const f of scrolls) f(n, event)
+      relayScroll(n, event, host)
+    },
     topScrollBeginDrag: relay("scrollBeginDrag"),
     topScrollEndDrag: relay("scrollEndDrag"),
     topMomentumScrollBegin: relay("momentumScrollBegin"),
@@ -197,6 +210,17 @@ export const props = new Map<
 
 /** Called after every commit, by kit modules that follow nodes. @internal */
 export const commits = new Set<(host: ViewHost) => void>()
+
+/**
+ * Called before every commit, by kit modules that set props on nodes they
+ * follow, so the commit carries them.
+ *
+ * @internal
+ */
+export const precommits = new Set<(host: ViewHost) => void>()
+
+/** Called with every scroll view's `topScroll` event. @internal */
+export const scrolls = new Set<(n: NativeNode, event: any) => void>()
 
 /** `LayoutAnimation` configs by view transition type. @internal */
 export const layouts = new Map<string, object>()

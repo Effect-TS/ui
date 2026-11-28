@@ -148,7 +148,8 @@ export const mountEffect = <
       rootTag: surface.rootTag,
       os: Platform.OS,
       processColor,
-      onCommit: options?.onCommit
+      onCommit: options?.onCommit,
+      device
     })
     const services = Context.make(Renderer.Renderer, { host: made.host }).pipe(
       Context.add(Native.Host, made.operations)

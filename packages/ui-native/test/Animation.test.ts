@@ -4,7 +4,7 @@ import { RefreshControl } from "@effect/ui-native/kit/RefreshControl"
 import * as Native from "@effect/ui-native/Native"
 import * as Renderer from "@effect/ui/Renderer"
 import * as UiSchema from "@effect/ui/UiSchema"
-import { pipe } from "effect/Function"
+import { identity, pipe } from "effect/Function"
 import * as Schema from "effect/Schema"
 import { assert, describe, it, vi } from "vitest"
 import * as FakeAnimated from "./utils/FakeAnimated.ts"
@@ -167,6 +167,83 @@ const Pull = Native.component({
   }
 })
 
+const Headers = Native.component({
+  name: "Headers",
+  model: Schema.Struct({
+    sticky: Schema.Boolean,
+    hiddenOnScroll: Schema.Boolean,
+    inverted: Schema.Boolean,
+    presses: Schema.Number
+  }),
+  message: UiSchema.TaggedEnum({
+    Set: {
+      sticky: Schema.Boolean,
+      hiddenOnScroll: Schema.Boolean,
+      inverted: Schema.Boolean
+    },
+    Pressed: {}
+  })
+}).make({
+  init: () => ({
+    sticky: true,
+    hiddenOnScroll: false,
+    inverted: false,
+    presses: 0
+  }),
+  update: {
+    Set: ($, options) => $.evolve({ ...options }),
+    Pressed: ($) => $.evolve({ presses: (n) => n + 1 })
+  },
+  view: (h, model) =>
+    pipe(
+      h.scroll,
+      model.sticky
+        ? Animation.stickyHeaders([0, 2], {
+          hiddenOnScroll: model.hiddenOnScroll,
+          inverted: model.inverted
+        })
+        : identity
+    ).children(
+      // Not a child native counts.
+      RefreshControl(h),
+      h.view.style({ height: 50 }).on("press", { _tag: "Pressed" }).children(
+        h.text("A " + model.presses)
+      ),
+      h.view.style({ height: 300 }),
+      h.view.style({ height: 40 }).children(h.text("B")),
+      h.view.style({ height: 600 })
+    )
+})
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+const headers = async (os: string) => {
+  const mounted = await FakeFabric.mount(
+    (root) => Renderer.mount(Headers, {}, root),
+    undefined,
+    os
+  )
+  const { fabric, find } = mounted
+  const a = () => find((n) => n.props.height === 50)
+  const b = () => find((n) => n.props.height === 40)
+  const scroller = () => find(FakeFabric.byName("RCTScrollView"))
+  const content = () => find(FakeFabric.byName("RCTScrollContentView"))
+  // Where native lays them out, inside the content view at y 10.
+  const place = (ya: number, yb: number) => {
+    fabric.place(scroller(), [0, 0, 390, 500])
+    fabric.place(content(), [0, 10, 390, 1000])
+    fabric.place(a(), [0, 10 + ya, 390, 50])
+    fabric.place(b(), [0, 10 + yb, 390, 40])
+  }
+  const shown = (n: { readonly tag: number }) =>
+    (animated.view(n.tag)?.transform as any)?.[0].translateY
+  const scroll = (y: number) => {
+    animated.scroll(scroller().tag, { y })
+    fabric.emit(scroller(), "topScroll", { contentOffset: { y } })
+  }
+  return { ...mounted, a, b, scroller, place, shown, scroll }
+}
+
 // Like React Native's, the fake animated module is shared by every surface,
 // so tests that count its nodes run one at a time.
 describe("Animation", { concurrent: false }, () => {
@@ -217,6 +294,138 @@ describe("Animation", { concurrent: false }, () => {
     assert.isUndefined(animated.view(reused.tag))
     await close()
   })
+
+  for (const os of ["ios", "android"]) {
+    it(`docks sticky headers on the native driver, one pushing the other, on ${os}`, async () => {
+      animated.ios(os === "ios")
+      const before = { nodes: animated.nodes(), events: animated.events() }
+      try {
+        const t = await headers(os)
+        const rows = t.find((n) => n.props.height === 300)
+        assert.strictEqual(t.a().props.zIndex, 10)
+        assert.strictEqual(t.a().props.collapsable, false)
+        assert.deepStrictEqual(t.a().props.transform, [{ translateY: 0 }])
+        assert.strictEqual(t.b().props.zIndex, 10)
+        assert.isUndefined(rows.props.zIndex)
+        // Not laid out yet: the headers scroll with the rows.
+        t.scroll(100)
+        assert.strictEqual(t.shown(t.a()), 0)
+
+        t.place(0, 350)
+        t.root.send({ _tag: "Pressed" })
+        await t.settle()
+        assert.strictEqual(t.shown(t.a()), 100)
+        assert.strictEqual(t.shown(t.b()), 0)
+        // B pushes A up as it reaches it, then docks itself.
+        t.scroll(320)
+        assert.strictEqual(t.shown(t.a()), 300)
+        assert.strictEqual(t.shown(t.b()), 0)
+        t.scroll(400)
+        assert.strictEqual(t.shown(t.a()), 300)
+        assert.strictEqual(t.shown(t.b()), 50)
+
+        // Once the scroll pauses, Fabric gets where they are shown.
+        t.scroll(120)
+        await sleep(100)
+        assert.deepStrictEqual(t.a().props.transform, [{ translateY: 120 }])
+        assert.deepStrictEqual(t.b().props.transform, [{ translateY: 0 }])
+
+        // Without sticky headers, they get new views that the driver doesn't move.
+        const tag = t.a().tag
+        t.root.send({
+          _tag: "Set",
+          sticky: false,
+          hiddenOnScroll: false,
+          inverted: false
+        })
+        await t.settle()
+        assert.notStrictEqual(t.a().tag, tag)
+        assert.isUndefined(t.a().props.zIndex)
+        assert.isUndefined(t.a().props.transform)
+        assert.isUndefined(animated.view(t.a().tag))
+        assert.deepStrictEqual(
+          { nodes: animated.nodes(), events: animated.events() },
+          before
+        )
+        // The new view is laid out where the old one was.
+        t.place(0, 350)
+        t.root.send({
+          _tag: "Set",
+          sticky: true,
+          hiddenOnScroll: false,
+          inverted: false
+        })
+        await t.settle()
+        t.scroll(60)
+        assert.strictEqual(t.shown(t.a()), 60)
+        await t.close()
+        assert.deepStrictEqual(
+          { nodes: animated.nodes(), events: animated.events() },
+          before
+        )
+      } finally {
+        animated.ios(false)
+      }
+    })
+
+    it(`hides a docked header while scrolling down, and docks inverted headers at the bottom, on ${os}`, async () => {
+      animated.ios(os === "ios")
+      const before = { nodes: animated.nodes(), events: animated.events() }
+      try {
+        const t = await headers(os)
+        t.place(0, 350)
+        t.root.send({
+          _tag: "Set",
+          sticky: true,
+          hiddenOnScroll: true,
+          inverted: false
+        })
+        await t.settle()
+        // Where A shows on screen: its place, scrolled, and translated.
+        const top = (y: number) => {
+          t.scroll(y)
+          return t.shown(t.a()) - y
+        }
+        // Docked, it moves up by as much as the list scrolls down.
+        assert.strictEqual(top(30), -30)
+        assert.strictEqual(top(100), -50)
+        // Scrolling up brings it back as far.
+        assert.strictEqual(top(80), -30)
+        assert.strictEqual(top(20), 0)
+        assert.strictEqual(top(60), -40)
+        await sleep(100)
+        assert.deepStrictEqual(t.a().props.transform, [{
+          translateY: t.shown(t.a())
+        }])
+
+        // Inverted, a header docks at the bottom of the 500 tall scroll
+        // view once it's below it.
+        t.scroll(0)
+        t.place(600, 900)
+        t.root.send({
+          _tag: "Set",
+          sticky: true,
+          hiddenOnScroll: false,
+          inverted: true
+        })
+        await t.settle()
+        t.scroll(100)
+        assert.strictEqual(t.shown(t.a()), 0)
+        t.scroll(200)
+        assert.strictEqual(t.shown(t.a()), 50)
+        // B, 300 below, pushes it at 350.
+        t.scroll(400)
+        assert.strictEqual(t.shown(t.a()), 200)
+        await t.close()
+        assert.deepStrictEqual(
+          { nodes: animated.nodes(), events: animated.events() },
+          before
+        )
+      } finally {
+        animated.ios(false)
+      }
+    })
+  }
 
   it("animates to each target from where the value is, and reports the end", async () => {
     const before = animated.nodes()

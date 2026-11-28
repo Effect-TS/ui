@@ -18,12 +18,13 @@
  */
 import type * as Renderer from "@effect/ui/Renderer"
 import type * as Context from "effect/Context"
-import { focus } from "./internal/focus.ts"
+import { focus, trackKeyboard } from "./internal/focus.ts"
 import {
   commits,
   flushInputs,
   kinds,
   layouts,
+  precommits,
   props
 } from "./internal/kinds.ts"
 import {
@@ -105,6 +106,12 @@ export interface Options {
   readonly processColor: (color: unknown) => unknown
   /** Called after every `commit`, whether or not it changed anything. */
   readonly onCommit?: (() => void) | undefined
+  /**
+   * The device whose keyboard events tell a `scroll` whether a tap can
+   * dismiss the keyboard. Without one the keyboard reads as hidden, except
+   * on Android before API 30.
+   */
+  readonly device?: Native.Device | undefined
 }
 
 /**
@@ -183,7 +190,7 @@ export const make = (options: Options): {
   readonly root: NativeNode
   readonly operations: Context.Service.Shape<typeof Native.Host>
 } => {
-  const { onCommit, os, processColor, rootTag, ui } = options
+  const { device, onCommit, os, processColor, rootTag, ui } = options
   // Each read of a binding method makes a new host function, so read once.
   const createNode = ui.createNode
   const cloneProps = ui.cloneNodeWithNewProps
@@ -191,6 +198,7 @@ export const make = (options: Options): {
   const cloneBoth = ui.cloneNodeWithNewChildrenAndProps
   const appendChild = ui.appendChild
   listen(ui)
+  if (device !== undefined) trackKeyboard(device)
   const colors = new Map<string, unknown>()
   const color = (value: unknown) => {
     if (typeof value !== "string") return processColor(value)
@@ -236,6 +244,7 @@ export const make = (options: Options): {
   // The LayoutAnimation config for the next commit that changes the tree.
   let layout: object | undefined
   const commit = () => {
+    for (const hook of precommits) hook(view)
     flushInputs(view)
     if (root.dirty) {
       root.dirty = false

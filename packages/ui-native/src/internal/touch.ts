@@ -1,5 +1,7 @@
 import type { NativeNode } from "../NativeHost.ts"
-import { rootOf } from "./node.ts"
+import { blurFocused, focus } from "./focus.ts"
+import { kinds, persistTaps } from "./kinds.ts"
+import { mounted, rootOf } from "./node.ts"
 
 /**
  * The touch payload Fabric sends with `topTouch*`.
@@ -154,8 +156,59 @@ const coasting = new WeakMap<NativeNode, number>()
 
 let target: NativeNode | undefined
 let taken = false
+// Whether the touch blurs the focused input when it ends: `1` unless a
+// scroll view around its target scrolls first, `2` regardless.
+let blur: 0 | 1 | 2 = 0
 // The target of a touch whose element was removed, until it is cancelled.
 let dropped: NativeNode | undefined
+
+// A handler that takes a touch as it starts, as React Native's responders do.
+const claims = (n: NativeNode) => {
+  const h = n.events?.handlers
+  return h !== undefined && (h.press ?? h.pressIn ?? h.pan) !== undefined
+}
+
+/**
+ * Applies `keyboardShouldPersistTaps` of the scroll views around a touch
+ * that starts on `n`, returning whether one takes the touch, as React
+ * Native's `ScrollView` does while the keyboard can be dismissed.
+ *
+ * A `"never"` scroll view takes a touch that doesn't start on an input. A
+ * `"handled"` one takes it when nothing inside it handles it. Either way
+ * the focused input is blurred when the touch ends, unless the scroll view
+ * scrolls. A keyboard of height 0, which doesn't cover the app, lets a
+ * `"never"` scroll view's touch through to the elements and blurs when it
+ * ends, as React Native's `ScrollView` does.
+ */
+const persist = (n: NativeNode): boolean => {
+  const input = kinds.get("input")
+  const focused = focus.node
+  if (
+    focused === undefined || focused.kind !== input || !mounted(focused) ||
+    (focus.keyboard === undefined && !focus.unreliable) || n === focused
+  ) return false
+  const scroll = kinds.get("scroll")
+  const detached = focus.keyboard === 0
+  let handled = n.kind === input
+  let take = false
+  for (let p: NativeNode | undefined = n; p !== undefined; p = p.parent) {
+    if (p.kind === scroll) {
+      const mode = persistTaps.get(p) ?? "never"
+      if (mode === "never" && n.kind !== input) {
+        if (detached) blur = 2
+        else {
+          blur ||= 1
+          take = true
+        }
+      } else if (mode === "handled" && !handled) {
+        blur ||= 1
+        take = handled = true
+      }
+    }
+    handled ||= claims(p)
+  }
+  return take
+}
 
 const cancel = () => {
   const t = dropped
@@ -182,8 +235,12 @@ export const route = (n: NativeNode, type: string, payload: any): void => {
   if (!type.startsWith("topTouch")) {
     if (type === "topMomentumScrollBegin") coasting.set(n, Infinity)
     else if (type === "topMomentumScrollEnd") coasting.set(n, Date.now())
-    else if (type === "topScrollBeginDrag" && !taken && under(target, n)) {
-      taken = recognize(4, n, payload) !== false
+    else if (type === "topScrollBeginDrag" || type === "topScroll") {
+      if (!under(target, n)) return
+      if (blur === 1) blur = 0
+      if (type === "topScrollBeginDrag" && !taken) {
+        taken = recognize(4, n, payload) !== false
+      }
     }
     return
   }
@@ -202,11 +259,14 @@ export const route = (n: NativeNode, type: string, payload: any): void => {
     for (let p: NativeNode | undefined = n; p !== undefined; p = p.parent) {
       if (now - coasting.get(p)! < 16) taken = true
     }
+    if (!taken) taken = persist(n)
   } else return
   if (!taken) recognize(phase, n, payload)
   if (phase > 1) {
+    if (phase === 2 && blur !== 0) blurFocused()
     target = undefined
     taken = false
+    blur = 0
   }
 }
 

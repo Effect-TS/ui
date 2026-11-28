@@ -194,7 +194,8 @@ export const byName = (name: string) => (n: ShadowNode) => n.viewName === name
 
 /**
  * Runs `mount` with a NativeHost on `os` (Android by default) over a new
- * fake Fabric, as `NativeApp` does, and waits for the first commit.
+ * fake Fabric, as `NativeApp` does, and waits for the first commit. Its
+ * scroll views read the keyboard from `device`.
  * `settle` waits for the next one.
  */
 export const mount = async <A>(
@@ -202,7 +203,8 @@ export const mount = async <A>(
     container: NativeHost.NativeNode
   ) => Effect.Effect<A, never, Renderer.Renderer | Native.Host | Scope.Scope>,
   processColor: (color: unknown) => unknown = (color) => color,
-  os = "android"
+  os = "android",
+  device?: Native.Device
 ) => {
   const fabric = make()
   let commits = 0
@@ -211,7 +213,8 @@ export const mount = async <A>(
     rootTag: 1,
     os,
     processColor,
-    onCommit: () => commits++
+    onCommit: () => commits++,
+    device
   })
   const scope = Scope.makeUnsafe()
   const root = await Effect.runPromise(

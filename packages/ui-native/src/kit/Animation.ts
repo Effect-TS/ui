@@ -10,6 +10,9 @@
  *   offset, and `interpolate`, `add`, `multiply` and `diffClamp` derive
  *   from it.
  *
+ * `stickyHeaders` docks children of a scroll view as it scrolls past them,
+ * as React Native's `stickyHeaderIndices` does.
+ *
  * Nothing about an animation is kept in the Model. The `animationEnd` event
  * fires when every target of the element has been reached, so `update` can
  * pick the next one.
@@ -60,8 +63,9 @@
 import * as View from "@effect/ui/View"
 import { dual } from "effect/Function"
 import { get } from "react-native/Libraries/TurboModule/TurboModuleRegistry"
-import { commits, props } from "../internal/kinds.ts"
-import { container, rootOf, surface } from "../internal/node.ts"
+import { commits, precommits, props, scrolls } from "../internal/kinds.ts"
+import { container, mounted, rootOf, surface } from "../internal/node.ts"
+import { rectOf } from "../internal/touch.ts"
 import type * as Native from "../Native.ts"
 import type { NativeNode } from "../NativeHost.ts"
 
@@ -380,6 +384,74 @@ export const source: {
   return self.prop("animationSource", name)
 })
 
+/**
+ * Docks children of the scroll view at the top while it scrolls past them,
+ * as React Native's `stickyHeaderIndices` does. `indices` count the
+ * scroll view's children, and each header is pushed up by the next one.
+ *
+ * **Details**
+ *
+ * - `hiddenOnScroll`, as `stickyHeaderHiddenOnScroll`: a docked header
+ *   hides as the list scrolls down and comes back as it scrolls up.
+ * - `inverted`, as `invertStickyHeaders`: headers dock at the bottom,
+ *   for a list that starts at its end.
+ *
+ * The native driver moves each header, so docking follows the scroll on the
+ * UI thread. Shortly after the scroll stops, the shown position is
+ * committed, so a press on a docked header lands on it. A header shows
+ * above the rows (`zIndex` 10), and its `transform` is the driver's.
+ *
+ * **Gotchas**
+ *
+ * Headers dock along `y` only. A `scrollEventThrottle` of 17 ms or more
+ * makes docking lag the scroll. On Android, don't set
+ * `removeClippedSubviews` on the scroll view.
+ *
+ * @stability experimental
+ * @category combinators
+ * @since 0.1.0
+ */
+export const stickyHeaders: {
+  (
+    indices: ReadonlyArray<number>,
+    options?: StickyOptions
+  ): <B extends Native.ViewElement<any, any, any, "scroll">>(self: B) => B
+  <B extends Native.ViewElement<any, any, any, "scroll">>(
+    self: B,
+    indices: ReadonlyArray<number>,
+    options?: StickyOptions
+  ): B
+} = dual(
+  (args) => View.isElementBuilder(args[0]),
+  (
+    self: Native.ViewElement<unknown>,
+    indices: ReadonlyArray<number>,
+    options?: StickyOptions
+  ) => {
+    install()
+    return self.prop(
+      "stickyHeaders",
+      indices.length === 0 ? undefined : {
+        indices,
+        hiddenOnScroll: options?.hiddenOnScroll === true,
+        inverted: options?.inverted === true
+      }
+    )
+  }
+)
+
+/**
+ * Options of {@link stickyHeaders}.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface StickyOptions {
+  readonly hiddenOnScroll?: boolean | undefined
+  readonly inverted?: boolean | undefined
+}
+
 type Transforms = NonNullable<Style["transform"]>
 
 interface Layer {
@@ -435,10 +507,42 @@ interface Source {
   y?: number | undefined
 }
 
+interface Sticky {
+  options: {
+    readonly indices: ReadonlyArray<number>
+    readonly hiddenOnScroll: boolean
+    readonly inverted: boolean
+  }
+  /** The name of the source the headers follow, private to the scroll view. */
+  readonly source: string
+  /** The children at `indices`, as of the last commit. */
+  kids: ReadonlyArray<NativeNode | undefined>
+  readonly headers: Map<NativeNode, Header>
+  /** The offset of the last scroll event. */
+  y: number
+  timer: ReturnType<typeof setTimeout> | undefined
+}
+
+interface Header {
+  translation: Expression
+  key: string
+  /** The state of `translation`'s `diffClamp`, as the native node has it. */
+  clamps: Map<Expression, Clamp>
+  /** `translation` at the last scroll event. */
+  value: number
+}
+
+interface Clamp {
+  input: number
+  value: number
+}
+
 /** What the driver follows on one surface. */
 interface Driver {
   readonly entries: Map<NativeNode, Entry>
   readonly sources: Map<string, Source>
+  /** The scroll views with sticky headers. */
+  readonly sticky: Map<NativeNode, Sticky>
 }
 
 /** The part of `NativeAnimatedModule` the driver uses. */
@@ -470,6 +574,10 @@ interface AnimatedModule {
 const drivers = new WeakMap<Native.ViewHost, Driver>()
 // The specs shown without a native driver.
 const plain = new WeakMap<NativeNode, Spec>()
+// Each node's spec from `style`, and the transform it gets as a sticky
+// header, which replaces the spec's.
+const own = new WeakMap<NativeNode, Spec>()
+const stuck = new WeakMap<NativeNode, Layer>()
 let animated: AnimatedModule | null | undefined
 let installed = false
 let batching = false
@@ -483,7 +591,10 @@ const install = () => {
   installed = true
   props.set("animation", setSpec)
   props.set("animationSource", setSource)
+  props.set("stickyHeaders", setSticky)
+  precommits.add(assign)
   commits.add(flush)
+  scrolls.add(scrolled)
 }
 
 const driverOf = (host: Native.ViewHost): Driver | undefined => {
@@ -496,7 +607,10 @@ const driverOf = (host: Native.ViewHost): Driver | undefined => {
   if (animated === null) return undefined
   let d = drivers.get(host)
   if (d === undefined) {
-    drivers.set(host, d = { entries: new Map(), sources: new Map() })
+    drivers.set(
+      host,
+      d = { entries: new Map(), sources: new Map(), sticky: new Map() }
+    )
   }
   return d
 }
@@ -504,16 +618,24 @@ const driverOf = (host: Native.ViewHost): Driver | undefined => {
 const setSpec = (n: NativeNode, value: unknown, host: Native.ViewHost) => {
   const spec = value as Spec | undefined
   const d = driverOf(host)
-  if (d === undefined) {
-    // Without a native driver, the view shows its targets.
-    for (const key in plain.get(n)) {
-      if (spec?.[key] === undefined) host.set(n, key, undefined)
-    }
-    for (const key in spec) host.set(n, key, resolve(spec[key]!.value, true))
-    if (spec === undefined) plain.delete(n)
-    else plain.set(n, spec)
-    return
+  if (d !== undefined) {
+    if (spec === undefined) own.delete(n)
+    else own.set(n, spec)
+    return show(d, n, host)
   }
+  // Without a native driver, the view shows its targets.
+  for (const key in plain.get(n)) {
+    if (spec?.[key] === undefined) host.set(n, key, undefined)
+  }
+  for (const key in spec) host.set(n, key, resolve(spec[key]!.value, true))
+  if (spec === undefined) plain.delete(n)
+  else plain.set(n, spec)
+}
+
+const show = (d: Driver, n: NativeNode, host: Native.ViewHost) => {
+  const mine = own.get(n)
+  const transform = stuck.get(n)
+  const spec = transform === undefined ? mine : { ...mine, transform }
   const entry = d.entries.get(n)
   if (entry !== undefined) {
     let released = false
@@ -552,8 +674,196 @@ const setSpec = (n: NativeNode, value: unknown, host: Native.ViewHost) => {
 const setSource = (n: NativeNode, name: unknown, host: Native.ViewHost) => {
   const d = driverOf(host)
   if (d === undefined) return
-  for (const s of d.sources.values()) if (s.node === n) s.node = undefined
+  for (const [key, s] of d.sources) {
+    if (s.node === n && key !== d.sticky.get(n)?.source) s.node = undefined
+  }
   if (typeof name === "string") sourceOf(d, name).node = n
+}
+
+const setSticky = (n: NativeNode, value: unknown, host: Native.ViewHost) => {
+  const d = driverOf(host)
+  if (d === undefined) return
+  const options = (value ?? noHeaders) as Sticky["options"]
+  const st = d.sticky.get(n)
+  if (st !== undefined) st.options = options
+  else if (value !== undefined) {
+    d.sticky.set(n, {
+      options,
+      source: "sticky " + (lastTag += 1),
+      kids: [],
+      headers: new Map(),
+      y: 0,
+      timer: undefined
+    })
+  }
+}
+
+const noHeaders: Sticky["options"] = {
+  indices: [],
+  hiddenOnScroll: false,
+  inverted: false
+}
+
+const unmeasured = [0, 0] as const
+
+// Before a commit: makes the scroll views' children at their indices
+// sticky headers, and the others not.
+const assign = (host: Native.ViewHost) => {
+  const d = drivers.get(host)
+  if (d === undefined) return
+  for (const [n, st] of d.sticky) {
+    const top = rootOf(n).kind
+    const live = top === surface || top === container
+    const kids: Array<NativeNode | undefined> = []
+    if (live) {
+      const children: Array<NativeNode> = []
+      for (let k = n.inner!.first; k !== undefined; k = k.next) {
+        // A wrapper such as `RefreshControl` isn't a child native counts.
+        if (k.kind.attach === undefined) children.push(k)
+      }
+      for (const i of st.options.indices) kids.push(children[i])
+    }
+    st.kids = kids
+    for (const h of st.headers.keys()) {
+      if (kids.includes(h)) continue
+      st.headers.delete(h)
+      stuck.delete(h)
+      host.set(h, "zIndex", undefined)
+      show(d, h, host)
+    }
+    for (const h of kids) {
+      if (h === undefined || st.headers.has(h)) continue
+      translate(d, st, h, undefined, undefined, undefined)
+      // As React Native's `ScrollViewStickyHeader`, above the rows.
+      host.set(h, "zIndex", 10)
+    }
+    if (live) sourceOf(d, st.source).node = n
+    else {
+      clearTimeout(st.timer)
+      d.sticky.delete(n)
+      sourceOf(d, st.source).node = undefined
+    }
+  }
+}
+
+// After a commit: lays each header's translation out from where native
+// laid the headers out, as React Native's `ScrollViewStickyHeader`.
+const measure = (d: Driver, n: NativeNode, st: Sticky) => {
+  const content = rectOf(n.inner!, false)
+  const layouts = st.kids.map((h) => {
+    const rect = h === undefined ? undefined : rectOf(h, false)
+    return rect == null || content == null
+      ? undefined
+      : [rect[1]! - content[1]!, rect[3]!] as const
+  })
+  const height = st.options.inverted ? rectOf(n, false)?.[3] : undefined
+  let changed = false
+  for (let i = 0; i < st.kids.length; i++) {
+    const h = st.kids[i]
+    if (h === undefined) continue
+    changed = translate(
+      d,
+      st,
+      h,
+      layouts[i],
+      layouts[i + 1]?.[0],
+      height
+    ) || changed
+  }
+  if (changed) commitLater(st, n.host)
+}
+
+// Gives the header the translation for its layout, returning whether it
+// changed.
+const translate = (
+  d: Driver,
+  st: Sticky,
+  h: NativeNode,
+  layout: readonly [number, number] | undefined,
+  next: number | undefined,
+  height: number | undefined
+): boolean => {
+  const [y, size] = layout ?? unmeasured
+  const offset = scroll(st.source, "y")
+  const input = [-1, 0]
+  const output = [0, 0]
+  if (layout === undefined) {
+    // Not laid out yet: in place.
+  } else if (st.options.inverted) {
+    if (height !== undefined) {
+      const start = y + size - height
+      if (start > 0) {
+        input.push(start, start + 1)
+        output.push(0, 1)
+        const collision = (next ?? 0) - size - height
+        if (collision > start) {
+          input.push(collision, collision + 1)
+          output.push(collision - start, collision - start)
+        }
+      }
+    }
+  } else {
+    input.push(y)
+    output.push(0)
+    const collision = (next ?? 0) - size
+    if (collision >= y) {
+      input.push(collision, collision + 1)
+      output.push(collision - y, collision - y)
+    } else {
+      input.push(y + 1)
+      output.push(1)
+    }
+  }
+  let translation = interpolate(offset, input, output)
+  if (st.options.hiddenOnScroll) {
+    // Follows the scroll past the header's place, up to its height.
+    translation = add(
+      translation,
+      diffClamp(interpolate(offset, [y - 1, y, y + 1], [0, 0, -1]), -size, 0)
+    )
+  }
+  const key = JSON.stringify(translation)
+  if (key === st.headers.get(h)?.key) return false
+  const clamps = new Map<Expression, Clamp>()
+  st.headers.set(h, {
+    translation,
+    key,
+    clamps,
+    value: evaluate(translation, st.y, clamps)
+  })
+  stuck.set(h, {
+    value: [{ translateY: translation }],
+    transition: undefined,
+    from: undefined
+  })
+  show(d, h, h.host)
+  return true
+}
+
+const scrolled = (n: NativeNode, event: any) => {
+  const st = drivers.get(n.host)?.sticky.get(n)
+  if (st === undefined) return
+  st.y = event?.contentOffset?.y ?? 0
+  for (const header of st.headers.values()) {
+    header.value = evaluate(header.translation, st.y, header.clamps)
+  }
+  commitLater(st, n.host)
+}
+
+// Commits where the headers are shown, so Fabric's shadow tree agrees for
+// hit tests, once the scroll pauses, as React Native's
+// `ScrollViewStickyHeader` does on Fabric.
+const commitLater = (st: Sticky, host: Native.ViewHost) => {
+  clearTimeout(st.timer)
+  st.timer = setTimeout(() => {
+    st.timer = undefined
+    for (const [h, header] of st.headers) {
+      if (mounted(h)) {
+        host.set(h, "transform", [{ translateY: header.value }])
+      }
+    }
+    host.commit()
+  }, host.os === "android" ? 15 : 64)
 }
 
 const sourceOf = (d: Driver, name: string): Source => {
@@ -582,19 +892,33 @@ const resolve = (value: Layer["value"], at0: boolean): unknown => {
   return out
 }
 
-const evaluate = (v: Value): number => {
+// The value at scroll offset `y`. With `clamps`, a `diffClamp` follows
+// the change since the last evaluation, as its native node does.
+const evaluate = (
+  v: Value,
+  y = 0,
+  clamps?: Map<Expression, Clamp>
+): number => {
   if (typeof v === "number") return v
   switch (v._tag) {
     case "Scroll":
-      return 0
+      return y
     case "Add":
-      return evaluate(v.left) + evaluate(v.right)
+      return evaluate(v.left, y, clamps) + evaluate(v.right, y, clamps)
     case "Multiply":
-      return evaluate(v.left) * evaluate(v.right)
-    case "DiffClamp":
-      return Math.min(Math.max(evaluate(v.input), v.min), v.max)
+      return evaluate(v.left, y, clamps) * evaluate(v.right, y, clamps)
+    case "DiffClamp": {
+      const x = evaluate(v.input, y, clamps)
+      const clamp = (value: number) => Math.min(Math.max(value, v.min), v.max)
+      if (clamps === undefined) return clamp(x)
+      let c = clamps.get(v)
+      if (c === undefined) clamps.set(v, c = { input: 0, value: 0 })
+      c.value = clamp(c.value + x - c.input)
+      c.input = x
+      return c.value
+    }
     case "Interpolate": {
-      const x = evaluate(v.input)
+      const x = evaluate(v.input, y, clamps)
       const at = v.inputRange
       const to = v.outputRange
       const last = at.length - 1
@@ -653,6 +977,7 @@ const native = (): AnimatedModule => {
 const flush = (host: Native.ViewHost) => {
   const d = drivers.get(host)
   if (d === undefined) return
+  for (const [n, st] of d.sticky) if (mounted(n)) measure(d, n, st)
   for (const [n, e] of d.entries) {
     const top = rootOf(n).kind
     // A node outside a surface or a kept child's container has been dropped.

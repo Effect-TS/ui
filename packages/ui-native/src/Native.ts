@@ -1523,6 +1523,24 @@ export class ScrollElement<
   scrollEventThrottle(ms: number): this {
     return this.prop("scrollEventThrottle", ms)
   }
+
+  /**
+   * What a tap does while an `input` inside the app has the soft keyboard
+   * up, as React Native's `keyboardShouldPersistTaps`:
+   *
+   * - `"never"`, the default: a tap that doesn't start on an `input` only
+   *   dismisses the keyboard. Elements inside get the next tap.
+   * - `"handled"`: a tap that nothing inside handles with `press`, a
+   *   `Pressable` or a `Pan` dismisses the keyboard. Others go through.
+   * - `"always"`: taps go through and leave the keyboard up.
+   *
+   * A tap that scrolls the view leaves the keyboard up.
+   *
+   * @since 0.1.0
+   */
+  keyboardShouldPersistTaps(mode: "never" | "handled" | "always"): this {
+    return this.prop("keyboardShouldPersistTaps", mode)
+  }
 }
 
 /**
