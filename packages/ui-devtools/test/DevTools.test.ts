@@ -639,6 +639,66 @@ describe("DevTools overlay", { concurrent: false }, () => {
       )
     }).pipe(Effect.scoped))
 
+  it.live("paints a stopped child at the shown update that mounted it, after the child updated", () =>
+    Effect.gen(function*() {
+      const ItemMessage = UiSchema.TaggedEnum({ Bumped: {} })
+      const Item = Html.component({
+        name: "Item",
+        model: Schema.Number,
+        message: ItemMessage
+      }).make({
+        init: () => 0,
+        update: { Bumped: ($) => $.model + 1 },
+        view: (h, model) =>
+          h.div(
+            h.output.attr("data-item", "").children(String(model)),
+            h.button.on("click", ItemMessage.Bumped()).children("Bump")
+          )
+      })
+      const ShelfMessage = UiSchema.TaggedEnum({ Added: {} })
+      const Shelf = Html.component({
+        name: "Shelf",
+        model: Schema.Boolean,
+        message: ShelfMessage
+      }).make({
+        init: () => false,
+        update: { Added: () => true },
+        view: (h, added) =>
+          h.main(
+            h.button.on("click", ShelfMessage.Added()).children("Add"),
+            added ? Item(h, { key: "i", props: {} }) : null
+          )
+      })
+      localStorage.clear()
+      sessionStorage.clear()
+      const app = document.body.appendChild(document.createElement("div"))
+      yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+      yield* Layer.build(
+        DevTools.layer({ exclude: [{ component: "Item" }] })
+      ).pipe(
+        Effect.flatMap((services) =>
+          BrowserHost.mountEffect(Shelf, {}, app).pipe(Effect.provide(services))
+        )
+      )
+      yield* settle
+      const root = overlay()
+      yield* open(root)
+      yield* click(HtmlLocator.getByRole(app, "button", { name: "Add" }))
+      yield* click(HtmlLocator.getByRole(app, "button", { name: "Bump" }))
+      yield* click(entry(root, /Update Added$/)[0]!)
+      yield* click(
+        HtmlLocator.getByRole(root, "button", { name: "Time travel" })
+      )
+      assert.strictEqual(
+        app.nextElementSibling?.querySelector("[data-item]")?.textContent,
+        "0"
+      )
+      assert.isNull(root.querySelector(".pause-note"))
+      yield* click(
+        HtmlLocator.getByRole(root, "button", { name: "Resume the live page" })
+      )
+    }).pipe(Effect.scoped))
+
   it.live("shows the page at an earlier entry beside the live tree, and Resume brings the live tree back", () =>
     Effect.gen(function*() {
       const { app, root } = yield* mount("closed")

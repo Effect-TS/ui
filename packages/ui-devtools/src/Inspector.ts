@@ -435,9 +435,10 @@ export interface Exclusion {
  * `DevTools.layer`, is omitted from `entries` and takes no slot. Of an
  * instance's excluded `Update`, `Mounted` and `Waiting` entries, only
  * the latest since the last shown entry of any instance is kept, so the next
- * shown entry is still compared with the latest excluded state. Other
- * excluded entries update the instance's records and are not kept. Links to
- * an entry not kept resolve to `Outside`.
+ * shown entry is still compared with the latest excluded state. An excluded
+ * `Unmounted` is kept too, unless the instance mounted since the last shown
+ * entry. Other excluded entries update the instance's records and are not
+ * kept. Links to an entry not kept resolve to `Outside`.
  *
  * `exclude` is not a way to hide sensitive data: later entries still carry
  * whatever an excluded message changed in the Model. Use `Schema.Redacted`

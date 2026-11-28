@@ -609,9 +609,10 @@ const makeSession = (
         hidden.add(entry.seq)
         const state = entry._tag === "Update" || entry._tag === "Mounted" ||
           entry._tag === "Waiting"
+        const fleeting = entry._tag === "Unmounted" && instance > settled
         // Only the latest state counts, and an instance that came and went
         // between shown entries leaves no trace.
-        if (state || entry._tag === "Unmounted" && instance > settled) {
+        if (state || fleeting) {
           const replaced = coalesced.get(instance)
           if (replaced !== undefined) {
             const inst = instances.get(instance)
@@ -623,8 +624,9 @@ const makeSession = (
           }
         }
         if (state) coalesced.set(instance, entry)
-        // The rest only changes the instance's records: apply it, keep nothing.
-        else transient = true
+        // An unmount stays, without a slot, so a late viewer replays it. The
+        // rest only changes the instance's records: apply it, keep nothing.
+        else if (fleeting || entry._tag !== "Unmounted") transient = true
       } else {
         newest = Math.max(newest, entry.instance)
         settled = newest

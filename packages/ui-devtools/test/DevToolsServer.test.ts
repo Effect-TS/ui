@@ -531,79 +531,73 @@ describe("DevToolsServer", { concurrent: false }, () => {
   )
 
   it.live(
-    "keeps the query results of a stopped mount that a stopped update without them replaced",
+    "keeps a stopped instance's query results and unmount, for its state and a late viewer",
     () =>
       Effect.gen(function*() {
         const { agent, url } = yield* serve()
-        const page = yield* Layer.build(
-          MessageLog.socket(url.replace("http", "ws") + "/log").pipe(
-            Layer.provide(Socket.layerWebSocketConstructorGlobal)
-          )
-        )
-        const log = Context.get(page, MessageLog.MessageLog)
-        const def = Query.defOf(GetNote)
-        const base = (seq: number) => ({
+        const socket = yield* connectSocket(url.replace("http", "ws") + "/log")
+        yield* Effect.addFinalizer(() => Effect.sync(() => socket.close()))
+        const stopped = { ...at, excluded: true }
+        const update = (seq: number, queries?: object) => ({
+          _tag: "Update",
+          ...stopped,
           seq,
-          at: 0,
-          session: "s",
-          path: "/Note",
-          instance: 1,
-          component: Note,
-          excluded: true
+          source: { _tag: "Dispatch" },
+          message: { _tag: "Ticked" },
+          props: {},
+          model: seq,
+          ...(queries === undefined ? undefined : { queries }),
+          commands: [],
+          events: [],
+          lists: [],
+          sends: []
         })
         for (
-          const entry of [
-            {
-              _tag: "SessionStarted",
-              seq: 0,
-              at: 0,
-              session: "s",
-              app: "Note"
-            },
+          const frame of [
+            { _tag: "Hello", version: 1, host: "test" },
+            { _tag: "SessionStarted", ...at, seq: 0, app: "App" },
             {
               _tag: "Mounted",
-              ...base(1),
-              props: { id: "a" },
-              model: {},
-              queries: {
-                note: Query.makeSnapshot(
-                  def,
-                  "note",
-                  { args: { id: "a" }, argsKey: def.argsKey({ id: "a" }) },
-                  AsyncResult.success("Note a", { timestamp: 0 })
-                )
-              },
+              ...at,
+              seq: 1,
+              props: {},
+              model: 1,
+              queries: { a: 1, b: 2 },
               commands: [],
               events: [],
               adopted: false
             },
-            {
-              _tag: "Update",
-              ...base(2),
-              source: { _tag: "Dispatch" },
-              message: { _tag: "Click" },
-              props: { id: "a" },
-              model: {},
-              commands: [],
-              events: [],
-              lists: [],
-              sends: []
-            }
-          ] as ReadonlyArray<MessageLog.Entry>
-        ) log.record(entry)
+            update(2),
+            { _tag: "QueryChanged", ...stopped, seq: 3, name: "a", result: 3 },
+            update(4),
+            // A shown entry, so the next stopped update doesn't replace #4.
+            { _tag: "PropsChanged", ...at, seq: 5, props: {} },
+            update(6, { a: 3, b: 4 }),
+            update(7),
+            { _tag: "Unmounted", ...stopped, seq: 8 }
+          ]
+        ) socket.send(JSON.stringify(frame))
 
-        // Stopped entries don't move `last`, but they count as instances.
-        yield* agent.call<ReadonlyArray<any>>("list_sessions").pipe(
-          Effect.filterOrFail(([session]) => session?.instances === 1),
-          Effect.retry(Schedule.spaced("10 millis")),
-          Effect.timeout("5 seconds")
-        )
         const state = yield* agent.call<any>("get_state", { instance: 1 }).pipe(
-          Effect.filterOrFail((state) => state.at === 2),
+          Effect.filterOrFail((state) => state.at === 8),
           Effect.retry(Schedule.spaced("10 millis")),
           Effect.timeout("5 seconds")
         )
-        assert.strictEqual(state.queries.note[2], "Note a")
+        assert.deepStrictEqual(state.queries, { a: 3, b: 4 })
+        const before = yield* agent.call("get_state", { instance: 1, at: 5 })
+        assert.deepStrictEqual(before.queries, { a: 3, b: 2 })
+
+        const watch = yield* connectSocket(url.replace("http", "ws") + "/watch")
+        yield* Effect.addFinalizer(() => Effect.sync(() => watch.close()))
+        const frames: Array<any> = []
+        watch.addEventListener("message", (event) => {
+          const frame = JSON.parse(String(event.data))
+          if (frame._tag !== "Held") frames.push(frame)
+        })
+        yield* until(() => frames.some((frame) => frame.seq === 8))
+        const viewer = Inspector.make()
+        viewer.ingest(frames)
+        assert.strictEqual(viewer.sessions()[0]!.summary(1)?.unmounted, 8)
       }).pipe(Effect.scoped),
     30_000
   )

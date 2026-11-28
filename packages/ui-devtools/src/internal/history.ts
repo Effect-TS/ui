@@ -94,10 +94,15 @@ const isDirty = (dirty: ReadonlySet<string>, path: string) => {
   return false
 }
 
-const keyOf = (entry: Entry): string | undefined => {
+// A mount a shown entry caused keeps its own slot: Time travel at that entry
+// paints it, whatever the instance does next.
+const keyOf = (entry: Entry, shownSeq: number): string | undefined => {
   switch (entry._tag) {
     case "Waiting":
     case "Mounted":
+      return entry.causedBy !== undefined && entry.causedBy <= shownSeq
+        ? entry._tag
+        : "state"
     case "Update":
       return "state"
     case "PropsChanged":
@@ -108,7 +113,8 @@ const keyOf = (entry: Entry): string | undefined => {
 }
 
 // A state entry without query results keeps those of the one it replaces,
-// with any result that changed after it.
+// with any result that changed after it. When the replaced one had none
+// either, the query changes kept apply over the earlier state.
 type StateEntry = Extract<
   Entry,
   { readonly _tag: "Waiting" | "Mounted" | "Update" }
@@ -119,7 +125,9 @@ const carryQueries = (
   replaced: StateEntry,
   kept: ReadonlyMap<string, Entry>
 ): Entry => {
-  if (entry.queries !== undefined) return entry
+  if (entry.queries !== undefined || replaced.queries === undefined) {
+    return entry
+  }
   let queries: unknown = replaced.queries
   for (const changed of kept.values()) {
     if (changed._tag === "QueryChanged" && changed.seq > replaced.seq) {
@@ -143,6 +151,7 @@ const makeSession = (size: number) => {
   // Instance numbers grow, so one above `settled` mounted since the last shown entry.
   let newest = -1
   let settled = -1
+  let shownSeq = -Infinity
   const drop = () => {
     const oldest = entries.shift()!
     floor = oldest.seq
@@ -162,14 +171,21 @@ const makeSession = (size: number) => {
   const exclude = (entry: Entry & { readonly instance: number }) => {
     let kept = coalesced.get(entry.instance)
     if (entry._tag === "Unmounted") {
-      // An instance that came and went between shown entries leaves no trace.
+      // An instance that came and went between shown entries leaves no trace,
+      // but for a mount a shown entry caused.
       if (entry.instance > settled) {
-        for (const replaced of kept?.values() ?? []) remove(replaced)
+        let painted = false
+        for (const [key, replaced] of kept ?? []) {
+          if (key === "Mounted" || key === "Waiting") painted = true
+          else remove(replaced)
+        }
         coalesced.delete(entry.instance)
-      } else entries.push(entry)
+        if (!painted) return
+      }
+      entries.push(entry)
       return
     }
-    const key = keyOf(entry)
+    const key = keyOf(entry, shownSeq)
     if (key === undefined) return
     if (kept === undefined) coalesced.set(entry.instance, kept = new Map())
     const replaced = kept.get(key)
@@ -201,6 +217,7 @@ const makeSession = (size: number) => {
       }
       coalesced.clear()
       settled = newest
+      shownSeq = entry.seq
       entries.push(entry)
       shown.set(entry.seq, entry)
       while (shown.size > size) drop()
