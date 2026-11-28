@@ -4,8 +4,8 @@
  * Native starts each surface, such as an Android activity's root view, by
  * calling `RN$AppRegistry.runApplication`. {@link register} installs that
  * global, and the rest of what React Native's own startup would: the event
- * emitters native sends device events through, `performance`, and in
- * development the Fast Refresh client.
+ * emitters native sends device events through, `performance`,
+ * `queueMicrotask`, and in development the Fast Refresh client.
  *
  * Networking globals such as `fetch` are not installed by {@link register}.
  * Import `@effect/ui-native/networking` from the entry module if your app
@@ -254,6 +254,12 @@ const install = () => {
   installed = true
   // Native's requestAnimationFrame reads the frame time from here.
   global.performance ??= { now: global.nativePerformanceNow ?? Date.now }
+  // React Native's setUpTimers installs this from the same module.
+  global.queueMicrotask ??=
+    device.module("NativeMicrotasksCxx")?.queueMicrotask ??
+      ((callback: () => void) => {
+        void Promise.resolve().then(callback)
+      })
   const register = (name: string, module: object) =>
     global.RN$registerCallableModule(name, () => module)
   // Native sends device events, such as the keyboard's and the network's,
