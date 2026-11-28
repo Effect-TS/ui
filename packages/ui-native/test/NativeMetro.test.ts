@@ -162,10 +162,12 @@ NativeApp.register(NativeApp.mount(App, {}))
       assert.notInclude(plain, "setSelection")
       assert.notInclude(plain, "react-native/Libraries/Core/setUpXHR")
       assert.include(await bundle("src/used.ts"), "FixtureToggleView")
-      // Each Css helper brings only its own React Native parser.
+      // Each Css helper brings only its parser and drops unused kit controls.
       const css = await bundle("src/css.ts")
       assert.include(css, "processTransform")
       assert.notInclude(css, "processBoxShadow")
+      assert.notInclude(css, "AndroidSwitch")
+      assert.notInclude(css, "activityIndicator")
       const networking = await bundle("src/networking.ts")
       assert.include(networking, "react-native/Libraries/Core/setUpXHR")
     },
