@@ -151,8 +151,15 @@ export const make = () => {
       for (const k in calls) delete calls[k]
     },
     committed: () => committed,
-    emit: (node: ShadowNode, type: string, payload: unknown) =>
+    emit: (node: ShadowNode, type: string, payload: unknown) => {
+      // iOS finds a pointer event's node through the handle, and drops the
+      // event unless that is the current node (UIManagerBinding.cpp:99).
+      if (
+        /^top(Pointer|Click$)/.test(type) &&
+        (node.handle as any)?.stateNode?.node !== node
+      ) return
       handler!(node.handle, type, payload)
+    }
   }
 }
 
@@ -193,28 +200,33 @@ export const touch = (
 export const byName = (name: string) => (n: ShadowNode) => n.viewName === name
 
 /**
- * Runs `mount` with a NativeHost on `os` (Android by default) over a new
- * fake Fabric, as `NativeApp` does, and waits for the first commit. Its
- * scroll views read the keyboard from `device`.
- * `settle` waits for the next one.
+ * A device for a host: `Native.Device`'s default on Android, unless
+ * `device` says otherwise.
+ */
+export const device = (device: Partial<Native.Device> = {}): Native.Device => ({
+  ...Native.Device.defaultValue(),
+  os: "android",
+  ...device
+})
+
+/**
+ * Runs `mount` with a NativeHost on `device` over a new fake Fabric, as
+ * `NativeApp` does, and waits for the first commit. `settle` waits for the
+ * next one.
  */
 export const mount = async <A>(
   mount: (
     container: NativeHost.NativeNode
   ) => Effect.Effect<A, never, Renderer.Renderer | Native.Host | Scope.Scope>,
-  processColor: (color: unknown) => unknown = (color) => color,
-  os = "android",
-  device?: Native.Device
+  options?: Partial<Native.Device>
 ) => {
   const fabric = make()
   let commits = 0
   const made = NativeHost.make({
     ui: fabric.ui,
     rootTag: 1,
-    os,
-    processColor,
-    onCommit: () => commits++,
-    device
+    device: device(options),
+    onCommit: () => commits++
   })
   const scope = Scope.makeUnsafe()
   const root = await Effect.runPromise(

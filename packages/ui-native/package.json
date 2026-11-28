@@ -36,6 +36,7 @@
   "imports": {
     "#dev": {
       "production": "./src/internal/devOff.ts",
+      "node": "./src/internal/devOff.ts",
       "default": "./src/internal/devOn.ts"
     }
   },
@@ -50,6 +51,7 @@
     "./kit": "./src/kit/index.ts",
     "./kit/*": "./src/kit/*.ts",
     "./kit/internal/*": null,
+    "./testing": "./src/testing/index.ts",
     "./*": "./src/*.ts",
     "./internal/*": null,
     "./index": null,
@@ -71,6 +73,7 @@
     "imports": {
       "#dev": {
         "production": "./dist/internal/devOff.js",
+        "node": "./dist/internal/devOff.js",
         "default": "./dist/internal/devOn.js"
       }
     },
@@ -85,6 +88,7 @@
       "./kit": "./dist/kit/index.js",
       "./kit/*": "./dist/kit/*.js",
       "./kit/internal/*": null,
+      "./testing": "./dist/testing/index.js",
       "./*": "./dist/*.js",
       "./internal/*": null,
       "./index": null,
@@ -100,10 +104,18 @@
   "peerDependencies": {
     "@effect/ui": "workspace:^",
     "effect": "^4.1.4",
+    "flow-remove-types": "^2.343.0",
     "react-native": ">=0.88.0",
+    "sucrase": "^3.35.1",
     "vite": "^8.0.0"
   },
   "peerDependenciesMeta": {
+    "flow-remove-types": {
+      "optional": true
+    },
+    "sucrase": {
+      "optional": true
+    },
     "vite": {
       "optional": true
     }
@@ -112,6 +124,8 @@
     "@effect/ui": "workspace:^",
     "@types/node": "^26.6.10",
     "effect": "^4.1.6",
+    "flow-remove-types": "^2.343.0",
+    "sucrase": "^3.35.1",
     "vite": "^8.3.6"
   }
 }

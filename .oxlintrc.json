@@ -47,6 +47,30 @@
       "eslint/no-restricted-imports": "off"
     }
   }, {
+    // Kit code reaches native modules through the host or Native.Device, so
+    // tests load it in Node. Only the files below import React Native.
+    "files": ["packages/ui-native/src/**"],
+    "rules": {
+      "eslint/no-restricted-imports": ["error", {
+        "patterns": [{
+          "regex": "^react-native(/|$)",
+          "allowTypeImports": true,
+          "message": "Reach native modules through the host or Native.Device, so tests can load this module in Node."
+        }]
+      }]
+    }
+  }, {
+    "files": [
+      "packages/ui-native/src/NativeApp.ts",
+      "packages/ui-native/src/internal/devOn.ts",
+      "packages/ui-native/src/networking/index.ts",
+      "packages/ui-native/src/kit/internal/asset.ts",
+      "packages/ui-native/src/kit/internal/process*.ts"
+    ],
+    "rules": {
+      "eslint/no-restricted-imports": "off"
+    }
+  }, {
     // DOM instanceof checks fail across windows; use internal/dom.ts guards for nodes.
     "files": ["packages/ui-kit/src/**"],
     "rules": {

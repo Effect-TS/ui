@@ -4,17 +4,8 @@ import * as Native from "@effect/ui-native/Native"
 import * as Renderer from "@effect/ui/Renderer"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
-import { assert, describe, it, vi } from "vitest"
+import { assert, describe, it } from "vitest"
 import * as FakeFabric from "../utils/FakeFabric.ts"
-
-vi.mock(
-  "react-native/Libraries/StyleSheet/processColor",
-  () => ({ default: (color: unknown) => color })
-)
-vi.mock(
-  "react-native/Libraries/Components/Sound/NativeSoundManager",
-  () => ({ default: null })
-)
 
 const Message = UiSchema.TaggedEnum({ Got: { event: Schema.String } })
 const got = (event: string) => Message.Got({ event })

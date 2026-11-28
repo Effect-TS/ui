@@ -72,8 +72,6 @@ const setup = async (os: string, version = 34) => {
   })
   const mounted = await FakeFabric.mount(
     (root) => Renderer.mount(Form, {}, root),
-    undefined,
-    os,
     fake.device
   )
   const { fabric, find, root, settle } = mounted

@@ -27,7 +27,7 @@ import {
   mounted,
   surface
 } from "./internal/node.ts"
-import { drop, fire, rectOf, route } from "./internal/touch.ts"
+import { drop, fire, nearest, rectOf, route } from "./internal/touch.ts"
 import * as Native from "./Native.ts"
 
 /**
@@ -93,18 +93,14 @@ export interface Options {
   readonly ui: UIManager
   /** The surface the host renders into, as native passes it to `runApplication`. */
   readonly rootTag: number
-  /** `Platform.OS` of the running app. */
-  readonly os: string
-  /** Turns a CSS colour into the value Fabric parses, as React Native's `processColor`. */
-  readonly processColor: (color: unknown) => unknown
+  /**
+   * The device the surface is on, for its `os`, colours and native modules.
+   * Its keyboard events tell a `scroll` whether a tap can dismiss the
+   * keyboard.
+   */
+  readonly device: Native.Device
   /** Called after every `commit`, whether or not it changed anything. */
   readonly onCommit?: (() => void) | undefined
-  /**
-   * The device whose keyboard events tell a `scroll` whether a tap can
-   * dismiss the keyboard. Without one the keyboard reads as hidden, except
-   * on Android before API 30.
-   */
-  readonly device?: Native.Device | undefined
 }
 
 /**
@@ -159,6 +155,13 @@ export class NativeNode {
     this.host = host
     this.props = props ?? { ...defaultsOf(this) }
   }
+  /**
+   * iOS resolves pointer targets through `stateNode.node`. Return the
+   * current shadow so the lookup survives Fabric clones.
+   */
+  get stateNode(): { readonly node: unknown } {
+    return { node: this.shadow }
+  }
 }
 
 const defaultsOf = ({ host, kind: { defaults } }: NativeNode) =>
@@ -183,7 +186,8 @@ export const make = (options: Options): {
   readonly root: NativeNode
   readonly operations: Context.Service.Shape<typeof Native.Host>
 } => {
-  const { device, onCommit, os, processColor, rootTag, ui } = options
+  const { device, onCommit, rootTag, ui } = options
+  const processColor = device.color as (color: unknown) => unknown
   // Each read of a binding method makes a new host function, so read once.
   const createNode = ui.createNode
   const cloneProps = ui.cloneNodeWithNewProps
@@ -191,7 +195,7 @@ export const make = (options: Options): {
   const cloneBoth = ui.cloneNodeWithNewChildrenAndProps
   const appendChild = ui.appendChild
   listen(ui)
-  if (device !== undefined) trackKeyboard(device)
+  trackKeyboard(device)
   const colors = new Map<string, unknown>()
   const color = (value: unknown) => {
     if (typeof value !== "string") return processColor(value)
@@ -257,10 +261,11 @@ export const make = (options: Options): {
     onCommit?.()
   }
   const view: Native.ViewHost = {
-    os,
+    os: device.os,
     ui,
     set: setNative,
     color,
+    device,
     command,
     fire,
     commit,
@@ -504,6 +509,8 @@ const setProp = (n: NativeNode, name: string, value: unknown) => {
 const propOf = (name: string): string =>
   "on" + name[0]!.toUpperCase() + name.slice(1)
 
+const bubbles = /^top(Pointer(Down|Up|Move|Cancel)|Click)$/
+
 // Native reports every surface's events through one handler, with the
 // instance handle the host gave `createNode`.
 const listening = new WeakSet<UIManager>()
@@ -518,9 +525,14 @@ const listen = (ui: UIManager) => {
     if (type === "topFocus") focus.node = handle
     else if (type === "topBlur" && focus.node === handle) focus.node = undefined
     const hook = handle.kind.events?.[type]
-    // Strip Fabric's "top" prefix: topLayout -> layout.
     if (hook === undefined) {
-      return fire(handle, type[3]!.toLowerCase() + type.slice(4), payload)
+      const name = type[3]!.toLowerCase() + type.slice(4)
+      // Native sends these to the deepest view under the pointer.
+      return fire(
+        bubbles.test(type) ? nearest(handle, name) : handle,
+        name,
+        payload
+      )
     }
     hook(handle, payload, handle.host)
     // After the microtask render, restore rejected controlled edits if still mounted.

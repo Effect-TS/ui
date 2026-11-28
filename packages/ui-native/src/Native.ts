@@ -835,6 +835,61 @@ export interface PressPayload {
 }
 
 /**
+ * A native W3C pointer event with positions in points, measured from:
+ * - the root view's top left for `x/y`, `clientX/Y` and `pageX/Y`;
+ * - the screen's top left for `screenX/Y`;
+ * - the hit view's top left for `offsetX/Y`.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface PointerPayload {
+  readonly pointerId: number
+  /** `""` for a pointer native can't identify. */
+  readonly pointerType: "mouse" | "pen" | "touch" | ""
+  readonly isPrimary: boolean
+  readonly x: number
+  readonly y: number
+  readonly clientX: number
+  readonly clientY: number
+  readonly pageX: number
+  readonly pageY: number
+  readonly offsetX: number
+  readonly offsetY: number
+  readonly screenX: number
+  readonly screenY: number
+  readonly width: number
+  readonly height: number
+  readonly pressure: number
+  readonly tangentialPressure: number
+  readonly tiltX: number
+  readonly tiltY: number
+  readonly twist: number
+  /** Always `0`. */
+  readonly detail: number
+  /** The button that changed: `0` primary, `1` middle, `2` secondary, `-1` none. */
+  readonly button: number
+  /** The buttons held, as a bit mask. */
+  readonly buttons: number
+  readonly altKey: boolean
+  readonly ctrlKey: boolean
+  readonly metaKey: boolean
+  readonly shiftKey: boolean
+}
+
+/**
+ * A `click`: a pointer event, or on Android an empty payload when a
+ * `focusable` view is activated without a pointer, such as from a keyboard
+ * or TalkBack. Check `pointerId !== undefined` before reading pointer fields.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export type ClickPayload = PointerPayload | { readonly pointerId?: undefined }
+
+/**
  * A scroll view's offset and sizes, in points.
  *
  * @stability experimental
@@ -980,6 +1035,21 @@ export interface ContentSizeChangePayload {
  * `accessibilityTap` (iOS) fires when VoiceOver activates an `accessible`
  * element, and `accessibilityEscape` (iOS) on VoiceOver's escape gesture.
  *
+ * **Pointer events**
+ *
+ * The pointer events fire only in an app that turns on React Native's W3C
+ * pointer events: `RCTSetDispatchW3CPointerEvents(YES)` on iOS and
+ * `ReactFeatureFlags.dispatchPointerEvents = true` on Android, before the
+ * first surface starts. Touch, mouse and stylus input can produce pointer
+ * events, including movement without a button held on hover-capable devices.
+ *
+ * Native sends a pointer event to the deepest view under the pointer. It
+ * goes to the nearest element that handles it, as `press` does, except
+ * `pointerEnter` and `pointerLeave`, which fire on each element the
+ * pointer enters or leaves. `click` fires when a primary button or a touch
+ * goes down and up on the element, and on Android when a `focusable`
+ * element is activated another way.
+ *
  * @stability experimental
  * @category events
  * @since 0.1.0
@@ -991,6 +1061,13 @@ export interface ViewEvents {
   readonly accessibilityAction: AccessibilityActionPayload
   readonly accessibilityTap: {}
   readonly accessibilityEscape: {}
+  readonly pointerDown: PointerPayload
+  readonly pointerUp: PointerPayload
+  readonly pointerMove: PointerPayload
+  readonly pointerCancel: PointerPayload
+  readonly pointerEnter: PointerPayload
+  readonly pointerLeave: PointerPayload
+  readonly click: ClickPayload
 }
 
 /**
@@ -1220,6 +1297,8 @@ export interface ViewHost {
   readonly set: (node: NativeNode, name: string, value: unknown) => void
   /** Converts a colour for Fabric, for colours nested inside a prop. */
   readonly color: (value: unknown) => unknown
+  /** The device the surface is on. */
+  readonly device: Device
   /** Dispatches a native command; no-op before the node's first commit. */
   readonly command: (
     node: NativeNode,

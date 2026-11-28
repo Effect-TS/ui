@@ -4,7 +4,7 @@ React Native vocabulary and Fabric host for `@effect/ui`. Apps render native vie
 
 ## Requirements
 
-- Peer dependencies: `effect`, `@effect/ui`, `react-native` (`>=0.88.0`), and `vite` (`^8`) for pre-bundled release builds
+- Peer dependencies: `effect`, `@effect/ui`, `react-native` (`>=0.88.0`), `vite` (`^8`) for pre-bundled release builds, and `flow-remove-types` and `sucrase` for tests
 - The New Architecture (Fabric) and Hermes
 
 ## Modules
@@ -15,7 +15,8 @@ React Native vocabulary and Fabric host for `@effect/ui`. Apps render native vie
 - `NativeHost`: `make`, the `Renderer.Host` that builds Fabric shadow trees and commits them to a surface
 - `NativeApp`: `mount`, `mountEffect`, and `register`, which runs an app on every surface native starts; the `Surface` service, whose `props` follow the surface's props as native updates them
 - `@effect/ui-native/networking`: opt-in side-effect entry that installs React Native's networking globals (`fetch`, `XMLHttpRequest`, `WebSocket`, `URL`, `AbortController`)
-- `@effect/ui-native/node`: `NativeMetro.withEffectUi`, the Metro configuration
+- `@effect/ui-native/node`: `NativeMetro.withEffectUi`, the Metro configuration, and `NativeVitest.plugin`, the Vitest configuration
+- `@effect/ui-native/testing`: `TestDevice`, a fake `Native.Device` for Play tests
 
 ## Setup
 
@@ -55,7 +56,7 @@ In development Metro serves the sources. Editing a module that exports only comp
 
 ## Device APIs
 
-The kit's device APIs use native modules and device events directly rather than React Native's JavaScript wrappers. `NativeApp.register` provides their `Native.Device` service. Tests can provide a fake device; without one, defaults include a 0×0 window at scale 1, the `"active"` app state, and a hidden keyboard.
+The kit's device APIs use native modules and device events directly rather than React Native's JavaScript wrappers. `NativeApp.register` provides their `Native.Device` service. Tests can provide `TestDevice` (see Testing); without a device, defaults include a 0×0 window at scale 1, the `"active"` app state, and a hidden keyboard.
 
 They come in three forms:
 
@@ -77,9 +78,74 @@ React Native doesn't load the `expo` package itself: an app that doesn't import 
 
 Networking globals are opt-in, so apps that don't make requests don't bundle React Native's XHR stack. If your app uses `fetch` or `FetchHttpClient`, add `import "@effect/ui-native/networking"` to the entry module.
 
+## Testing
+
+Use `NativeVitest.plugin()` to import `@effect/ui-native/kit` in Node tests without mocking React Native imports. The plugin compiles the Flow sources used by `Css` and `Image`.
+
+Use Node 22.15 or later and install `flow-remove-types` and `sucrase` as dev dependencies. Then add the plugin to your Vitest configuration:
+
+```ts
+// vitest.config.ts
+import { NativeVitest } from "@effect/ui-native/node"
+import { defineConfig } from "vitest/config"
+
+export default defineConfig({ plugins: [NativeVitest.plugin()] })
+```
+
+The loader runs before your test setup files, so those files can import the kit too. It supports the non-React modules the kit uses, not React Native's React components.
+
+- `NativeVitest.plugin({ platform: "android" })` selects React Native's Android files; the default is `"ios"`. This affects values such as `Css.color("red")`, not the OS that kit components read from `Native.Device`.
+- Compiled files are cached in `node_modules/.cache/@effect/ui-native/vitest` under the project root.
+
+Write tests with `@effect/ui/testing`.
+
+The examples test `Draft`, a screen with an `input`. While it holds text, Back shows an alert, and its `"discard"` button clears the text.
+
+Start with a Scene. Commands and Subscriptions stay data there, so a screen needs no device: the test sends a Subscription's message and resolves a Command.
+
+```ts
+import * as Alert from "@effect/ui-native/kit/Alert"
+import { Locator, Scene } from "@effect/ui/testing"
+import { Effect, Result } from "effect"
+
+Effect.gen(function*() {
+  const s = yield* Scene.make(Draft, {})
+  s.fire(Locator.tag("input"), "input", { value: "Hello" })
+    .subscription("@effect/ui-native/kit/BackHandler", Message.PressedBack())
+    .resolve(Alert.Alert, Result.succeed("discard"))
+    .expect(Locator.text("Empty")).toExist()
+}).pipe(Effect.scoped, Effect.runSync)
+```
+
+A Play runs the kit's Effects, so it needs a device. `TestDevice.layer("android")` or `TestDevice.layer("ios")` provides one that acts as that platform, with controls in the kit's terms: `pressBack`, `setColorScheme`, `setAppState`, `showKeyboard`, `resize`, `receiveURL`, `answerAlert`, `answerShare`, `setPermission`, `setAccessibility` and more. A control sends its event at once, so settle before reading the result.
+
+```ts
+import { TestDevice } from "@effect/ui-native/testing"
+import { Locator, Play, TestHost } from "@effect/ui/testing"
+import { Effect, Layer } from "effect"
+
+Effect.gen(function*() {
+  const device = yield* TestDevice.TestDevice
+  const play = yield* Play.make(Draft, {})
+  yield* play.fire(Locator.tag("input"), "input", { value: "Hello" })
+  device.pressBack()
+  yield* TestHost.settle
+  device.answerAlert("Discard")
+  yield* play.expect(Locator.text("Empty")).toExist()
+}).pipe(
+  Effect.scoped,
+  Effect.provide(Layer.merge(TestHost.layer(), TestDevice.layer("android"))),
+  Effect.runPromise
+)
+```
+
+An alert, prompt or iOS share sheet stays open until the test answers it; Android reports a share as soon as the sheet opens. Pick a button by its text or, when two share a text, by `id` with the `buttons` the app showed: `device.answerAlert({ buttons, id: "discard" })`. `device.log()` lists what the app asked the device to do, such as the URLs it opened, the alerts it showed and its status bar style. Apps never import `@effect/ui-native/testing`, so it adds nothing to the bundle.
+
 ## Touches
 
 The core host recognizes one touch at a time, from the first finger down to the last one lifted. Without the kit it sends `press` to the nearest element with a `press` handler, when the touch ends on that element or within 20 points of it. A scroll view takes the touch when it starts dragging under it, or when the touch starts while the scroll view is still moving. Either way no `press` is sent. Importing `Pressable` or `Pan` from the kit replaces this recognizer with one that also handles press timing and pans. A plain `.on("press")` keeps working with it.
+
+Views support W3C pointer events (`pointerDown`, `pointerUp`, `pointerMove`, `pointerCancel`, `pointerEnter`, `pointerLeave` and `click`) for touch, mouse and stylus input. `Pressable` adds `onHoverIn` and `onHoverOut`. Enable W3C pointer events at app launch: `RCTSetDispatchW3CPointerEvents(YES)` on iOS and `ReactFeatureFlags.dispatchPointerEvents = true` on Android. `examples/native/plugins/withPointerEvents.cjs` does this for an Expo app. Native sends a pointer event to the deepest view under the pointer, and the host passes it to the nearest element that handles it. `pointerEnter` and `pointerLeave` fire only on the element entered or left.
 
 ## Styles and props
 

@@ -1,5 +1,4 @@
 import type * as View from "@effect/ui/View"
-import NativeSoundManager from "react-native/Libraries/Components/Sound/NativeSoundManager"
 import { isColor, markDirty, mounted } from "../../internal/node.ts"
 import {
   fire,
@@ -165,7 +164,7 @@ export const press: Recognizer = (phase, target, payload) => {
     !(longPressed && n.events?.handlers.longPress !== undefined)
   ) {
     if (options.sound && n.host.os === "android") {
-      NativeSoundManager?.playTouchSound()
+      n.host.device.module("SoundManager")?.playTouchSound()
     }
     fire(n, "press", { x, y })
   }

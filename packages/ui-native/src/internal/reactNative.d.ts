@@ -42,11 +42,6 @@ declare module "react-native/Libraries/Utilities/DevSettings" {
   export default DevSettings
 }
 
-declare module "react-native/Libraries/Components/Sound/NativeSoundManager" {
-  const NativeSoundManager: { readonly playTouchSound: () => void } | null
-  export default NativeSoundManager
-}
-
 declare module "react-native/asset-registry" {
   export interface PackagerAsset {
     readonly __packager_asset?: boolean | undefined

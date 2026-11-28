@@ -1443,4 +1443,62 @@ describe("Query runs", () => {
       }).pipe(provide)
     })
   })
+  describe("trace parents", () => {
+    const span = (spanId: string) => ({
+      traceId: "0af7651916cd43dd8448eb211c80319c",
+      spanId,
+      sampled: true
+    })
+    // Each fetch's trigger and the span id that parents it.
+    const parents = Effect.gen(function*() {
+      const seen: Array<string> = []
+      const off = Query.internals(yield* Query.Cache).onFetch((event) =>
+        seen.push(
+          `${event.trigger}${event.restart ? " restart" : ""} ${
+            event.parentSpanId ?? "root"
+          }`
+        )
+      )
+      yield* Effect.addFinalizer(() => Effect.sync(off))
+      return seen
+    })
+
+    it.effect("a refetch belongs to the latest run that invalidated its entry", () => {
+      const { GetCount, provide } = makeCount()
+      return Effect.gen(function*() {
+        const seen = yield* parents
+        yield* watchPatched(GetCount, { id: "a" })
+        yield* advance(10)
+        const invalidate = (spanId: string) =>
+          Effect.flatMap(
+            issue({ invalidates: [GetCount] }),
+            ({ handle }) =>
+              Effect.forkScoped(
+                handle.run(Effect.void, undefined, span(spanId))
+              )
+          )
+        // In flight: the later run restarts it.
+        yield* invalidate("000000000000000a")
+        yield* flush
+        yield* invalidate("000000000000000b")
+        yield* advance(10)
+        // Deferred under a live patch: the last run to exit starts it.
+        const held = yield* issue({
+          optimistic: [GetCount.patch({ id: "a" }, (n) => n)]
+        })
+        yield* invalidate("000000000000000c")
+        yield* flush
+        yield* Effect.forkScoped(
+          held.handle.run(Effect.void, undefined, span("000000000000000d"))
+        )
+        yield* advance(10)
+        assert.deepStrictEqual(seen, [
+          "watch root",
+          "invalidation 000000000000000a",
+          "invalidation restart 000000000000000b",
+          "invalidation 000000000000000d"
+        ])
+      }).pipe(provide)
+    })
+  })
 })

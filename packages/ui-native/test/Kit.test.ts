@@ -147,8 +147,7 @@ describe("@effect/ui-native/kit", () => {
       const { close, fabric, find, printed, root, settle } = await FakeFabric
         .mount(
           (container) => Renderer.mount(SwitchHarness, {}, container),
-          processColor,
-          os
+          { color: processColor, os }
         )
       const node = () => find(FakeFabric.byName(viewName))
       const toggle = (value: boolean) =>
@@ -266,8 +265,7 @@ describe("@effect/ui-native/kit", () => {
         : "AndroidProgressBar"
       const { close, fabric, root, settle } = await FakeFabric.mount(
         (container) => Renderer.mount(IndicatorHarness, {}, container),
-        processColor,
-        os
+        { color: processColor, os }
       )
       const children = () => fabric.committed()[0]!.children
       assert.strictEqual(children()[0]!.viewName, viewName)

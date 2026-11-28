@@ -6,7 +6,10 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "plugins": ["./plugins/withWorkspaceSources.cjs"],
+    "plugins": [
+      "./plugins/withWorkspaceSources.cjs",
+      "./plugins/withPointerEvents.cjs"
+    ],
     "android": {
       "package": "dev.effect.ui.example"
     },

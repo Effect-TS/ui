@@ -58,13 +58,8 @@ let down: NativeNode | undefined
  */
 export const touch: { press: Recognizer; pan?: Recognizer | undefined } = {
   press(phase, n, payload) {
-    if (phase === 0) {
-      let p: NativeNode | undefined = fenced ? undefined : n
-      while (p !== undefined && p.events?.handlers.press === undefined) {
-        p = p.parent
-      }
-      down = p
-    } else if (phase !== 1) {
+    if (phase === 0) down = fenced ? undefined : nearest(n, "press")
+    else if (phase !== 1) {
       const target = down
       down = undefined
       if (phase === 2 && under(n, target)) {
@@ -73,6 +68,21 @@ export const touch: { press: Recognizer; pan?: Recognizer | undefined } = {
       }
     }
   }
+}
+
+/**
+ * Return `n` if it handles `event`, otherwise its nearest ancestor that does.
+ *
+ * @internal
+ */
+export const nearest = (
+  n: NativeNode | undefined,
+  event: string
+): NativeNode | undefined => {
+  while (n !== undefined && n.events?.handlers[event] === undefined) {
+    n = n.parent
+  }
+  return n
 }
 
 /**
@@ -141,14 +151,14 @@ export const within = (
  * @internal
  */
 export const fire = (
-  n: NativeNode,
+  n: NativeNode | undefined,
   event: string,
   payload: unknown,
   onMessage?: (() => void) | undefined
 ): boolean => {
-  const handler = n.events?.handlers[event]
+  const handler = n?.events?.handlers[event]
   return handler !== undefined &&
-    n.events!.dispatch(event, handler, payload, onMessage)
+    n!.events!.dispatch(event, handler, payload, onMessage)
 }
 
 // When each scroll view stopped coasting, or `Infinity` while it coasts.

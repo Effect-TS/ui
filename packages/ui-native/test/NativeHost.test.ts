@@ -65,9 +65,11 @@ const setup = async () => {
   const colors: Array<unknown> = []
   const mounted = await FakeFabric.mount(
     (root) => Renderer.mount(Counter, {}, root),
-    (color) => {
-      colors.push(color)
-      return `processed ${String(color)}`
+    {
+      color: (color) => {
+        colors.push(color)
+        return `processed ${String(color)}`
+      }
     }
   )
   return { ...mounted, colors }
@@ -241,8 +243,7 @@ describe("NativeHost", () => {
     const { host, root } = NativeHost.make({
       ui: fabric.ui,
       rootTag: 1,
-      os: "android",
-      processColor: (c) => c
+      device: FakeFabric.device({ os: "android" })
     })
     const outer = host.createElement("text")
     const box = host.createElement("view")
@@ -292,8 +293,7 @@ describe("NativeHost", () => {
       const { host, root } = NativeHost.make({
         ui: fabric.ui,
         rootTag: 1,
-        os,
-        processColor: (c) => c
+        device: FakeFabric.device({ os })
       })
       const nodes = [host.createElement("text"), host.createElement("input")]
       for (const n of nodes) host.insertBefore(root, n, undefined)
@@ -325,8 +325,7 @@ describe("NativeHost", () => {
     const { host, root } = NativeHost.make({
       ui: fabric.ui,
       rootTag: 1,
-      os: "android",
-      processColor: (c) => c
+      device: FakeFabric.device({ os: "android" })
     })
     const view = host.createElement("view")
     const set = (name: string, value: unknown) => {
@@ -369,7 +368,7 @@ describe("NativeHost", () => {
     ])
   })
 
-  it("renders a view another module defines, and sends its events only to it", () => {
+  it("renders a view another module defines, and bubbles only pointer events from it", () => {
     const fired: Array<unknown> = []
     Native.defineView(() => new Native.Element("toggle"), {
       viewName: (_, host) => host.os === "ios" ? "RCTSwitch" : "AndroidSwitch",
@@ -381,15 +380,19 @@ describe("NativeHost", () => {
     const { host, root } = NativeHost.make({
       ui: fabric.ui,
       rootTag: 1,
-      os: "ios",
-      processColor: (c) => `processed ${c}`
+      device: FakeFabric.device({ os: "ios", color: (c) => `processed ${c}` })
     })
     const dispatch = (name: string, handler: unknown, payload: unknown) =>
       fired.push([name, handler, payload]) > 0
     const box = host.createElement("view")
     const toggle = host.createElement("toggle")
     host.setProp(toggle, "checked", true)
-    host.setEvents(box, { valueChange: "box" }, dispatch, {})
+    host.setEvents(
+      box,
+      { valueChange: "box", pointerDown: "box", pointerEnter: "box" },
+      dispatch,
+      {}
+    )
     host.setEvents(toggle, { valueChange: "toggle" }, dispatch, {})
     host.insertBefore(root, box, undefined)
     host.insertBefore(box, toggle, undefined)
@@ -412,9 +415,13 @@ describe("NativeHost", () => {
     fabric.emit(shadow(), "topValueChange", { value: false })
     // The touch recognizer doesn't hide touches from a kind's hooks.
     fabric.emit(shadow(), "topTouchMove", { touches: [] })
+    // The toggle has been cloned since its first commit.
+    fabric.emit(shadow(), "topPointerDown", { pointerId: 1 })
+    fabric.emit(shadow(), "topPointerEnter", { pointerId: 1 })
     assert.deepStrictEqual(fired, [
       ["valueChange", "toggle", { value: false }],
-      ["hook", { touches: [] }]
+      ["hook", { touches: [] }],
+      ["pointerDown", "box", { pointerId: 1 }]
     ])
 
     host.setEvents(toggle, {}, dispatch, {})
@@ -429,7 +436,7 @@ describe("NativeHost", () => {
       value: true
     })
     fabric.emit(shadow(), "topValueChange", { value: true })
-    assert.strictEqual(fired.length, 2)
+    assert.strictEqual(fired.length, 3)
   })
 
   it("hands a wrapped node's layout from one wrapper kind to another", () => {
@@ -444,8 +451,7 @@ describe("NativeHost", () => {
     const { host, root } = NativeHost.make({
       ui: fabric.ui,
       rootTag: 1,
-      os: "android",
-      processColor: (c) => c
+      device: FakeFabric.device({ os: "android" })
     })
     const box = host.createElement("view")
     host.setProp(box, "margin", 4)
@@ -470,8 +476,7 @@ describe("NativeHost", () => {
       const { host, root } = NativeHost.make({
         ui: fabric.ui,
         rootTag,
-        os,
-        processColor: () => color
+        device: FakeFabric.device({ os, color: () => color })
       })
       const scroll = host.createElement("scroll")
       host.setProp(scroll, "horizontal", true)
@@ -499,8 +504,10 @@ describe("NativeHost", () => {
     const { host, root } = NativeHost.make({
       ui: fabric.ui,
       rootTag: 1,
-      os: "ios",
-      processColor: (c) => `color:${String(c)}`
+      device: FakeFabric.device({
+        os: "ios",
+        color: (c) => `color:${String(c)}`
+      })
     })
     const input = host.createElement("input")
     host.insertBefore(root, input, undefined)

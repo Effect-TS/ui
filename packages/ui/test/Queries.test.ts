@@ -12,7 +12,7 @@ import { Html } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Schema, Tracer } from "effect"
+import { Effect, Layer, Option, Schema, Tracer } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
 
@@ -231,7 +231,17 @@ describe("a query without onChange", { concurrent: false }, () => {
   it.effect("hydrates the server's { model, queries } state without refetching", () => {
     const app = makeApp()
     return Effect.gen(function*() {
+      const request = yield* Effect.currentSpan
       const result = yield* ssr(app.Note, { id: "1" })
+      // The server's fetch stays under the request's span, and its log entry says so.
+      assert.deepStrictEqual(
+        result.serverLog.flatMap((entry) =>
+          entry._tag === "FetchStarted"
+            ? [[entry.traceId, entry.parentSpanId]]
+            : []
+        ),
+        [[request.traceId, request.spanId]]
+      )
       // The page state of a component with queries: its Model and its results, a result as its snapshot tuple.
       const state = result.state["/Note"] as {
         readonly model: unknown
@@ -264,6 +274,7 @@ describe("a query without onChange", { concurrent: false }, () => {
       assert.deepStrictEqual(result.root.model(), { clicks: 1, last: "Note 1" })
       assert.strictEqual(app.server.calls, 1)
     }).pipe(
+      Effect.withSpan("request"),
       Effect.provide(app.layer),
       Effect.scoped,
       Effect.provide(TestHost.layer())
@@ -795,7 +806,9 @@ describe("a query without onChange", { concurrent: false }, () => {
         // Each span's parent, as an index into `spans`: -1 for a root.
         const parent = (span: Tracer.Span) =>
           span.parent._tag === "Some"
-            ? spans.indexOf(span.parent.value as Tracer.Span)
+            ? spans.findIndex((other) =>
+              other.spanId === span.parent.pipe(Option.getOrThrow).spanId
+            )
             : -1
         assert.deepStrictEqual(
           spans.map((span) => [
@@ -808,7 +821,7 @@ describe("a query without onChange", { concurrent: false }, () => {
             ["rpc GetNote", undefined, 0],
             ["notes/Touch", undefined, -1],
             ["rpc Touch", undefined, 2],
-            ["notes/GetNote", "invalidation", -1],
+            ["notes/GetNote", "invalidation", 2],
             ["rpc GetNote", undefined, 4]
           ]
         )

@@ -6,39 +6,31 @@ import * as Renderer from "@effect/ui/Renderer"
 import * as UiSchema from "@effect/ui/UiSchema"
 import { identity, pipe } from "effect/Function"
 import * as Schema from "effect/Schema"
-import { assert, describe, it, vi } from "vitest"
+import { assert, describe, it } from "vitest"
 import * as FakeAnimated from "./utils/FakeAnimated.ts"
 import * as FakeFabric from "./utils/FakeFabric.ts"
 
-const native = vi.hoisted(() => {
-  const listeners = new Set<(event: string, data: unknown) => void>()
-  return {
-    animated: undefined as any,
-    emit: (event: string, data: unknown) => {
-      for (const f of listeners) f(event, data)
-    },
-    emitter: {
-      addListener(event: string, f: (data: unknown) => void) {
-        const own = (e: string, data: unknown) => e === event && f(data)
-        listeners.add(own)
-        return { remove: () => listeners.delete(own) }
-      }
-    }
-  }
+// Native's value reports, as the device sends them.
+const reports = new Set<(payload: unknown) => void>()
+const animated = FakeAnimated.make((event, payload) => {
+  if (event === "onAnimatedValueUpdate") { for (const f of reports) f(payload) }
 })
-vi.mock(
-  "react-native/Libraries/EventEmitter/RCTDeviceEventEmitter",
-  () => ({ default: native.emitter })
-)
-vi.mock(
-  "react-native/Libraries/TurboModule/TurboModuleRegistry",
-  () => ({
-    get: (name: string) =>
-      name === "NativeAnimatedModule" ? native.animated.module : null
+
+// Mounts on a device with the native driver.
+const mount = <A>(
+  mount: Parameters<typeof FakeFabric.mount<A>>[0],
+  os = "android"
+) =>
+  FakeFabric.mount(mount, {
+    os,
+    module: (name) =>
+      name === "NativeAnimatedModule" ? animated.module : undefined,
+    on: (event, f) => {
+      if (event !== "onAnimatedValueUpdate") return () => {}
+      reports.add(f)
+      return () => reports.delete(f)
+    }
   })
-)
-native.animated = FakeAnimated.make(native.emit)
-const animated: ReturnType<typeof FakeAnimated.make> = native.animated
 
 const Sticky = Native.component({
   name: "Sticky",
@@ -245,9 +237,8 @@ const Headers = Native.component({
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 const headers = async (os: string) => {
-  const mounted = await FakeFabric.mount(
+  const mounted = await mount(
     (root) => Renderer.mount(Headers, {}, root),
-    undefined,
     os
   )
   const { fabric, find } = mounted
@@ -273,10 +264,36 @@ const headers = async (os: string) => {
 
 // Like React Native's, the fake animated module is shared by every surface,
 // so tests that count its nodes run one at a time.
+const Panel = Native.component({
+  name: "Panel",
+  model: Schema.Struct({ hidden: Schema.Boolean }),
+  message: UiSchema.TaggedEnum({ Toggled: {} })
+}).make({
+  init: () => ({ hidden: true }),
+  update: { Toggled: ($) => $.evolve({ hidden: (hidden) => !hidden }) },
+  view: (h, model) => {
+    const panel = h.view.style({ height: 10 })
+    return h.view(
+      model.hidden ? pipe(panel, Animation.style({ opacity: 0 })) : panel
+    )
+  }
+})
+
 describe("Animation", { concurrent: false }, () => {
+  it("shows the targets without a native driver, and clears them when the element stops animating", async () => {
+    const { find, root, settle } = await FakeFabric.mount((root) =>
+      Renderer.mount(Panel, {}, root)
+    )
+    const panel = () => find((n) => n.props.height === 10)
+    assert.strictEqual(panel().props.opacity, 0)
+    root.send({ _tag: "Toggled" })
+    await settle()
+    assert.isUndefined(panel().props.opacity)
+  })
+
   it("drives a sticky header from scroll events, across recreated views, until removed", async () => {
     const before = { nodes: animated.nodes(), events: animated.events() }
-    const { close, find, root, settle } = await FakeFabric.mount((root) =>
+    const { close, find, root, settle } = await mount((root) =>
       Renderer.mount(Sticky, {}, root)
     )
     const header = () => find((n) => n.props.height === 80)
@@ -483,7 +500,7 @@ describe("Animation", { concurrent: false }, () => {
 
   it("animates to each target from where the value is, and reports the end", async () => {
     const before = animated.nodes()
-    const { close, find, printed, root, settle } = await FakeFabric.mount((
+    const { close, find, printed, root, settle } = await mount((
       root
     ) => Renderer.mount(Fade, {}, root))
     const panel = () => find((n) => n.props.height === 10)
@@ -520,9 +537,8 @@ describe("Animation", { concurrent: false }, () => {
     animated.ios(true)
     const before = { nodes: animated.nodes(), events: animated.events() }
     try {
-      const { close, fabric, find, root, settle } = await FakeFabric.mount(
+      const { close, fabric, find, root, settle } = await mount(
         (root) => Renderer.mount(Follow, {}, root),
-        undefined,
         "ios"
       )
       const header = () => find((n) => n.props.height === 80)
@@ -551,8 +567,8 @@ describe("Animation", { concurrent: false }, () => {
 
   it("follows each surface's own scroll view", async () => {
     const before = animated.nodes()
-    const a = await FakeFabric.mount((root) => Renderer.mount(Follow, {}, root))
-    const b = await FakeFabric.mount((root) => Renderer.mount(Follow, {}, root))
+    const a = await mount((root) => Renderer.mount(Follow, {}, root))
+    const b = await mount((root) => Renderer.mount(Follow, {}, root))
     const header = (s: typeof a) => s.find((n) => n.props.height === 80).tag
     const scroller = (s: typeof a) =>
       s.find((n) => n.viewName.endsWith("ScrollView")).tag
@@ -575,7 +591,7 @@ describe("Animation", { concurrent: false }, () => {
 
   it("splits a wrapped scroll view's style between it and its refresh control, as Fabric does", async () => {
     const before = { nodes: animated.nodes(), events: animated.events() }
-    const { close, find, root, settle } = await FakeFabric.mount((root) =>
+    const { close, find, root, settle } = await mount((root) =>
       Renderer.mount(Pull, {}, root)
     )
     const scroller = () => find(FakeFabric.byName("RCTScrollView"))
@@ -616,7 +632,7 @@ describe("Animation", { concurrent: false }, () => {
 
 describe("LayoutAnimation", () => {
   it("animates the commit of a step that asks for it and changes the tree", async () => {
-    const { fabric, root, settle } = await FakeFabric.mount((root) =>
+    const { fabric, root, settle } = await mount((root) =>
       Renderer.mount(List, {}, root)
     )
     root.send({ _tag: "Added" })

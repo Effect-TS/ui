@@ -38,6 +38,14 @@ The APK is `android/app/build/outputs/apk/release/app-release.apk`. Add `-Preact
 
 Gradle bundles again only when the bundle task's inputs change, and React Native's inputs stop at this directory. `plugins/withWorkspaceSources.cjs`, listed in `app.json`, adds the sources of the workspace packages the app links (`packages/ui` and `packages/ui-native`), so editing one of them is enough for the next `assembleRelease` to ship it. Run `pnpm prebuild` again after linking another workspace package.
 
+## Pointer events
+
+`plugins/withPointerEvents.cjs` turns on React Native's W3C pointer events in the generated `AppDelegate.swift` and `MainApplication.kt`, which both platforms leave off. The main screen shows the last pointer event under the item list, and a list item shows "hovering" while a mouse or stylus is over it. To check them, connect a mouse to an Android device, or use an iPad with a trackpad or Apple Pencil, then:
+
+- Move the pointer over the screen without pressing: the line reads `mouse move` (or `pen move`) with the position.
+- Press and release on a button: `down`, `up` and `click` follow, even though the button's text is the view native hits.
+- Add an item and move over it: "hovering Item 1" shows, and goes when the pointer leaves the row.
+
 ## Measuring the bundle
 
 The Hermes bytecode an Android release ships is `assets/index.android.bundle` in the APK:

@@ -10,6 +10,12 @@ import {
   Upload
 } from "./fixtures/components.ts"
 
+const noSpan: Command.SpanContext = {
+  traceId: "00000000000000000000000000000000",
+  spanId: "0000000000000000",
+  sampled: false
+}
+
 const todo = { id: "t1", title: "buy milk", done: false }
 
 class Ticks extends Command.Service<Ticks>()(
@@ -205,7 +211,7 @@ describe("Command", () => {
         assert.strictEqual(yield* matched("milk").effect, "saved milk")
         assert.strictEqual(yield* matched("").effect, "failed empty")
         assert.strictEqual(
-          matched("").reject?.(new SaveFailed({ reason: "x" })),
+          matched("").reject?.(new SaveFailed({ reason: "x" }), noSpan),
           "failed x"
         )
       }).pipe(Effect.provide(Save.layer)))
@@ -353,7 +359,7 @@ describe("Command", () => {
       ])
       assert.strictEqual(Effect.runSync(mapped.effect), "Results")
       assert.strictEqual(
-        mapped.resolve({ _tag: "Results", items: [] }),
+        mapped.resolve({ _tag: "Results", items: [] }, noSpan),
         "Results"
       )
     })
@@ -382,7 +388,7 @@ describe("Command", () => {
         const mapped = original.pipe(Command.as(message))
         assert.strictEqual(yield* mapped.effect, message)
         assert.strictEqual(
-          mapped.resolve({ _tag: "Results", items: [] }),
+          mapped.resolve({ _tag: "Results", items: [] }, noSpan),
           message
         )
         assert.deepStrictEqual([mapped.name, mapped.args, mapped.mode], [
@@ -401,7 +407,7 @@ describe("Command", () => {
         )
         assert.strictEqual(yield* matched.effect, message)
         assert.strictEqual(
-          matched.reject?.(new SaveFailed({ reason: "empty" })),
+          matched.reject?.(new SaveFailed({ reason: "empty" }), noSpan),
           message
         )
         const interrupt = Command.interrupt(Ticks)
@@ -420,7 +426,7 @@ describe("Command", () => {
         ])
         assert.strictEqual(yield* silent.effect, Component.noop)
         assert.strictEqual(
-          silent.resolve({ _tag: "Results", items: [] }),
+          silent.resolve({ _tag: "Results", items: [] }, noSpan),
           Component.noop
         )
         const stream = Command.asNoop(Ticks.make({ n: 2 }))
@@ -433,7 +439,7 @@ describe("Command", () => {
           Command.asNoop
         )
         assert.strictEqual(
-          matched.reject?.(new SaveFailed({ reason: "empty" })),
+          matched.reject?.(new SaveFailed({ reason: "empty" }), noSpan),
           Component.noop
         )
         const interrupt = Command.interrupt(Ticks)

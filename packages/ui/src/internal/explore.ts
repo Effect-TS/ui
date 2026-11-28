@@ -27,7 +27,6 @@ import * as rules from "./storyRules.ts"
 
 type Story = Cursor & { send(message: unknown): unknown }
 type State = engine.State<any, any, any, any>
-type Issued = Pending<any>["command"]
 
 interface Node {
   readonly parent: Node | undefined
@@ -192,16 +191,17 @@ export const explore = (
       ) => [Command.nameOf(definition), results])
     )
     const checks = rules.make(component, options)
-    const settled = new WeakMap<Issued, Settles | string>()
+    const settled = new WeakMap<Pending<any>, Settles | string>()
     let runs = 0
 
     /**
      * How a pending Command settles: with its `commands` entry, or `Component.noop` for a silent
      * Service. A string says why the search can't settle it.
      */
-    const settlesOf = (command: Issued): Settles | string => {
-      let out = settled.get(command)
+    const settlesOf = (entry: Pending<any>): Settles | string => {
+      let out = settled.get(entry)
       if (out !== undefined) return out
+      const command = entry.command
       const listed = lists.get(command.name)
       if (command._tag === "Stream") {
         out =
@@ -217,10 +217,14 @@ export const explore = (
           : values(listed.success, command.args)
         const error = values(listed?.error, command.args)
         // Pending Commands are stored with their result types erased.
-        const resolve = command.resolve as (value: unknown) => unknown
+        const resolve = command.resolve as (
+          value: unknown,
+          span: Command.SpanContext
+        ) => unknown
         const reject = command.reject as
-          | ((value: unknown) => unknown)
+          | ((value: unknown, span: Command.SpanContext) => unknown)
           | undefined
+        const span = engine.spanOf(entry)
         // A run that reads more than its result, an `afterRefetch` wait or an optimistic patch,
         // never merges with another, nor does one whose mapping throws: its settling step fails.
         let key: unknown = runs++
@@ -229,8 +233,8 @@ export const explore = (
         ) {
           try {
             key = [
-              ...success.map(resolve),
-              ...error.map((value) => reject?.(value))
+              ...success.map((value) => resolve(value, span)),
+              ...error.map((value) => reject?.(value, span))
             ]
           } catch {
             // Report the mapper failure at settlement, not while building the key.
@@ -238,7 +242,7 @@ export const explore = (
         }
         out = { success, error, key }
       }
-      settled.set(command, out)
+      settled.set(entry, out)
       return out
     }
 
@@ -258,14 +262,15 @@ export const explore = (
         for (const name of names) values.push(name, results[name])
       }
       values.push(loadingMore.length, ...loadingMore, pending.length)
-      for (const { awaiting, command, message, status } of pending) {
+      for (const entry of pending) {
+        const { awaiting, command, message, status } = entry
         values.push(command.name, command.args, status, message)
         if (awaiting === undefined) values.push(-1)
         else {
           values.push(awaiting.length)
           for (const query of awaiting) values.push(query.name, query.args)
         }
-        const key = (settlesOf(command) as Settles).key
+        const key = (settlesOf(entry) as Settles).key
         if (Array.isArray(key)) values.push(key.length, ...key)
         else values.push("run", key)
       }
@@ -314,7 +319,7 @@ export const explore = (
         () => recordOf(story),
         acknowledged,
         () =>
-          story.state.pending.map((entry) => settlesOf(entry.command)).find((
+          story.state.pending.map((entry) => settlesOf(entry)).find((
             settles
           ) => typeof settles === "string") as string | undefined
       )
@@ -374,7 +379,7 @@ export const explore = (
           })
           continue
         }
-        const { error, success } = settlesOf(command) as Settles
+        const { error, success } = settlesOf(entry) as Settles
         for (const value of success) {
           moves.push({
             lines: () => [
