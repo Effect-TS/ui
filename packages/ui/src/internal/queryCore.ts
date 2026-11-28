@@ -15,6 +15,20 @@ import type * as Query from "../Query.ts"
 import type * as componentQueries from "./queries.ts"
 import type * as queryRun from "./queryRun.ts"
 
+/** A span's ids: `Command.SpanContext`, and what the cache keeps of a span. */
+export interface SpanContext {
+  readonly traceId: string
+  readonly spanId: string
+  readonly sampled: boolean
+}
+
+/** Copies a span's ids, so a stored context doesn't keep the span alive. */
+export const spanContextOf = (span: SpanContext): SpanContext => ({
+  traceId: span.traceId,
+  spanId: span.spanId,
+  sampled: span.sampled
+})
+
 // -----------------------------------------------------------------------------
 // The loaded module
 // -----------------------------------------------------------------------------

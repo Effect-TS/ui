@@ -207,22 +207,14 @@ class Runs implements Kernel.Runs {
     const attributes = run.message === undefined
       ? { path: inst.path, mode: command.mode }
       : { path: inst.path, mode: command.mode, message: run.message }
+    const parentSpan = command.parentSpan
     const program = Effect.useSpan(
       command.name,
-      command.parentSpan === undefined
-        ? { attributes }
-        : { attributes, parent: Tracer.externalSpan(command.parentSpan) },
+      { attributes, parent: parentSpan && Tracer.externalSpan(parentSpan) },
       (span): Effect.Effect<unknown, unknown, any> => {
         if (run.done || inst.closed) return Effect.interrupt
-        const spanContext: Command.SpanContext = {
-          traceId: span.traceId,
-          spanId: span.spanId,
-          sampled: span.sampled
-        }
+        const spanContext = queryCore.spanContextOf(span)
         run.span = spanContext
-        const parentSpanId = Option.isSome(span.parent)
-          ? span.parent.value.spanId
-          : undefined
         const log = tree.log
         if (log !== undefined) {
           begun(() =>
@@ -232,7 +224,9 @@ class Runs implements Kernel.Runs {
               issued: run.issued,
               spanId: span.spanId,
               traceId: span.traceId,
-              ...(parentSpanId === undefined ? undefined : { parentSpanId })
+              ...(parentSpan === undefined
+                ? undefined
+                : { parentSpanId: parentSpan.spanId })
             })
           )
         }

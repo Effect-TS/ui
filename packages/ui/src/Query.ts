@@ -564,16 +564,12 @@ const queryClass = (def: QueryDef) => {
     }
     static invalidate(args?: unknown) {
       return withCache((cache, context) =>
-        Effect.sync(() =>
+        Effect.sync(() => {
+          const span = Context.getOrUndefined(context, Tracer.ParentSpan)
           cache.invalidate([
             args === undefined ? QueryService : entryTarget(QueryService, args)
-          ], {
-            byHand: true,
-            parent: toSpanRef(
-              Context.getOrUndefined(context, Tracer.ParentSpan)
-            )
-          })
-        )
+          ], { byHand: true, parent: span && queryCore.spanContextOf(span) })
+        })
       )
     }
     static changes(args: unknown) {
@@ -2848,20 +2844,8 @@ const closeBuild = (build: Build): Effect.Effect<void> =>
 // Cache: the internal API
 // -----------------------------------------------------------------------------
 
-/** A span's ids, without the span: what a fetch keeps of the invalidation that parents it. */
-interface SpanRef {
-  readonly traceId: string
-  readonly spanId: string
-  readonly sampled: boolean
-}
-
-const toSpanRef = (span: Tracer.AnySpan | undefined): SpanRef | undefined =>
-  span === undefined
-    ? undefined
-    : { traceId: span.traceId, spanId: span.spanId, sampled: span.sampled }
-
 const spanFields = (
-  parent: SpanRef | undefined
+  parent: queryCore.SpanContext | undefined
 ): { readonly traceId?: string; readonly parentSpanId?: string } =>
   parent === undefined
     ? {}
@@ -2949,7 +2933,7 @@ export interface RunHandle {
   /** The predicate of `Query.invalidatesEntry` over the run's declarations. */
   readonly invalidates: (def: QueryDef, argsKey: string) => boolean
   /** The work begins, under the run's span. A queued run is issued before it starts. */
-  readonly start: (span?: SpanRef | undefined) => void
+  readonly start: (span?: queryCore.SpanContext | undefined) => void
   readonly isStarted: () => boolean
   /** Called once, at fiber exit. Later calls do nothing. */
   readonly finish: (exit: RunExit) => void
@@ -2962,7 +2946,7 @@ export interface RunHandle {
   readonly run: <A, E, R>(
     body: Effect.Effect<A, E, R>,
     writes?: ((success: A) => ReadonlyArray<Write>) | undefined,
-    span?: SpanRef | undefined
+    span?: queryCore.SpanContext | undefined
   ) => Effect.Effect<A, E, R>
   /**
    * For a run begun with `afterRefetch`, once a success has applied its
@@ -3073,7 +3057,7 @@ interface CacheInternals {
     args: unknown,
     fetcher: Fetcher,
     run: RunHandle | undefined,
-    parent?: SpanRef | undefined
+    parent?: queryCore.SpanContext | undefined
   ) => Effect.Effect<any, any>
   readonly prefetch: (def: QueryDef, args: unknown, fetcher: Fetcher) => void
   /**
@@ -3096,7 +3080,7 @@ interface CacheInternals {
     targets: ReadonlyArray<Target>,
     options?: {
       readonly byHand?: boolean | undefined
-      readonly parent?: SpanRef | undefined
+      readonly parent?: queryCore.SpanContext | undefined
     } | undefined
   ) => void
   /**
@@ -3914,7 +3898,7 @@ interface FetchRec {
   fiber: Fiber.Fiber<any, any> | undefined
   /** On an infinite query: an append of one page, instead of a walk from the first. */
   readonly append: boolean
-  readonly parent: SpanRef | undefined
+  readonly parent: queryCore.SpanContext | undefined
 }
 
 /** A `loadMore` caller, waiting for the walk or append that reaches its page. */
@@ -3957,7 +3941,7 @@ interface Run {
   startSeq: number
   started: boolean
   done: boolean
-  span: SpanRef | undefined
+  span: queryCore.SpanContext | undefined
   /** The entries its patches registered on. */
   readonly entries: Set<Entry>
 }
@@ -4014,7 +3998,7 @@ interface Entry {
   /** The first trigger deferred under a live patch. */
   deferred: Trigger | undefined
   /** The parent span of the latest invalidation (or dropped fetch) deferred under a live patch. */
-  deferredParent: SpanRef | undefined
+  deferredParent: queryCore.SpanContext | undefined
   /** The caller-only fetch `get` callers join, while a patch is live. */
   shared: Shared | undefined
   /** Sequence numbers: when the entry was made, and the last write or invalidation that hit it. */
@@ -4040,7 +4024,7 @@ const runBody = <A, E, R>(
   handle: RunHandle,
   body: Effect.Effect<A, E, R>,
   writes: ((success: A) => ReadonlyArray<Write>) | undefined,
-  span: SpanRef | undefined
+  span: queryCore.SpanContext | undefined
 ): Effect.Effect<A, E, R> =>
   Effect.uninterruptibleMask((restore) => {
     handle.start(span)
@@ -4415,7 +4399,7 @@ interface CacheEnv {
     restart: boolean,
     stored: boolean,
     page?: PageRef | undefined,
-    parent?: SpanRef | undefined
+    parent?: queryCore.SpanContext | undefined
   ) => void
   readonly startFetch: (
     entry: Entry,
@@ -4423,13 +4407,13 @@ interface CacheEnv {
     build: Build,
     restart: boolean,
     append?: boolean,
-    parent?: SpanRef | undefined
+    parent?: queryCore.SpanContext | undefined
   ) => void
   readonly ensureFetch: (
     entry: Entry,
     trigger: Trigger,
     build: Build,
-    parent?: SpanRef | undefined
+    parent?: queryCore.SpanContext | undefined
   ) => void
   readonly store: (entry: Entry, result: Settled) => void
   /** Saves a Success that isn't stored through `store`, keeping its timestamp. */
@@ -4452,7 +4436,7 @@ interface CacheEnv {
   readonly invalidateEntry: (
     entry: Entry,
     cause?: Trigger,
-    parent?: SpanRef | undefined
+    parent?: queryCore.SpanContext | undefined
   ) => void
   readonly fetchEnded: () => void
 }
@@ -4499,7 +4483,7 @@ interface ListOps {
     env: CacheEnv,
     entry: Entry,
     trigger: Trigger,
-    parent?: SpanRef | undefined
+    parent?: queryCore.SpanContext | undefined
   ) => void
 }
 
@@ -4663,7 +4647,7 @@ const listStart = (
   entry: Entry,
   trigger: Trigger,
   build: Build,
-  parent?: SpanRef | undefined
+  parent?: queryCore.SpanContext | undefined
 ): void => {
   const held = listHeldPages(entry).length
   const append = entry.result?._tag === "Success" && entry.target === held + 1
@@ -5042,13 +5026,14 @@ const buildCache = (
     def: QueryDef,
     trigger: Trigger,
     body: () => Effect.Effect<A, E>,
-    parent?: SpanRef | undefined
+    parent?: queryCore.SpanContext | undefined
   ): Effect.Effect<A, E> =>
     Effect.useSpan(
       def.name,
-      parent === undefined
-        ? { attributes: { trigger } }
-        : { attributes: { trigger }, parent: Tracer.externalSpan(parent) },
+      {
+        attributes: { trigger },
+        parent: parent && Tracer.externalSpan(parent)
+      },
       (span) => Effect.provideService(body(), Tracer.ParentSpan, span)
     )
   /** Runs `f` one scheduler step later. */
@@ -5372,7 +5357,7 @@ const buildCache = (
     restart: boolean,
     stored: boolean,
     page?: PageRef | undefined,
-    parent?: SpanRef | undefined
+    parent?: queryCore.SpanContext | undefined
   ): void => {
     if (fetchListeners.size === 0) return
     notify(fetchListeners, {
@@ -5603,7 +5588,7 @@ const buildCache = (
     build: Build,
     restart: boolean,
     append = false,
-    parent?: SpanRef | undefined
+    parent?: queryCore.SpanContext | undefined
   ): void => {
     if (entry.heldRestart && !append) {
       entry.heldRestart = false
@@ -5683,7 +5668,7 @@ const buildCache = (
     entry: Entry,
     trigger: Trigger,
     build: Build,
-    parent?: SpanRef | undefined
+    parent?: queryCore.SpanContext | undefined
   ): void => {
     if (entry.fetch !== undefined || disposed || !fetches) return
     if (settleOnce && entry.result !== undefined) return
@@ -5818,7 +5803,7 @@ const buildCache = (
   const replaceFetch = (
     entry: Entry,
     fetch: FetchRec,
-    parent: SpanRef | undefined
+    parent: queryCore.SpanContext | undefined
   ): void => {
     dropFetch(entry, fetch)
     const build = survivingBuild(entry) ??
@@ -6299,7 +6284,7 @@ const buildCache = (
   const invalidateEntry = (
     entry: Entry,
     cause: Trigger = "invalidation",
-    parent?: SpanRef | undefined
+    parent?: queryCore.SpanContext | undefined
   ): void => {
     entry.touched = ++seq
     // A never-fetched entry is a no-op.
@@ -6424,7 +6409,7 @@ const buildCache = (
     entry: Entry,
     value: unknown,
     fresh: boolean,
-    parent?: SpanRef | undefined
+    parent?: queryCore.SpanContext | undefined
   ): void => {
     const fetch = entry.fetch
     store(entry, AsyncResult.success(value, { timestamp: now() }))

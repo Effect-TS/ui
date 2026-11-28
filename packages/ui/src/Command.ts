@@ -88,7 +88,7 @@ import * as commandRun from "./internal/commandRun.ts"
 import type { Given } from "./internal/given.ts"
 import type * as Kernel from "./internal/kernel.ts"
 import * as internalNoop from "./internal/noop.ts"
-import { canonical } from "./internal/queryCore.ts"
+import { canonical, spanContextOf } from "./internal/queryCore.ts"
 import { onCommit } from "./internal/services.ts"
 import type * as Query from "./Query.ts"
 import type * as Renderer from "./Renderer.ts"
@@ -974,49 +974,50 @@ const currentSpan: Effect.Effect<SpanContext> = Effect.map(
   Effect.context<never>(),
   (context) => {
     const span = Context.getOrUndefined(context, Tracer.ParentSpan)
-    return span === undefined
-      ? noSpan
-      : { traceId: span.traceId, spanId: span.spanId, sampled: span.sampled }
+    return span === undefined ? noSpan : spanContextOf(span)
   }
 )
-
-const withSpan = <A>(
-  value: A,
-  f: (value: A, span: SpanContext) => unknown
-): Effect.Effect<unknown> => Effect.map(currentSpan, (span) => f(value, span))
 
 /** `effect` and `stream` are the work with `resolve` and `reject` applied. An unmatched Command keeps its failure. */
 const makeIssued = (fields: Fields, unmatched = false): any => {
   const { reject, resolve, work } = fields
+  const plain = resolve === identity && reject === undefined
   let effect: Effect.Effect<any, any, any> | undefined
   let stream: Stream.Stream<any, any, any> | undefined
   if (fields._tag === "Effect") {
-    const mapped = resolve === identity
-      ? work as Effect.Effect<any, any, any>
-      : Effect.flatMap(
-        work as Effect.Effect<any, any, any>,
-        (value) => withSpan(value, resolve)
-      )
-    effect = reject === undefined
-      ? mapped
-      : Effect.catch(mapped, (error) => withSpan(error, reject))
+    effect = plain ? work as Effect.Effect<any, any, any> : Effect.flatMap(
+      currentSpan,
+      (span) => {
+        const mapped = Effect.map(
+          work as Effect.Effect<any, any, any>,
+          (value) => resolve(value, span)
+        )
+        return reject === undefined
+          ? mapped
+          : Effect.catch(
+            mapped,
+            (error) => Effect.sync(() => reject(error, span))
+          )
+      }
+    )
   } else {
-    const mapped = resolve === identity
-      ? work as Stream.Stream<any, any, any>
-      : Stream.unwrap(Effect.map(
+    stream = plain ?
+      work as Stream.Stream<any, any, any> :
+      Stream.unwrap(Effect.map(
         currentSpan,
-        (span) =>
-          Stream.map(
+        (span) => {
+          const mapped = Stream.map(
             work as Stream.Stream<any, any, any>,
             (value) => resolve(value, span)
           )
+          return reject === undefined
+            ? mapped
+            : Stream.catch(
+              mapped,
+              (error) => Stream.sync(() => reject(error, span))
+            )
+        }
       ))
-    stream = reject === undefined
-      ? mapped
-      : Stream.catch(
-        mapped,
-        (error) => Stream.fromEffect(withSpan(error, reject))
-      )
   }
   return Object.assign(
     Object.create(unmatched ? UnmatchedProto : Proto),
@@ -1863,11 +1864,7 @@ export const withParentSpan: {
     return makeIssued(
       {
         ...(self as unknown as Fields),
-        parentSpan: {
-          traceId: span.traceId,
-          spanId: span.spanId,
-          sampled: span.sampled
-        }
+        parentSpan: spanContextOf(span)
       },
       UnmatchedTypeId in self
     )
