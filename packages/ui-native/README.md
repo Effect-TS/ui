@@ -122,7 +122,7 @@ Effect.gen(function*() {
 )
 ```
 
-An alert, prompt or share sheet stays open until the test answers it, by a button's text. `device.log()` lists what the app asked the device to do, such as the URLs it opened, the alerts it showed and its status bar style. An app never imports `@effect/ui-native/testing`, so it adds nothing to the bundle.
+An alert, prompt or share sheet stays open until the test answers it. Pick an alert's button by its text, or, when two buttons share a text, by `id` with the `buttons` the app showed: `device.answerAlert({ buttons, id: "discard" })`. `device.log()` lists what the app asked the device to do, such as the URLs it opened, the alerts it showed and its status bar style. An app never imports `@effect/ui-native/testing`, so it adds nothing to the bundle.
 
 ## Touches
 

@@ -239,6 +239,41 @@ describe("TestDevice", () => {
           device.answerAlert("Cancel")
           assert.strictEqual(yield* Fiber.join(alert), "cancel")
 
+          // Two buttons with the same text, which only an id tells apart.
+          const twins = [
+            { id: "later", text: "Later" },
+            { id: "save", text: "OK" },
+            { id: "discard", text: "OK", style: "destructive" }
+          ] as const
+          const twin = yield* open(
+            Alert.alert({ title: "Leave?", buttons: twins })
+          )
+          assert.throws(() => device.answerAlert("OK"), /several "OK" buttons/)
+          assert.throws(
+            () =>
+              device.answerAlert({ buttons: twins.slice(1), id: "discard" }),
+            /No alert with \["OK","OK"\] is open/
+          )
+          assert.throws(
+            // @ts-expect-error: not one of the buttons' ids
+            () => device.answerAlert({ buttons: twins, id: "stay" }),
+            /no button with id "stay"/
+          )
+          device.answerAlert({ buttons: twins, id: "discard" })
+          assert.strictEqual(yield* Fiber.join(twin), "discard")
+          const four = [{ id: "first", text: "OK" }, ...twins] as const
+          const dropped = yield* open(
+            Alert.alert({ title: "Leave?", buttons: four })
+          )
+          if (android) {
+            assert.throws(
+              () => device.answerAlert({ buttons: four, id: "first" }),
+              /only the last three buttons/
+            )
+          }
+          device.answerAlert({ buttons: four, id: "save" })
+          assert.strictEqual(yield* Fiber.join(dropped), "save")
+
           const dismissed = yield* open(
             Alert.alert({ title: "Hi", cancelable: true })
           )
@@ -263,7 +298,7 @@ describe("TestDevice", () => {
             )
             assert.isTrue(Result.isFailure(yield* Fiber.join(prompt)))
           } else {
-            device.answerPrompt("OK", "secret", "ada")
+            device.answerPrompt({ buttons: [], id: "ok" }, "secret", "ada")
             assert.deepStrictEqual(
               yield* Fiber.join(prompt),
               Result.succeed({
@@ -308,6 +343,16 @@ describe("TestDevice", () => {
                 title: "Delete?",
                 buttons: ["Later", "Cancel", "Delete"]
               },
+              {
+                _tag: "Alert",
+                title: "Leave?",
+                buttons: ["Later", "OK", "OK"]
+              },
+              {
+                _tag: "Alert",
+                title: "Leave?",
+                buttons: ["Later", "OK", "OK"]
+              },
               { _tag: "Alert", title: "Hi", buttons: ["OK"] },
               { _tag: "Share", message: "Hi https://effect.website" },
               { _tag: "Share", message: "Hi" }
@@ -317,6 +362,16 @@ describe("TestDevice", () => {
                 _tag: "Alert",
                 title: "Delete?",
                 buttons: ["Later", "Cancel", "Delete"]
+              },
+              {
+                _tag: "Alert",
+                title: "Leave?",
+                buttons: ["Later", "OK", "OK"]
+              },
+              {
+                _tag: "Alert",
+                title: "Leave?",
+                buttons: ["OK", "Later", "OK", "OK"]
               },
               { _tag: "Alert", title: "Hi", buttons: ["OK"] },
               {

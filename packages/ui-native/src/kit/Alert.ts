@@ -67,6 +67,7 @@ import * as Effect from "effect/Effect"
 import type * as Result from "effect/Result"
 import * as Schema from "effect/Schema"
 import * as Native from "../Native.ts"
+import { androidButtons, buttonsOf } from "./internal/alert.ts"
 import * as device from "./internal/device.ts"
 
 /**
@@ -127,12 +128,6 @@ export type Pressed<O extends Options> =
     ? never
     : "ok")
 
-const ok: ReadonlyArray<Button> = [{ id: "ok", text: "OK" }]
-
-const buttonsOf = (
-  buttons: ReadonlyArray<Button> | undefined
-): ReadonlyArray<Button> => buttons?.length ? buttons : ok
-
 // iOS's dialog, which answers with the index of the button pressed and the
 // text fields' values.
 const ios = (
@@ -176,11 +171,7 @@ const android = (options: Options, buttons: ReadonlyArray<Button>) =>
     "showAlert",
     (module, resolve, reject) => {
       const constants = module.getConstants()
-      const [neutral, negative, positive] = [
-        undefined,
-        undefined,
-        ...buttons.slice(-3)
-      ].slice(-3)
+      const [neutral, negative, positive] = androidButtons(buttons)
       module.showAlert(
         {
           title: options.title,
