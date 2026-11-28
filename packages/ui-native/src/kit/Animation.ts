@@ -62,7 +62,7 @@
  */
 import * as View from "@effect/ui/View"
 import { dual } from "effect/Function"
-import { commits, precommits, props } from "../internal/kinds.ts"
+import { commits, listeners, precommits, props } from "../internal/kinds.ts"
 import { container, mounted, rootOf, surface } from "../internal/node.ts"
 import { rectOf } from "../internal/touch.ts"
 import type * as Native from "../Native.ts"
@@ -542,9 +542,6 @@ interface Header {
   layer: Layer | undefined
   /** The translation native last reported. */
   value: number | undefined
-  /** The node's own `zIndex` and `transform`, shown again after. */
-  zIndex: unknown
-  transform: unknown
 }
 
 /** What the driver follows on one surface. */
@@ -597,6 +594,11 @@ const plain = new WeakMap<NativeNode, Spec>()
 const own = new WeakMap<NativeNode, Spec>()
 const headers = new WeakMap<NativeNode, Header>()
 const heard = new Map<number, NativeNode>()
+// The own values of the props a header, or a scroll view with headers,
+// shows in their place, to show again after.
+const kept = new WeakMap<NativeNode, Record<string, unknown>>()
+// Where each scroll view last scrolled to.
+const offsets = new WeakMap<NativeNode, number>()
 // The devices whose value reports are followed.
 const listening = new WeakSet<Native.Device>()
 // The sticky headers' part of the driver, set by the first `stickyHeaders`
@@ -629,7 +631,9 @@ const installSticky = () => {
   props.set("stickyHeaders", setSticky)
   props.set("zIndex", keep("zIndex"))
   props.set("transform", keep("transform"))
+  props.set("onLayout", keep("onLayout"))
   precommits.add(assign)
+  listeners.add(follow)
   docking = {
     measure: (d) => {
       for (const [n, st] of d.sticky) if (mounted(n)) measure(d, n, st)
@@ -642,14 +646,42 @@ const installSticky = () => {
   }
 }
 
-// Sets the style key, or keeps it for when a header stops being one.
+// Sets the prop, or keeps it for when the node shows its own again.
 const keep =
-  (key: "zIndex" | "transform") =>
-  (n: NativeNode, value: unknown, host: Native.ViewHost) => {
-    const header = headers.get(n)
-    if (header === undefined) host.set(n, key, value)
-    else header[key] = value
+  (key: string) => (n: NativeNode, value: unknown, host: Native.ViewHost) => {
+    const values = kept.get(n)
+    if (values !== undefined && key in values) values[key] = value
+    else host.set(n, key, value)
   }
+
+// Shows `values` in place of the node's own.
+const replace = (n: NativeNode, values: Record<string, unknown>) => {
+  const mine: Record<string, unknown> = {}
+  for (const key in values) {
+    mine[key] = n.props[key] ?? n.outer?.props[key]
+    if (values[key] !== undefined) n.host.set(n, key, values[key])
+  }
+  kept.set(n, mine)
+}
+
+const restore = (n: NativeNode) => {
+  const values = kept.get(n)!
+  kept.delete(n)
+  for (const key in values) {
+    // A transform the node's own `style` drives stays the driver's.
+    if (key !== "transform" || own.get(n)?.transform === undefined) {
+      n.host.set(n, key, values[key])
+    }
+  }
+}
+
+// Follows what native changes between commits: where a scroll view is
+// scrolled to, and the layout of a header or a scroll view with headers,
+// which React Native's sticky headers follow with `onLayout`.
+const follow = (n: NativeNode, type: string, payload: any) => {
+  if (type === "topScroll") offsets.set(n, payload?.contentOffset?.y ?? 0)
+  else if (type === "topLayout" && kept.has(n)) n.host.commit()
+}
 
 const driverOf = (host: Native.ViewHost): Driver | null => {
   let d = drivers.get(host)
@@ -745,6 +777,7 @@ const setSticky = (n: NativeNode, value: unknown, host: Native.ViewHost) => {
   const st = d.sticky.get(n)
   if (st !== undefined) st.options = options
   else if (options !== undefined) {
+    replace(n, { onLayout: true })
     d.sticky.set(n, {
       options,
       source: "sticky " + (lastTag += 1),
@@ -779,38 +812,26 @@ const assign = (host: Native.ViewHost) => {
     st.kids = kids
     for (const h of st.headers) {
       if (kids.includes(h)) continue
-      const { zIndex, transform } = headers.get(h)!
       st.headers.delete(h)
       headers.delete(h)
       show(d, h, host)
-      host.set(h, "zIndex", zIndex)
-      if (own.get(h)?.transform === undefined) {
-        host.set(h, "transform", transform)
-      }
+      restore(h)
     }
     for (const h of kids) {
       if (h === undefined || st.headers.has(h)) continue
-      const { outer, props } = h
       st.headers.add(h)
-      headers.set(h, {
-        st,
-        key: undefined,
-        layer: undefined,
-        value: undefined,
-        zIndex: props.zIndex ?? outer?.props.zIndex,
-        transform: props.transform ?? outer?.props.transform
-      })
-      translate(d, h)
+      headers.set(h, { st, key: undefined, layer: undefined, value: undefined })
       // As React Native's `ScrollViewStickyHeader`, above the rows.
-      host.set(h, "zIndex", 10)
+      replace(h, { zIndex: 10, transform: undefined, onLayout: true })
+      translate(d, h)
     }
     if (live) {
-      // As React Native's `ScrollView`: the offset starts at `contentOffset`,
-      // and a top inset, which iOS reports as a negative offset at rest, is
-      // added to it.
+      // As React Native's `ScrollView`: the offset starts where the view
+      // is scrolled to, or at `contentOffset`, and a top inset, which iOS
+      // reports as a negative offset at rest, is added to it.
       const s = sourceOf(d, st.source)
       s.node = n
-      s.start = (n.props.contentOffset as any)?.y ?? 0
+      s.start = offsets.get(n) ?? (n.props.contentOffset as any)?.y ?? 0
       const inset = (n.props.contentInset as any)?.top ?? 0
       if (inset !== s.inset) {
         s.inset = inset
@@ -819,6 +840,7 @@ const assign = (host: Native.ViewHost) => {
     } else {
       clearTimeout(st.timer)
       d.sticky.delete(n)
+      restore(n)
       sourceOf(d, st.source).node = undefined
     }
   }

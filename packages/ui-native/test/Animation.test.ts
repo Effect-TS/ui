@@ -364,6 +364,14 @@ describe("Animation", { concurrent: false }, () => {
         t.scroll(320)
         assert.strictEqual(t.shown(t.a()), 300)
         assert.strictEqual(t.shown(t.b()), 0)
+        // Native moves B up without a commit, and reports its layout.
+        assert.strictEqual(t.b().props.onLayout, true)
+        t.place(0, 200)
+        t.fabric.emit(t.b(), "topLayout", {})
+        assert.strictEqual(t.shown(t.a()), 150)
+        assert.strictEqual(t.shown(t.b()), 120)
+        t.place(0, 350)
+        t.fabric.emit(t.b(), "topLayout", {})
         t.scroll(400)
         assert.strictEqual(t.shown(t.a()), 300)
         assert.strictEqual(t.shown(t.b()), 50)
@@ -392,6 +400,7 @@ describe("Animation", { concurrent: false }, () => {
         // Its own style shows again, as it changed while it was a header.
         assert.strictEqual(t.a().props.zIndex, 3)
         assert.deepStrictEqual(t.a().props.transform, [{ scale: 3 }])
+        assert.isUndefined(t.a().props.onLayout)
         assert.isUndefined(animated.view(t.a().tag))
         assert.deepStrictEqual(
           { nodes: animated.nodes(), events: animated.events() },
@@ -406,6 +415,8 @@ describe("Animation", { concurrent: false }, () => {
           inverted: false
         })
         await t.settle()
+        // From where the list rests.
+        assert.strictEqual(t.shown(t.a()), 120)
         t.scroll(60)
         assert.strictEqual(t.shown(t.a()), 60)
         await t.close()

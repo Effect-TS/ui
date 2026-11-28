@@ -222,7 +222,7 @@ const persist = (n: NativeNode): void => {
   const focused = focus.node
   if (
     focused === undefined || focused.kind !== input || !mounted(focused) ||
-    (focus.keyboard === undefined && !focus.unreliable) || n === focused
+    !keyboardUp() || n === focused
   ) return
   const scroll = kinds.get("scroll")
   const detached = focus.keyboard === 0
@@ -252,6 +252,9 @@ const persist = (n: NativeNode): void => {
   taken = take
   fenced = !take && fence
 }
+
+// As React Native's `ScrollView`, which checks again when the touch ends.
+const keyboardUp = () => focus.keyboard !== undefined || focus.unreliable
 
 const reset = () => {
   target = undefined
@@ -311,7 +314,7 @@ export const route = (n: NativeNode, type: string, payload: any): void => {
   } else return
   if (!taken) recognize(phase, n, payload)
   if (phase > 1) {
-    if (phase === 2 && blur !== 0) blurFocused()
+    if (phase === 2 && blur !== 0 && keyboardUp()) blurFocused()
     reset()
   }
 }

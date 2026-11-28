@@ -19,7 +19,14 @@
 import type * as Renderer from "@effect/ui/Renderer"
 import type * as Context from "effect/Context"
 import { focus, trackKeyboard } from "./internal/focus.ts"
-import { commits, kinds, layouts, precommits, props } from "./internal/kinds.ts"
+import {
+  commits,
+  kinds,
+  layouts,
+  listeners,
+  precommits,
+  props
+} from "./internal/kinds.ts"
 import {
   container,
   isColor,
@@ -521,6 +528,7 @@ const listen = (ui: UIManager) => {
   ui.registerEventHandler((handle, type, payload) => {
     if (!(handle instanceof NativeNode)) return
     route(handle, type, payload)
+    for (const f of listeners) f(handle, type, payload)
     // Native sends these whether or not the input has a handler.
     if (type === "topFocus") focus.node = handle
     else if (type === "topBlur" && focus.node === handle) focus.node = undefined

@@ -204,6 +204,16 @@ export const props = new Map<
 export const commits = new Set<(host: ViewHost) => void>()
 
 /**
+ * Called with every event native sends a node, by kit modules that follow
+ * what native changes between commits.
+ *
+ * @internal
+ */
+export const listeners = new Set<
+  (node: NativeNode, type: string, payload: any) => void
+>()
+
+/**
  * Called before every commit, to set props the commit carries: deferred
  * input text, and those of kit modules on nodes they follow.
  *

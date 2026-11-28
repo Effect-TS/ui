@@ -145,6 +145,15 @@ describe("scroll keyboardShouldPersistTaps", { concurrent: false }, () => {
       await t.settle()
       assert.deepStrictEqual([t.presses(), t.blurs()], [2, 1])
 
+      // A keyboard that hides before the touch ends isn't dismissed again,
+      // but the touch still presses nothing.
+      t.fabric.emit(t.row, "topTouchStart", {})
+      t.emit("keyboardDidHide", {})
+      t.fabric.emit(t.row, "topTouchEnd", {})
+      await t.settle()
+      assert.deepStrictEqual([t.presses(), t.blurs()], [2, 1])
+      t.emit("keyboardDidShow", shown)
+
       // `"never"` set explicitly does the same.
       await t.mode("never")
       await t.tap(t.plain)
