@@ -213,7 +213,7 @@ describe("SortableList in a document", { concurrent: false }, () => {
       )
     }).pipe(Effect.scoped))
 
-  it.effect("pick-then-place survives an iOS tap's focusout before click, and pointer drag is scoped per list", () =>
+  it.effect("pick-then-place survives an iOS tap's focusout before click, cancels after an interrupted press, and pointer drag is scoped per list", () =>
     Effect.gen(function*() {
       const Message = UiSchema.TaggedEnum({
         ReorderedFirst: { from: Schema.Number, to: Schema.Number },
@@ -314,6 +314,36 @@ describe("SortableList in a document", { concurrent: false }, () => {
       yield* tick
       assert.deepStrictEqual(root.model()?.first, ["b", "c", "a"])
 
+      for (
+        const interrupt of [
+          () =>
+            document.dispatchEvent(
+              new PointerEvent("pointercancel", {
+                bubbles: true,
+                pointerType: "touch"
+              })
+            ),
+          () => window.dispatchEvent(new Event("blur"))
+        ]
+      ) {
+        handleA.focus()
+        keyboardClick(handleA)
+        yield* tick
+        assert.strictEqual(handleA.getAttribute("aria-pressed"), "true")
+        press(handleA, "touch")
+        handleA.dispatchEvent(
+          new MouseEvent("mousedown", { bubbles: true, cancelable: true })
+        )
+        yield* tick
+        interrupt()
+        yield* tick
+        handleA.dispatchEvent(
+          new FocusEvent("focusout", { bubbles: true, relatedTarget: null })
+        )
+        yield* tick
+        assert.strictEqual(handleA.getAttribute("aria-pressed"), "false")
+      }
+
       // Real pointer drag: list 2 rejects list 1's row; list 1 accepts and reorders.
       const itemC = byId("first-c")
       const itemB = byId("first-b")
@@ -337,70 +367,5 @@ describe("SortableList in a document", { concurrent: false }, () => {
 
       assert.deepStrictEqual(root.model()?.first, ["c", "b", "a"])
       assert.deepStrictEqual(root.model()?.second, ["x", "y"])
-    }).pipe(Effect.scoped))
-  it.effect("a press on a handle interrupted before mouseup lets focus leaving the list cancel the move", () =>
-    Effect.gen(function*() {
-      const Message = UiSchema.TaggedEnum({
-        Reordered: { from: Schema.Number, to: Schema.Number }
-      })
-      const List = Html.component({
-        name: "List",
-        model: Schema.Struct({ items: Schema.Array(Schema.String) }),
-        message: Message
-      }).make({
-        init: () => ({ items: ["a", "b"] }),
-        update: {
-          Reordered: ($, { from, to }) =>
-            $.evolve({ items: reorder($.model.items, from, to) })
-        },
-        view: (h, model) =>
-          SortableList(h, {
-            props: { items: model.items },
-            onEmit: { Reordered: (event) => Message.Reordered(event) },
-            view: (sortableList) =>
-              sortableList.list(h.ul).children(
-                model.items.map((id) =>
-                  sortableList.item({ element: h.li, id }).children(
-                    sortableList.handle({
-                      element: h.button.attr("id", "handle-" + id),
-                      id
-                    }).children(id)
-                  )
-                )
-              )
-          })
-      })
-      const app = yield* container
-      yield* BrowserHost.mountEffect(List, {}, app)
-      yield* tick
-      const handle = byId("handle-a") as HTMLButtonElement
-      const interruptions = [
-        () =>
-          document.dispatchEvent(
-            new PointerEvent("pointercancel", {
-              bubbles: true,
-              pointerType: "touch"
-            })
-          ),
-        () => window.dispatchEvent(new Event("blur"))
-      ]
-      for (const interrupt of interruptions) {
-        handle.focus()
-        keyboardClick(handle)
-        yield* tick
-        assert.strictEqual(handle.getAttribute("aria-pressed"), "true")
-        press(handle, "touch")
-        handle.dispatchEvent(
-          new MouseEvent("mousedown", { bubbles: true, cancelable: true })
-        )
-        yield* tick
-        interrupt()
-        yield* tick
-        handle.dispatchEvent(
-          new FocusEvent("focusout", { bubbles: true, relatedTarget: null })
-        )
-        yield* tick
-        assert.strictEqual(handle.getAttribute("aria-pressed"), "false")
-      }
     }).pipe(Effect.scoped))
 })

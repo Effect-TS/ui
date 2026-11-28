@@ -53,21 +53,22 @@ const pointer = (target: EventTarget, type: string, clientX: number) =>
     })
   )
 
+const controlRect = {
+  left: 0,
+  right: 100,
+  top: 0,
+  bottom: 10,
+  width: 100,
+  height: 10
+} as DOMRect
+
 it.effect("a track press reads a direction change made in the same task, before focus enters the slider", () =>
   Effect.gen(function*() {
     const app = yield* container
     yield* BrowserHost.mountEffect(Page, {}, app)
     yield* tick
     const control = app.querySelector<HTMLElement>(".control")!
-    control.getBoundingClientRect = () =>
-      ({
-        left: 0,
-        right: 100,
-        top: 0,
-        bottom: 10,
-        width: 100,
-        height: 10
-      }) as DOMRect
+    control.getBoundingClientRect = () => controlRect
     app.style.direction = "rtl"
     pointer(control, "pointerdown", 30)
     pointer(document, "pointerup", 30)
@@ -103,15 +104,7 @@ it.effect("a lost pointer capture or window blur ends a drag with one commit, an
     const root = yield* BrowserHost.mountEffect(Page, {}, app)
     yield* tick
     const control = app.querySelector<HTMLElement>(".control")!
-    control.getBoundingClientRect = () =>
-      ({
-        left: 0,
-        right: 100,
-        top: 0,
-        bottom: 10,
-        width: 100,
-        height: 10
-      }) as DOMRect
+    control.getBoundingClientRect = () => controlRect
     const slider = app.firstElementChild!
     const interruptions = [
       () => {
