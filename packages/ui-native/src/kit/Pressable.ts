@@ -213,7 +213,9 @@ export const Pressable = <
         retention: [side("left"), side("top"), side("right"), side("bottom")],
         delayLongPress: props.delayLongPress,
         ripple: rippled,
-        sound: props.android_disableSound !== true
+        sound: props.android_disableSound !== true,
+        // Not in the options' type: only `Link` passes it.
+        link: (options as { readonly link?: PressOptions["link"] }).link
       } satisfies PressOptions
     )
     if (hitSlop !== undefined) out = out.prop("hitSlop", hitSlop)

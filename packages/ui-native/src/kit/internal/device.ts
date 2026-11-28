@@ -131,7 +131,8 @@ export const subscription = <A, Msg>(
   handler: View.Handler<Msg, A>,
   listen: (
     device: Native.Device,
-    listener: (value: A) => boolean
+    listener: (value: A) => boolean,
+    context: Context.Context<never>
   ) => () => void,
   initial?: ((device: Native.Device) => A) | undefined
 ): Subscription.Subscription<Msg> =>
@@ -155,10 +156,10 @@ export const subscription = <A, Msg>(
         })
         return sent
       }
-      if (initial === undefined) return listen(device, send)
+      if (initial === undefined) return listen(device, send, context)
       let started = false
       return {
-        close: listen(device, (value) => started && send(value)),
+        close: listen(device, (value) => started && send(value), context),
         start: () => {
           started = true
           send(initial(device))

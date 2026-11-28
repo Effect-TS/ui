@@ -6,8 +6,10 @@
  * `onPress` is a Subscription that handles a press. A handler that returns
  * a message takes the press, and one that returns `undefined` passes it to
  * the Subscription that started before it. The latest Subscription gets the
- * press first, so a screen shown over another handles Back before it. When
- * none takes the press, the app runs Android's default, which closes it.
+ * press first, so a screen shown over another handles Back before it. A
+ * `Stack` screen that another covers takes no press, and `NativeRouter`
+ * gets the press after every Subscription. When none takes the press, the
+ * app runs Android's default, which closes it.
  *
  * `exit` runs that default, and `Exit` is its Command.
  *
@@ -51,37 +53,9 @@ import type * as Subscription from "@effect/ui/Subscription"
 import type * as View from "@effect/ui/View"
 import type * as Effect from "effect/Effect"
 import * as Native from "../Native.ts"
+import { exitWith, handle } from "./internal/back.ts"
 import * as device from "./internal/device.ts"
-
-// Each takes the press when it returns true.
-type Entry = () => boolean
-
-const exitWith = (d: Native.Device) =>
-  d.module("DeviceEventManager")?.invokeDefaultBackPressHandler()
-
-// The device listens only while a Subscription does, so the app runs the
-// default without one.
-const entries = device.perDevice((d) => {
-  const stack: Array<Entry> = []
-  let off: (() => void) | undefined
-  const press = () => {
-    for (let i = stack.length - 1; i >= 0; i--) {
-      if (stack[i]()) return
-    }
-    exitWith(d)
-  }
-  return (entry: Entry) => {
-    stack.push(entry)
-    off ??= d.on("hardwareBackPress", press)
-    return () => {
-      stack.splice(stack.indexOf(entry), 1)
-      if (stack.length === 0) {
-        off?.()
-        off = undefined
-      }
-    }
-  }
-})
+import { covered } from "./internal/screen.ts"
 
 /**
  * A Subscription that handles Back while it runs. `handler` is a message,
@@ -98,7 +72,8 @@ export const onPress = <Msg>(
   device.subscription(
     "@effect/ui-native/kit/BackHandler",
     handler,
-    (d, press) => entries(d)(() => press(undefined))
+    (d, press, context) =>
+      handle(d)(() => !covered(context) && press(undefined))
   )
 
 /**

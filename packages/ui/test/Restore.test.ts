@@ -350,6 +350,28 @@ describe("restore", () => {
       )
     }).pipe(Effect.provide(TestHost.layer())))
 
+  it.effect("saves nothing with restore: false, so Back starts the page fresh", () =>
+    Effect.gen(function*() {
+      const history = Router.memoryHistory("/page")
+      yield* Effect.gen(function*() {
+        const root = yield* TestHost.mount(App, Router.props(AppRoute))
+        yield* TestHost.settle
+        click(root, "login |")
+        yield* TestHost.settle
+        click(root, "Home")
+        yield* TestHost.settle
+        history.go(-1)
+        yield* TestHost.settle
+        root.get(Locator.text("login |", { exact: true }))
+        assert.notInclude(JSON.stringify(history.current().state), "Login")
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Router.make({ routes: AppRoute, history, restore: false })
+        )
+      )
+    }).pipe(Effect.provide(TestHost.layer())))
+
   it.effect("restores every root on its first mount after a reload, and none on a remount", () =>
     Effect.gen(function*() {
       const history = Router.memoryHistory("/page")

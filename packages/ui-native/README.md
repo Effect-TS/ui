@@ -10,10 +10,11 @@ React Native vocabulary and Fabric host for `@effect/ui`. Apps render native vie
 ## Modules
 
 - `Native`: `Native.component`, `Native.H`, the element vocabulary (`view`, `text`, `scroll`, `input`), style, prop and event types, `Native.Host`, `Native.Device`, `Native.clear`, `Native.setSelection`, and `Native.defineView` for custom native views
-- `@effect/ui-native/kit`: native controls and APIs beyond the vocabulary, bundled only when imported. `Css` parses CSS strings into the style forms native reads, `Image` and `ImageBackground` render images, `RefreshControl` adds pull to refresh, and `Modal`, `SafeArea`, `Drawer` and `InputAccessory` are screen containers. `Pressable` adds press states, a pressed style and the Android ripple; `Pan` handles drags after a configurable movement threshold. `Animation` animates `opacity` and `transform` on React Native's native driver, and `LayoutAnimation` animates a step's layout changes. `KeyboardAvoidingView` keeps content above the keyboard, and the device APIs come as namespaces (`AccessibilityInfo`, `Alert`, `AppState`, `Appearance`, `BackHandler`, `Dimensions`, `I18nManager`, `Keyboard`, `Linking`, `PermissionsAndroid`, `PlatformColor`, `Share`, `StatusBar`, `Vibration`)
+- `@effect/ui-native/kit`: native controls and APIs beyond the vocabulary, bundled only when imported. `Css` parses CSS strings into the style forms native reads, `Image` and `ImageBackground` render images, `RefreshControl` adds pull to refresh, and `Modal`, `SafeArea`, `Drawer` and `InputAccessory` are screen containers. `Pressable` adds press states, a pressed style and the Android ripple; `Pan` handles drags after a configurable movement threshold. `Animation` animates `opacity` and `transform` on React Native's native driver, and `LayoutAnimation` animates a step's layout changes. `KeyboardAvoidingView` keeps content above the keyboard. `Stack` draws a `NativeRouter` stack of screens and `Link` navigates on press. The device APIs come as namespaces (`AccessibilityInfo`, `Alert`, `AppState`, `Appearance`, `BackHandler`, `Dimensions`, `I18nManager`, `Keyboard`, `Linking`, `PermissionsAndroid`, `PlatformColor`, `Share`, `StatusBar`, `Vibration`)
 - `@effect/ui-native/assets`: ambient TypeScript declarations for static image imports (`import logo from "./logo.png"`)
 - `NativeHost`: `make`, the `Renderer.Host` that builds Fabric shadow trees and commits them to a surface
 - `NativeApp`: `mount`, `mountEffect`, and `register`, which runs an app on every surface native starts; the `Surface` service, whose `props` follow the surface's props as native updates them
+- `NativeRouter`: `layer`, which provides `@effect/ui`'s `Router` on a history in memory, with Android Back and deep links; `Stack`, `Navigation`, `props`, `subscription` and `follow` for a root that holds the screens
 - `@effect/ui-native/networking`: opt-in side-effect entry that installs React Native's networking globals (`fetch`, `XMLHttpRequest`, `WebSocket`, `URL`, `AbortController`)
 - `@effect/ui-native/node`: `NativeMetro.withEffectUi`, the Metro configuration
 - `@effect/ui-native/testing`: `TestDevice`, a fake `Native.Device` for Play tests
@@ -72,11 +73,64 @@ import { Linking } from "@effect/ui-native/kit"
 $.run(Linking.Open.make({ url: "https://effect.website" }).pipe(Command.asNoop))
 ```
 
-On Android, Back closes the app when nothing handles it. The kit's `BackHandler.onPress` handles it while its Subscription runs, and React Native's `BackHandler` takes over that default as it does in a React app. Use one of them: each closes the app when its own handlers pass on a press.
+On Android, Back closes the app when nothing handles it. The kit's `BackHandler.onPress` handles it while its Subscription runs, and React Native's `BackHandler` takes over that default as it does in a React app. Use one of them: each closes the app when its own handlers pass on a press. Under `NativeRouter`, Back goes back one screen before it closes the app.
 
 React Native doesn't load the `expo` package itself: an app that doesn't import it saves about 1 MB of Hermes bytecode.
 
 Networking globals are opt-in, so apps that don't make requests don't bundle React Native's XHR stack. If your app uses `fetch` or `FetchHttpClient`, add `import "@effect/ui-native/networking"` to the entry module.
+
+## Routing
+
+`NativeRouter.layer({ routes, prefixes })` provides the `Router` and its Commands, as `BrowserRouter` does in the browser, on a history kept in memory. The root holds the stack of entries up to the current one and draws it with the kit's `Stack`:
+
+```ts
+const Message = UiSchema.TaggedEnum({
+  Navigated: { navigation: NativeRouter.Navigation(AppRoute) }
+})
+
+export const App = Native.component({
+  name: "App",
+  props: Schema.Struct({ stack: NativeRouter.Stack(AppRoute) }),
+  model: NativeRouter.Stack(AppRoute),
+  message: Message
+}).make({
+  init: ($) => $.props.stack,
+  update: {
+    Navigated: ($, { navigation }) =>
+      $.set(NativeRouter.follow(AppRoute, $.model, navigation))
+  },
+  subscriptions: ({ model }) => [
+    NativeRouter.subscription(
+      AppRoute,
+      model,
+      (navigation) => Message.Navigated({ navigation })
+    )
+  ],
+  view: (h, stack) =>
+    Stack(h, {
+      entries: stack,
+      screen: (s, { route }) =>
+        AppRoute.match(route, {
+          Home: () => Home(s, { key: "home" }),
+          About: () => About(s, { key: "about" })
+        })
+    })
+})
+
+NativeApp.register(
+  NativeApp.mount(App, NativeRouter.props(AppRoute)).pipe(
+    Layer.provide(
+      NativeRouter.layer({ routes: AppRoute, prefixes: ["myapp://"] })
+    )
+  )
+)
+```
+
+- **Screens.** Covered screens stay mounted, hidden from touches and the screen reader, so Back shows a screen as it was left, scroll position included. The Router saves no snapshots. Screens switch without a transition, and iOS has no swipe-back yet.
+- **Links.** `Link(h, { href })` is a `Pressable` with the link role that navigates on press and reports `Router.intent` when a touch starts, for prefetch. An href the routes don't parse opens with `Linking.openURL`.
+- **Back.** A `BackHandler.onPress` on the top screen gets the press first. Handlers on covered screens get none. Then the router goes back one entry, and at the first it closes the app. While a `Router.blocked` block is held, Back does nothing.
+- **Deep links.** A URL that starts with one of `prefixes` opens the rest as its path: with `"myapp://"`, `myapp://people/1` opens `/people/1`. The app starts at the URL that launched it, or at `/`, and a URL that arrives while it runs is pushed. Pass a function for other schemes.
+- **Accessibility.** The screen reader's focus moves to a screen that comes to the top, which reads it. Nothing is announced; a screen with more to say runs `AccessibilityInfo.announce`.
 
 ## Testing
 
@@ -142,4 +196,4 @@ Use native prop names and plain style objects. React Native's `aria-*` and `id` 
 
 ## Example
 
-See `examples/native` and its README, which covers the development client, release builds and measuring the bundle. It is an Expo app with a counter, a controlled input, nested text, a draggable handle, and a scrolling list of pressable rows under a sticky header. Its `babel.config.cjs` runs TypeScript's type stripper before Expo's, because Metro compiles the workspace's TypeScript sources there and Flow's stripper rejects `declare` class fields.
+See `examples/native` and its README, which covers the development client, release builds and measuring the bundle. It is an Expo app with two screens: a Link opens the second, and the `effect-ui://about` deep link opens it directly. The first has a counter, a controlled input, nested text, a draggable handle, and a scrolling list of pressable rows under a sticky header. Its `babel.config.cjs` runs TypeScript's type stripper before Expo's, because Metro compiles the workspace's TypeScript sources there and Flow's stripper rejects `declare` class fields.

@@ -953,6 +953,34 @@ describe("Router", { concurrent: false }, () => {
     }).pipe(Effect.provide(layer))
   })
 
+  it.effect("gives each location its history entry's index", () => {
+    const { history, layer } = setup()
+    return Effect.gen(function*() {
+      const router = yield* Router.Router
+      const seen: Array<string> = []
+      yield* Effect.forkScoped(
+        Stream.runForEach(router.changes, (location) =>
+          Effect.sync(() => {
+            seen.push(`${location.action} ${location.index}`)
+          }))
+      )
+      yield* Effect.yieldNow
+      yield* router.push(AppRoute.Person({ params: { id: 1 } }))
+      yield* router.push(AppRoute.Person({ params: { id: 2 } }))
+      yield* router.replace(AppRoute.Card({ params: { id: 3 } }))
+      history.go(-2)
+      yield* Effect.yieldNow
+      assert.deepStrictEqual(seen, [
+        "initial 0",
+        "push 1",
+        "push 2",
+        "replace 2",
+        "pop 0"
+      ])
+      assert.strictEqual(router.location().index, 0)
+    }).pipe(Effect.scoped, Effect.provide(layer))
+  })
+
   it.effect("Router.static is fixed at its URL", () =>
     Effect.gen(function*() {
       const router = yield* Router.Router

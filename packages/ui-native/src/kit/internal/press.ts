@@ -28,6 +28,12 @@ export interface PressOptions extends View.EventOptions {
   readonly delayLongPress?: number | undefined
   readonly ripple?: boolean | undefined
   readonly sound?: boolean | undefined
+  /**
+   * Called with `false` when a touch starts on the element and with `true`
+   * when it presses it, before `press`: how `Link` navigates without a
+   * message.
+   */
+  readonly link?: ((n: NativeNode, pressed: boolean) => void) | undefined
 }
 
 // React Native's `Pressability` timings.
@@ -134,6 +140,7 @@ export const press: Recognizer = (phase, target, payload) => {
     x0 = x
     y0 = y
     activate(n, x, y)
+    options.link?.(n, false)
     if (n.events!.handlers.longPress !== undefined) {
       longTimer = setTimeout(() => {
         if (owner === n && inside) {
@@ -167,6 +174,7 @@ export const press: Recognizer = (phase, target, payload) => {
     if (options.sound && n.host.os === "android") {
       NativeSoundManager?.playTouchSound()
     }
+    options.link?.(n, true)
     fire(n, "press", { x, y })
   }
 }
