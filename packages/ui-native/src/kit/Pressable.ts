@@ -34,10 +34,9 @@
  *
  * **Hovering**
  *
- * `onHoverIn` and `onHoverOut` fire when a pointer enters and leaves the
- * element, as its `pointerEnter` and `pointerLeave` events. They need the
- * app to turn on React Native's pointer events, described on
- * `Native.ViewEvents`, as React Native's own `onHoverIn` does.
+ * `onHoverIn` and `onHoverOut` handle the element's `pointerEnter` and
+ * `pointerLeave` events. Enable React Native's W3C pointer events at app
+ * launch as described in `Native.ViewEvents`.
  *
  * **Disabled**
  *

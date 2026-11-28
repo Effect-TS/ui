@@ -160,8 +160,8 @@ export class NativeNode {
     this.props = props ?? { ...defaultsOf(this) }
   }
   /**
-   * Where iOS looks up the node a pointer event is for, as on a React
-   * fiber. Without it iOS drops every pointer event.
+   * iOS resolves pointer targets through `stateNode.node`. Return the
+   * current shadow so the lookup survives Fabric clones.
    */
   get stateNode(): { readonly node: unknown } {
     return { node: this.shadow }
@@ -527,7 +527,6 @@ const listen = (ui: UIManager) => {
     else if (type === "topBlur" && focus.node === handle) focus.node = undefined
     const hook = handle.kind.events?.[type]
     if (hook === undefined) {
-      // Strip Fabric's "top" prefix: topLayout -> layout.
       const name = type[3]!.toLowerCase() + type.slice(4)
       // Native sends these to the deepest view under the pointer.
       return fire(

@@ -1,7 +1,5 @@
-// Turns on React Native's W3C pointer events, which are off by default on
-// both platforms. Without them native sends no `pointer*` or `click`
-// events, and `Pressable`'s `onHoverIn` and `onHoverOut` never fire.
-// Each flag is read when the first surface starts, so it is set at launch.
+// Enable W3C pointer events before the first surface starts.
+// Both platforms disable them by default.
 const { withAppDelegate, withMainApplication } = require("expo/config-plugins")
 
 const insertAfter = (contents, anchor, line, file) => {

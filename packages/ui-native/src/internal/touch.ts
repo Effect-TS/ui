@@ -69,7 +69,7 @@ export const touch: { press: Recognizer; pan?: Recognizer | undefined } = {
 }
 
 /**
- * `n` or the nearest element around it that handles `event`.
+ * Return `n` if it handles `event`, otherwise its nearest ancestor that does.
  *
  * @internal
  */

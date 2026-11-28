@@ -107,7 +107,6 @@ export const App = Native.component({
     items: Schema.Array(Schema.String),
     selected: Schema.String,
     hovered: Schema.String,
-    // The last pointer event anywhere on the screen.
     pointer: Schema.String,
     // The handle's offset while dragged, and where it was last dropped.
     dragged: Schema.Number,
@@ -234,7 +233,6 @@ export const App = Native.component({
     }
     const list = h.id("list")
     const scrolled = Animation.scroll(list, "y")
-    // Pointer events reach this view from whatever is under the pointer.
     const pointed = (event: string) => (p: Native.ClickPayload) =>
       Message.Pointed({
         pointer: p.pointerId === undefined

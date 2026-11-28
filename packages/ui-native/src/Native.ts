@@ -835,11 +835,10 @@ export interface PressPayload {
 }
 
 /**
- * A W3C pointer event, as React Native's native side sends it. Positions
- * are in points. `x`, `y`, `clientX`, `clientY`, `pageX` and `pageY`
- * are all from the top left of the root view, `screenX` and `screenY`
- * from the top left of the screen, and `offsetX` and `offsetY` from the
- * top left of the view native hit.
+ * A native W3C pointer event with positions in points, measured from:
+ * - the root view's top left for `x/y`, `clientX/Y` and `pageX/Y`;
+ * - the screen's top left for `screenX/Y`;
+ * - the hit view's top left for `offsetX/Y`.
  *
  * @stability experimental
  * @category events
@@ -882,7 +881,7 @@ export interface PointerPayload {
 /**
  * A `click`: a pointer event, or on Android an empty payload when a
  * `focusable` view is activated without a pointer, such as from a keyboard
- * or TalkBack. Check `pointerId !== undefined` before reading the pointer.
+ * or TalkBack. Check `pointerId !== undefined` before reading pointer fields.
  *
  * @stability experimental
  * @category events
@@ -1041,9 +1040,8 @@ export interface ContentSizeChangePayload {
  * The pointer events fire only in an app that turns on React Native's W3C
  * pointer events: `RCTSetDispatchW3CPointerEvents(YES)` on iOS and
  * `ReactFeatureFlags.dispatchPointerEvents = true` on Android, before the
- * first surface starts. A touch, a mouse and a stylus all send them, and
- * `pointerEnter`, `pointerLeave` and a `pointerMove` without a button
- * held come from a hovering mouse or stylus.
+ * first surface starts. Touch, mouse and stylus input can produce pointer
+ * events, including movement without a button held on hover-capable devices.
  *
  * Native sends a pointer event to the deepest view under the pointer. It
  * goes to the nearest element that handles it, as `press` does, except
