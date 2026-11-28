@@ -587,9 +587,10 @@ const levelOf = <N>(reader: Reader<N>, node: N): number | undefined => {
  *
  * `name` matches the accessible name exactly (after collapsing whitespace),
  * or tests it with a RegExp. `checked` matches a checkbox or radio button's
- * live state, and `level` a heading's. `hidden: true` includes hidden and
- * inert elements for inspection; simulated user actions still refuse inert
- * targets.
+ * live state, `expanded` matches an explicit `aria-expanded` attribute
+ * (`"true"` or `"false"`), and `level` a heading's. `hidden: true` includes
+ * hidden and inert elements for inspection; simulated user actions still
+ * refuse inert targets.
  *
  * @stability experimental
  * @category models
@@ -598,6 +599,7 @@ const levelOf = <N>(reader: Reader<N>, node: N): number | undefined => {
 export interface RoleOptions {
   readonly name?: string | RegExp | undefined
   readonly checked?: boolean | undefined
+  readonly expanded?: boolean | undefined
   readonly level?: number | undefined
   readonly hidden?: boolean | undefined
 }
@@ -616,8 +618,9 @@ const describeOptions = (
       }`
     )
   }
-  if (options?.checked !== undefined) parts.push(`checked ${options.checked}`)
-  if (options?.level !== undefined) parts.push(`level ${options.level}`)
+  for (const key of ["checked", "expanded", "level"] as const) {
+    if (options?.[key] !== undefined) parts.push(`${key} ${options[key]}`)
+  }
   return parts.join(", ")
 }
 
@@ -633,6 +636,10 @@ const select = <N>(
     if (
       options?.checked !== undefined &&
       isChecked(index.reader, entry.node) !== options.checked
+    ) continue
+    if (
+      options?.expanded !== undefined &&
+      index.reader.attr(entry.node, "aria-expanded") !== `${options.expanded}`
     ) continue
     if (
       options?.level !== undefined &&

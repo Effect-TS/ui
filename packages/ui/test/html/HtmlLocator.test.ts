@@ -83,6 +83,36 @@ describe("HtmlLocator", () => {
         .toHaveLength(3)
     })
 
+    it("expanded filters by explicit aria-expanded state and reports it in diagnostics", () => {
+      const open = el("button", { "aria-expanded": "true" }, text("Details"))
+      const closed = el("button", { "aria-expanded": "false" }, text("Details"))
+      const plain = el("button", {}, text("Details"))
+      const other = el("button", { "aria-expanded": "yes" }, text("Details"))
+      const tree = el("div", {}, open, closed, plain, other)
+      expect(
+        Locator.get(
+          tree,
+          HtmlLocator.role("button", { name: "Details", expanded: true })
+        )
+      ).toBe(open)
+      expect(
+        Locator.get(
+          tree,
+          HtmlLocator.role("button", { name: "Details", expanded: false })
+        )
+      ).toBe(closed)
+      expect(HtmlLocator.queryAllByRole(tree, "button", { name: "Details" }))
+        .toEqual([open, closed, plain, other])
+      expect(() =>
+        HtmlLocator.getByRole(el("div", {}, plain), "button", {
+          name: "Details",
+          expanded: false
+        })
+      ).toThrow(
+        "HtmlLocator: nothing has role \"button\", name \"Details\", expanded false. Roles here:\n  button \"Details\""
+      )
+    })
+
     it("inert elements and those outside the topmost modal are left out unless asked for", () => {
       const tree = el(
         "div",
