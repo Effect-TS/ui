@@ -128,13 +128,10 @@ const setText = (n: NativeNode, value: unknown, host: ViewHost) => {
   host.command(n, "setTextAndSelection", [n.eventCount, value, -1, -1])
 }
 
-/**
- * Applies deferred `defaultValue` updates once all props for a render are set,
- * so `value` and `defaultValue` produce the same text in either prop order.
- *
- * @internal
- */
-export const flushInputs = (host: ViewHost) => {
+// Applies deferred `defaultValue` updates once all props for a render are
+// set, so `value` and `defaultValue` produce the same text in either prop
+// order.
+const flushInputs = (host: ViewHost) => {
   const set = pendingText.get(host)
   if (set === undefined) return
   pendingText.delete(host)
@@ -207,12 +204,12 @@ export const props = new Map<
 export const commits = new Set<(host: ViewHost) => void>()
 
 /**
- * Called before every commit, by kit modules that set props on nodes they
- * follow, so the commit carries them.
+ * Called before every commit, to set props the commit carries: deferred
+ * input text, and those of kit modules on nodes they follow.
  *
  * @internal
  */
-export const precommits = new Set<(host: ViewHost) => void>()
+export const precommits = new Set<(host: ViewHost) => void>([flushInputs])
 
 /** `LayoutAnimation` configs by view transition type. @internal */
 export const layouts = new Map<string, object>()

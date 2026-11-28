@@ -54,17 +54,17 @@
  */
 import type * as View from "@effect/ui/View"
 import {
-  fenced,
   fire,
   own,
   pointOf,
+  pressed,
   type Recognizer,
   touch,
   type TouchPayload
 } from "../internal/touch.ts"
 import type * as Native from "../Native.ts"
 import type { NativeNode } from "../NativeHost.ts"
-import { bind, ignore, pressed } from "./internal/view.ts"
+import { bind, ignore } from "./internal/view.ts"
 
 /**
  * When the element takes a touch, and what that does.
@@ -244,7 +244,7 @@ const take = (
   ) return false
   const claim = () => {
     if (owner !== undefined) end("panCancel")
-    else if (!fenced) touch.press(3, n, payload)
+    else touch.press(3, n, payload)
     owner = n
     own()
     responder(n, true)
@@ -294,7 +294,7 @@ const pan: Recognizer = (phase, n, payload) => {
     g.moveY = y
     g.numberActiveTouches = count
     if (phase === 0) {
-      const press = fenced ? undefined : pressed(n)
+      const press = pressed(n)
       from = press ?? n
       ask(n, press, payload)
     } else if (owner === undefined) ask(from, undefined, payload)
@@ -312,5 +312,5 @@ const pan: Recognizer = (phase, n, payload) => {
       return end(phase === 2 ? "panEnd" : "panCancel")
     }
   }
-  return fenced ? undefined : touch.press(phase, n, payload)
+  return touch.press(phase, n, payload)
 }

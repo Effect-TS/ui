@@ -464,6 +464,8 @@ interface Layer {
   readonly value: Value | Transforms
   readonly transition: Transition | undefined
   readonly from: number | Style<number>["transform"]
+  /** Whether native reports the value of its one leaf to the node's header. */
+  readonly reported?: boolean | undefined
 }
 
 type Spec = Readonly<Record<string, Layer>>
@@ -519,24 +521,32 @@ interface Source {
 }
 
 interface Sticky {
-  options: {
-    readonly indices: ReadonlyArray<number>
-    readonly hiddenOnScroll: boolean
-    readonly inverted: boolean
-  }
+  options:
+    | {
+      readonly indices: ReadonlyArray<number>
+      readonly hiddenOnScroll: boolean
+      readonly inverted: boolean
+    }
+    | undefined
   /** The name of the source the headers follow, private to the scroll view. */
   readonly source: string
   /** The children at `indices`, as of the last commit. */
   kids: ReadonlyArray<NativeNode | undefined>
-  readonly headers: Map<NativeNode, Header>
+  readonly headers: Set<NativeNode>
   timer: ReturnType<typeof setTimeout> | undefined
 }
 
 interface Header {
-  /** The translation's shape, to rebuild only when the layout changes it. */
-  key: string
+  readonly st: Sticky
+  /** The layout `layer` is for, to rebuild it only when that changes. */
+  key: string | undefined
+  /** The transform shown in place of the node's own. */
+  layer: Layer | undefined
   /** The translation native last reported. */
   value: number | undefined
+  /** The node's own `zIndex` and `transform`, shown again after. */
+  zIndex: unknown
+  transform: unknown
 }
 
 /** What the driver follows on one surface. */
@@ -580,15 +590,10 @@ interface AnimatedModule {
 const drivers = new WeakMap<Native.ViewHost, Driver>()
 // The specs shown without a native driver.
 const plain = new WeakMap<NativeNode, Spec>()
-// Each node's spec from `style`, and the transform it gets as a sticky
-// header, which replaces the spec's.
+// Each node's spec from `style`, the sticky headers, and the header of
+// each node native reports the value of.
 const own = new WeakMap<NativeNode, Spec>()
-const stuck = new WeakMap<NativeNode, Layer>()
-// A header's own `zIndex` and `transform`, shown again once it isn't one.
-const base = new WeakMap<NativeNode, Record<string, unknown>>()
-// What a header does with its translation when native reports it, and the
-// header of each translation node native reports.
-const hearing = new WeakMap<NativeNode, (value: number) => void>()
+const headers = new WeakMap<NativeNode, Header>()
 const heard = new Map<number, NativeNode>()
 let listening = false
 // The sticky headers' part of the driver, set by the first `stickyHeaders`
@@ -597,8 +602,6 @@ let docking:
   | {
     /** Lays the headers out from the last commit. */
     readonly measure: (d: Driver) => void
-    /** Whether native reports `n`'s translation to its header. */
-    readonly hears: (n: NativeNode) => boolean
     readonly listen: (tag: number, n: NativeNode) => void
     readonly unlisten: (tag: number) => void
   }
@@ -630,7 +633,6 @@ const installSticky = () => {
     measure: (d) => {
       for (const [n, st] of d.sticky) if (mounted(n)) measure(d, n, st)
     },
-    hears: (n) => hearing.has(n),
     listen,
     unlisten: (tag) => {
       native().stopListeningToAnimatedNodeValue(tag)
@@ -641,10 +643,11 @@ const installSticky = () => {
 
 // Sets the style key, or keeps it for when a header stops being one.
 const keep =
-  (key: string) => (n: NativeNode, value: unknown, host: Native.ViewHost) => {
-    const own = base.get(n)
-    if (own === undefined) host.set(n, key, value)
-    else own[key] = value
+  (key: "zIndex" | "transform") =>
+  (n: NativeNode, value: unknown, host: Native.ViewHost) => {
+    const header = headers.get(n)
+    if (header === undefined) host.set(n, key, value)
+    else header[key] = value
   }
 
 const driverOf = (host: Native.ViewHost): Driver | undefined => {
@@ -684,7 +687,7 @@ const setSpec = (n: NativeNode, value: unknown, host: Native.ViewHost) => {
 
 const show = (d: Driver, n: NativeNode, host: Native.ViewHost) => {
   const mine = own.get(n)
-  const transform = stuck.get(n)
+  const transform = headers.get(n)?.layer
   const spec = transform === undefined ? mine : { ...mine, transform }
   const entry = d.entries.get(n)
   if (entry !== undefined) {
@@ -724,8 +727,9 @@ const show = (d: Driver, n: NativeNode, host: Native.ViewHost) => {
 const setSource = (n: NativeNode, name: unknown, host: Native.ViewHost) => {
   const d = driverOf(host)
   if (d === undefined) return
-  for (const [key, s] of d.sources) {
-    if (s.node === n && key !== d.sticky.get(n)?.source) s.node = undefined
+  for (const s of d.sources.values()) {
+    // `assign` gives a sticky source its node back before `flush`.
+    if (s.node === n) s.node = undefined
   }
   if (typeof name === "string") sourceOf(d, name).node = n
 }
@@ -733,53 +737,47 @@ const setSource = (n: NativeNode, name: unknown, host: Native.ViewHost) => {
 const setSticky = (n: NativeNode, value: unknown, host: Native.ViewHost) => {
   const d = driverOf(host)
   if (d === undefined) return
-  const options = (value ?? noHeaders) as Sticky["options"]
+  const options = value as Sticky["options"]
   const st = d.sticky.get(n)
   if (st !== undefined) st.options = options
-  else if (value !== undefined) {
+  else if (options !== undefined) {
     d.sticky.set(n, {
       options,
       source: "sticky " + (lastTag += 1),
       kids: [],
-      headers: new Map(),
+      headers: new Set(),
       timer: undefined
     })
   }
 }
 
-const noHeaders: Sticky["options"] = {
-  indices: [],
-  hiddenOnScroll: false,
-  inverted: false
-}
-
-const unmeasured = [0, 0] as const
-
 // Before a commit: makes the scroll views' children at their indices
-// sticky headers, and the others not.
+// sticky headers, and the others not. A scroll view that no longer has
+// headers, or was removed, is forgotten.
 const assign = (host: Native.ViewHost) => {
   const d = drivers.get(host)
   if (d === undefined) return
   for (const [n, st] of d.sticky) {
     const top = rootOf(n).kind
-    const live = top === surface || top === container
+    const options = st.options
+    const live = options !== undefined &&
+      (top === surface || top === container)
     const kids: Array<NativeNode | undefined> = []
     if (live) {
-      const children: Array<NativeNode> = []
+      let i = 0
       for (let k = n.inner!.first; k !== undefined; k = k.next) {
         // A wrapper such as `RefreshControl` isn't a child native counts.
-        if (k.kind.attach === undefined) children.push(k)
+        if (k.kind.attach !== undefined) continue
+        const at = options.indices.indexOf(i++)
+        if (at !== -1) kids[at] = k
       }
-      for (const i of st.options.indices) kids.push(children[i])
     }
     st.kids = kids
-    for (const h of st.headers.keys()) {
+    for (const h of st.headers) {
       if (kids.includes(h)) continue
-      const { zIndex, transform } = base.get(h)!
+      const { zIndex, transform } = headers.get(h)!
       st.headers.delete(h)
-      base.delete(h)
-      stuck.delete(h)
-      hearing.delete(h)
+      headers.delete(h)
       show(d, h, host)
       host.set(h, "zIndex", zIndex)
       if (own.get(h)?.transform === undefined) {
@@ -789,15 +787,16 @@ const assign = (host: Native.ViewHost) => {
     for (const h of kids) {
       if (h === undefined || st.headers.has(h)) continue
       const { outer, props } = h
-      base.set(h, {
+      st.headers.add(h)
+      headers.set(h, {
+        st,
+        key: undefined,
+        layer: undefined,
+        value: undefined,
         zIndex: props.zIndex ?? outer?.props.zIndex,
         transform: props.transform ?? outer?.props.transform
       })
-      hearing.set(h, (value) => {
-        st.headers.get(h)!.value = value
-        commitLater(st, host)
-      })
-      translate(d, st, h, undefined, undefined, undefined)
+      translate(d, h)
       // As React Native's `ScrollViewStickyHeader`, above the rows.
       host.set(h, "zIndex", 10)
     }
@@ -825,37 +824,43 @@ const assign = (host: Native.ViewHost) => {
 // laid the headers out, as React Native's `ScrollViewStickyHeader`.
 const measure = (d: Driver, n: NativeNode, st: Sticky) => {
   const content = rectOf(n.inner!, false)
-  const layouts = st.kids.map((h) => {
-    const rect = h === undefined ? undefined : rectOf(h, false)
-    return rect == null || content == null
-      ? undefined
-      : [rect[1]! - content[1]!, rect[3]!] as const
-  })
-  const height = st.options.inverted ? rectOf(n, false)?.[3] : undefined
-  for (let i = 0; i < st.kids.length; i++) {
+  const height = st.options?.inverted ? rectOf(n, false)?.[3] : undefined
+  // Each header meets the next one's top.
+  let next: number | undefined
+  for (let i = st.kids.length - 1; i >= 0; i--) {
     const h = st.kids[i]
-    if (h !== undefined) {
-      translate(d, st, h, layouts[i], layouts[i + 1]?.[0], height)
-    }
+    const rect = h === undefined || content == null
+      ? undefined
+      : rectOf(h, false)
+    const y = rect == null ? undefined : rect[1]! - content![1]!
+    if (h !== undefined) translate(d, h, y, rect?.[3], next, height)
+    next = y
   }
 }
 
-// Gives the header the translation for its layout.
+// Gives the header the translation for its layout: its top `at` in the
+// content, unless not laid out yet, and its height.
 const translate = (
   d: Driver,
-  st: Sticky,
   h: NativeNode,
-  layout: readonly [number, number] | undefined,
-  next: number | undefined,
-  height: number | undefined
+  at?: number,
+  size = 0,
+  next?: number,
+  height?: number
 ) => {
-  const [y, size] = layout ?? unmeasured
-  const offset = scroll(st.source, "y")
+  const header = headers.get(h)!
+  const { source, options } = header.st
+  const { hiddenOnScroll, inverted } = options!
+  const key = [at, size, next, height, hiddenOnScroll, inverted].join()
+  if (key === header.key) return
+  header.key = key
+  const y = at ?? 0
+  const offset = scroll(source, "y")
   const input = [-1, 0]
   const output = [0, 0]
-  if (layout === undefined) {
+  if (at === undefined) {
     // Not laid out yet: in place.
-  } else if (st.options.inverted) {
+  } else if (inverted) {
     if (height !== undefined) {
       const start = y + size - height
       if (start > 0) {
@@ -881,22 +886,19 @@ const translate = (
     }
   }
   let translation = interpolate(offset, input, output)
-  if (st.options.hiddenOnScroll) {
+  if (hiddenOnScroll) {
     // Follows the scroll past the header's place, up to its height.
     translation = add(
       translation,
       diffClamp(interpolate(offset, [y - 1, y, y + 1], [0, 0, -1]), -size, 0)
     )
   }
-  const key = JSON.stringify(translation)
-  const header = st.headers.get(h)
-  if (key === header?.key) return
-  st.headers.set(h, { key, value: header?.value })
-  stuck.set(h, {
+  header.layer = {
     value: [{ translateY: translation }],
     transition: undefined,
-    from: undefined
-  })
+    from: undefined,
+    reported: true
+  }
   show(d, h, h.host)
 }
 
@@ -907,7 +909,8 @@ const commitLater = (st: Sticky, host: Native.ViewHost) => {
   clearTimeout(st.timer)
   st.timer = setTimeout(() => {
     st.timer = undefined
-    for (const [h, { value }] of st.headers) {
+    for (const h of st.headers) {
+      const { value } = headers.get(h)!
       if (value !== undefined && mounted(h)) {
         host.set(h, "transform", [{ translateY: value }])
       }
@@ -1205,11 +1208,9 @@ const rebuild = (
   const transforms: Array<object> = []
   const moved: Array<number> = []
   let listened = 0
-  leaves(spec, (path, value, _, from) => {
+  leaves(spec, (path, value, layer, from) => {
     const tag = lower(value, path, from)
-    if (path === "transform.0.translateY" && docking?.hears(e.node)) {
-      listened = tag
-    }
+    if (layer.reported) listened = tag
     const dot = path.lastIndexOf(".")
     if (dot === -1) return styles[outer?.test(path) ? 1 : 0][path] = tag
     transforms.push({
@@ -1255,9 +1256,13 @@ const listen = (tag: number, n: NativeNode) => {
     // iOS sends the events only while the module counts a listener.
     if (n.host.os === "ios") m.addListener?.("onAnimatedValueUpdate")
     RCTDeviceEventEmitter.addListener("onAnimatedValueUpdate", (data: any) => {
-      const h = heard.get(data?.tag)
-      // Only Android reports a value node's offset apart.
-      if (h !== undefined) hearing.get(h)?.(data.value + (data.offset ?? 0))
+      const n = heard.get(data?.tag)
+      const header = n === undefined ? undefined : headers.get(n)
+      if (header !== undefined) {
+        // Only Android reports a value node's offset apart.
+        header.value = data.value + (data.offset ?? 0)
+        commitLater(header.st, n!.host)
+      }
     })
   }
   m.startListeningToAnimatedNodeValue(tag)

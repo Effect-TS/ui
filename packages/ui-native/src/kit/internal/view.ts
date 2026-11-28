@@ -1,5 +1,4 @@
 import type { Insets } from "../../Native.ts"
-import type { NativeNode } from "../../NativeHost.ts"
 
 /**
  * A handler that sends nothing, for an event a module needs bound.
@@ -47,17 +46,3 @@ export const insets = (
   typeof slop === "number"
     ? { top: slop, left: slop, bottom: slop, right: slop }
     : slop
-
-/**
- * The nearest element a touch on `n` presses: `n` or one around it that
- * handles `press` or `pressIn`.
- *
- * @internal
- */
-export const pressed = (n: NativeNode | undefined): NativeNode | undefined => {
-  while (
-    n !== undefined && n.events?.handlers.press === undefined &&
-    n.events?.handlers.pressIn === undefined
-  ) n = n.parent
-  return n
-}

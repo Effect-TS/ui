@@ -46,7 +46,7 @@ export type Recognizer = (
   payload: TouchPayload
 ) => unknown
 
-let pressed: NativeNode | undefined
+let down: NativeNode | undefined
 
 /**
  * The recognizers in use. `press` sends `press` to the nearest element
@@ -59,14 +59,14 @@ let pressed: NativeNode | undefined
 export const touch: { press: Recognizer; pan?: Recognizer | undefined } = {
   press(phase, n, payload) {
     if (phase === 0) {
-      let p: NativeNode | undefined = n
+      let p: NativeNode | undefined = fenced ? undefined : n
       while (p !== undefined && p.events?.handlers.press === undefined) {
         p = p.parent
       }
-      pressed = p
+      down = p
     } else if (phase !== 1) {
-      const target = pressed
-      pressed = undefined
+      const target = down
+      down = undefined
       if (phase === 2 && under(n, target)) {
         const { x, y } = pointOf(payload)
         if (within(rectOf(target), x, y)) fire(target, "press", { x, y })
@@ -156,13 +156,9 @@ const coasting = new WeakMap<NativeNode, number>()
 
 let target: NativeNode | undefined
 let taken = false
-/**
- * Whether a `"handled"` scroll view takes the touch's press while leaving
- * it to the pans, which press nothing then.
- *
- * @internal
- */
-export let fenced = false
+// Whether a `"handled"` scroll view takes the touch's press, leaving the
+// touch to the pans.
+let fenced = false
 // Whether the touch blurs the focused input when it ends: `1` unless a
 // scroll view around its target scrolls first, `2` regardless.
 let blur: 0 | 1 | 2 = 0
@@ -173,6 +169,18 @@ let dropped: NativeNode | undefined
 const claims = (n: NativeNode) => {
   const h = n.events?.handlers
   return h !== undefined && (h.press ?? h.pressIn) !== undefined
+}
+
+/**
+ * The nearest element a touch on `n` presses: `n` or one around it that
+ * handles `press` or `pressIn`. None while a scroll view takes the press.
+ *
+ * @internal
+ */
+export const pressed = (n: NativeNode | undefined): NativeNode | undefined => {
+  if (fenced) return undefined
+  while (n !== undefined && !claims(n)) n = n.parent
+  return n
 }
 
 /**
@@ -188,8 +196,8 @@ export const own = (): void => {
 /**
  * Applies `keyboardShouldPersistTaps` of the scroll views around a touch
  * that starts on `n`, as React Native's `ScrollView` does while the
- * keyboard can be dismissed. Returns `1` when one takes the touch, and `2`
- * when one takes only its press.
+ * keyboard can be dismissed, setting `taken` when one takes the touch, and
+ * `fenced` when one takes only its press.
  *
  * A `"never"` scroll view takes a touch that doesn't start on an input. A
  * `"handled"` one takes it when nothing inside it handles a press, but only
@@ -199,13 +207,13 @@ export const own = (): void => {
  * the app, lets a `"never"` scroll view's touch through to the elements
  * and blurs when it ends, as React Native's `ScrollView` does.
  */
-const persist = (n: NativeNode): 0 | 1 | 2 => {
+const persist = (n: NativeNode): void => {
   const input = kinds.get("input")
   const focused = focus.node
   if (
     focused === undefined || focused.kind !== input || !mounted(focused) ||
     (focus.keyboard === undefined && !focus.unreliable) || n === focused
-  ) return 0
+  ) return
   const scroll = kinds.get("scroll")
   const detached = focus.keyboard === 0
   let handled = n.kind === input
@@ -231,7 +239,14 @@ const persist = (n: NativeNode): 0 | 1 | 2 => {
     handled ||= claims(p)
     pan ||= p.events?.handlers.pan !== undefined
   }
-  return take ? 1 : fence ? 2 : 0
+  taken = take
+  fenced = !take && fence
+}
+
+const reset = () => {
+  target = undefined
+  taken = fenced = false
+  blur = 0
 }
 
 const cancel = () => {
@@ -259,12 +274,11 @@ export const route = (n: NativeNode, type: string, payload: any): void => {
   if (!type.startsWith("topTouch")) {
     if (type === "topMomentumScrollBegin") coasting.set(n, Infinity)
     else if (type === "topMomentumScrollEnd") coasting.set(n, Date.now())
-    else if (type === "topScrollBeginDrag" || type === "topScroll") {
-      if (!under(target, n)) return
-      if (blur === 1) blur = 0
-      if (type === "topScrollBeginDrag" && !taken) {
-        taken = recognize(4, n, payload) !== false
-      }
+    else if (type === "topScroll") {
+      if (blur === 1 && under(target, n)) own()
+    } else if (type === "topScrollBeginDrag" && under(target, n)) {
+      own()
+      if (!taken) taken = recognize(4, n, payload) !== false
     }
     return
   }
@@ -283,18 +297,12 @@ export const route = (n: NativeNode, type: string, payload: any): void => {
     for (let p: NativeNode | undefined = n; p !== undefined; p = p.parent) {
       if (now - coasting.get(p)! < 16) taken = true
     }
-    if (!taken) {
-      const kept = persist(n)
-      taken = kept === 1
-      fenced = kept === 2
-    }
+    if (!taken) persist(n)
   } else return
   if (!taken) recognize(phase, n, payload)
   if (phase > 1) {
     if (phase === 2 && blur !== 0) blurFocused()
-    target = undefined
-    taken = fenced = false
-    blur = 0
+    reset()
   }
 }
 
@@ -313,9 +321,7 @@ export const drop = (n: NativeNode) => {
     dropped = t
     queueMicrotask(cancel)
   }
-  target = undefined
-  taken = fenced = false
-  blur = 0
+  reset()
 }
 
 const recognize: Recognizer = (phase, n, payload) =>

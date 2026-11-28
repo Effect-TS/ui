@@ -19,14 +19,7 @@
 import type * as Renderer from "@effect/ui/Renderer"
 import type * as Context from "effect/Context"
 import { focus, trackKeyboard } from "./internal/focus.ts"
-import {
-  commits,
-  flushInputs,
-  kinds,
-  layouts,
-  precommits,
-  props
-} from "./internal/kinds.ts"
+import { commits, kinds, layouts, precommits, props } from "./internal/kinds.ts"
 import {
   container,
   isColor,
@@ -245,7 +238,6 @@ export const make = (options: Options): {
   let layout: object | undefined
   const commit = () => {
     for (const hook of precommits) hook(view)
-    flushInputs(view)
     if (root.dirty) {
       root.dirty = false
       root.kidsChanged = false
