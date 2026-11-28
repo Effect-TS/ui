@@ -20,13 +20,13 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Component from "@effect/ui/Component"
 import * as Mount from "@effect/ui/Mount"
-import * as Router from "@effect/ui/Router"
+import type * as Router from "@effect/ui/Router"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import type { NativeNode } from "../NativeHost.ts"
+import { hold } from "./internal/router.ts"
 import { Pan } from "./Pan.ts"
 import type { SwipeBack } from "./StackSlide.ts"
 
@@ -38,18 +38,7 @@ const Follow = Mount.makeStream(
   "StackSwipe",
   { args: { key: Schema.String } },
   (node: NativeNode, { key }) =>
-    node.host.os !== "ios" ? Stream.empty : Stream.callback<
-      never,
-      never,
-      Router.Router
-    >(() =>
-      Router.Router.use((router) =>
-        Effect.acquireRelease(
-          Effect.sync(() => routers.set(key, router)),
-          () => Effect.sync(() => routers.delete(key))
-        )
-      )
-    )
+    node.host.os === "ios" ? hold(routers, key) : Stream.empty
 )
 
 /**
@@ -84,6 +73,6 @@ export const swipeBack = (options?: {
           return undefined
         },
         onCancel: () => void move(0, true)
-      }).onMount(Follow({ key }).pipe(Mount.map(() => Component.noop)))
+      }).onMount(Follow({ key }))
   }
 }

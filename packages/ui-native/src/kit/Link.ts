@@ -28,15 +28,14 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Component from "@effect/ui/Component"
 import * as Mount from "@effect/ui/Mount"
-import * as Router from "@effect/ui/Router"
+import type * as Router from "@effect/ui/Router"
 import type * as View from "@effect/ui/View"
 import * as Effect from "effect/Effect"
-import * as Stream from "effect/Stream"
 import type * as Native from "../Native.ts"
 import type { NativeNode } from "../NativeHost.ts"
 import type { PressOptions } from "./internal/press.ts"
+import { hold } from "./internal/router.ts"
 import { Pressable, type PressableElement } from "./Pressable.ts"
 
 // The Router of each mounted link, which a touch on it reaches through the
@@ -46,15 +45,7 @@ const routers = new WeakMap<NativeNode, Router.Router>()
 const Follow = Mount.makeStream(
   "Link",
   {},
-  (node: NativeNode) =>
-    Stream.callback<never, never, Router.Router>(() =>
-      Router.Router.use((router) =>
-        Effect.acquireRelease(
-          Effect.sync(() => routers.set(node, router)),
-          () => Effect.sync(() => routers.delete(node))
-        )
-      )
-    )
+  (node: NativeNode) => hold(routers, node)
 )
 
 /**
@@ -96,5 +87,5 @@ export const Link = <
   )
   return element
     .prop("accessibilityRole", "link")
-    .onMount(Follow().pipe(Mount.map(() => Component.noop))) as any
+    .onMount(Follow()) as any
 }

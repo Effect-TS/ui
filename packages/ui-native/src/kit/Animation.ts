@@ -548,8 +548,9 @@ interface AnimatedModule {
 const drivers = new WeakMap<Native.ViewHost, Driver>()
 // The specs shown without a native driver.
 const plain = new WeakMap<NativeNode, Spec>()
-// The elements `named` names.
+// The elements `named` names, and the name of each.
 const names = new Map<string, NativeNode>()
+const nameOf = new WeakMap<NativeNode, string>()
 let animated: AnimatedModule | null | undefined
 let installed = false
 let batching = false
@@ -645,8 +646,11 @@ const setSpec = (n: NativeNode, value: unknown, host: Native.ViewHost) => {
 }
 
 const setName = (n: NativeNode, name: unknown) => {
-  for (const [key, at] of names) if (at === n) names.delete(key)
-  if (typeof name === "string") names.set(name, n)
+  const old = nameOf.get(n)
+  if (old !== undefined && names.get(old) === n) names.delete(old)
+  if (typeof name !== "string") return nameOf.delete(n)
+  names.set(name, n)
+  nameOf.set(n, name)
 }
 
 const setSource = (n: NativeNode, name: unknown, host: Native.ViewHost) => {
@@ -752,6 +756,7 @@ const native = (): AnimatedModule => {
 
 const flush = (host: Native.ViewHost) => {
   for (const [name, n] of names) {
+    if (n.host !== host) continue
     const top = rootOf(n).kind
     if (top !== surface && top !== container) names.delete(name)
   }

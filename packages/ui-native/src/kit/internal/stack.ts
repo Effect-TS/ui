@@ -8,24 +8,46 @@ import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import * as Native from "../../Native.ts"
 import type { NativeNode } from "../../NativeHost.ts"
+import type { StackEntry, StackTransition } from "../Stack.ts"
 import { ScreenState } from "./screen.ts"
-
-/**
- * Draws a stack entry's screen.
- *
- * @internal
- */
-export type Draw = (s: Native.H<never>, entry: Entry) => any
 
 /**
  * A stack entry, as the stack draws it.
  *
  * @internal
  */
-export interface Entry {
-  readonly id: number
-  readonly route: unknown
-}
+export type Entry = StackEntry<unknown>
+
+/**
+ * Draws a stack entry's screen.
+ *
+ * @internal
+ */
+export type Draw = Parameters<StackTransition["draw"]>[2]
+
+/** @internal */
+export const EntrySchema = Schema.Struct({
+  id: Schema.Number,
+  route: Schema.Unknown
+})
+
+/** @internal */
+export const DrawSchema = Schema.declare((u): u is Draw =>
+  typeof u === "function"
+)
+
+/**
+ * Fills the stack.
+ *
+ * @internal
+ */
+export const fill = {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0
+} as const
 
 const Track = Mount.makeStream(
   "Screen",
@@ -66,11 +88,11 @@ export const Screen = Component.provide(
   Native.component({
     name: "Screen",
     props: Schema.Struct({
-      entry: Schema.Struct({ id: Schema.Number, route: Schema.Unknown }),
+      entry: EntrySchema,
       index: Schema.Number,
       covered: Schema.Boolean,
       fade: Schema.Boolean,
-      draw: Schema.declare((u): u is Draw => typeof u === "function")
+      draw: DrawSchema
     }),
     model: Schema.Null,
     message: Schema.Never,
@@ -84,11 +106,7 @@ export const Screen = Component.provide(
       const { covered, draw, entry, fade, index } = s.props
       return s.view
         .style({
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
+          ...fill,
           opacity: fade && covered ? 0 : 1,
           pointerEvents: covered ? "none" : "auto"
         })
@@ -98,9 +116,7 @@ export const Screen = Component.provide(
           covered ? "no-hide-descendants" : "auto"
         )
         .prop("accessibilityElementsHidden", covered)
-        .onMount(
-          Track({ covered, index }).pipe(Mount.map(() => Component.noop))
-        )
+        .onMount(Track({ covered, index }))
         .children(draw(s as Native.H<never>, entry))
     }
   }),

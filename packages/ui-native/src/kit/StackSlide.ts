@@ -36,7 +36,13 @@ import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import * as Native from "../Native.ts"
 import * as Animation from "./Animation.ts"
-import { type Draw, type Entry, Screen } from "./internal/stack.ts"
+import {
+  DrawSchema,
+  type Entry,
+  EntrySchema,
+  fill,
+  Screen
+} from "./internal/stack.ts"
 import type { StackTransition } from "./Stack.ts"
 
 /**
@@ -82,37 +88,22 @@ export interface SwipeBack<R = never> {
   readonly "~requirements"?: ((_: never) => R) | undefined
 }
 
-const EntrySchema = Schema.Struct({ id: Schema.Number, route: Schema.Unknown })
-
 const Message = UiSchema.TaggedEnum({
   Measured: { width: Schema.Number },
   Drew: {},
   Ended: { id: Schema.Number },
-  Started: {},
-  Scoped: { scope: Schema.String }
+  Started: {}
 })
 
-let scopes = 0
-
-// Names the stack's screens apart from another mounted copy's, whose
-// `h.id`s are the same, then reports each draw.
 const Drawn = Mount.makeStream(
   "StackSlide",
   { args: { ids: Schema.String } },
-  (_node, _args, changes) =>
-    Stream.concat(
-      Stream.succeed(Message.Scoped({ scope: String(scopes += 1) })),
-      Stream.map(changes, () => Message.Drew())
-    )
+  (_node, _args, changes) => Stream.map(changes, () => Message.Drew())
 )
 
-const fill = {
-  position: "absolute",
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0
-} as const
+// Names a stack's screens apart from another mounted copy's, whose `h.id`s
+// are the same.
+let scopes = 0
 
 // How far the screen under the top one sits to the left, by the width.
 const under = -0.3
@@ -128,7 +119,7 @@ const Slide = Native.component({
   name: "StackSlide",
   props: Schema.Struct({
     entries: Schema.Array(EntrySchema),
-    draw: Schema.declare((u): u is Draw => typeof u === "function"),
+    draw: DrawSchema,
     transition: Schema.Any,
     swipe: Schema.Any
   }),
@@ -138,8 +129,8 @@ const Slide = Native.component({
     shown: Schema.Array(EntrySchema),
     // The top screen has arrived.
     settled: Schema.Boolean,
-    // Unique to this mounted stack, once it is mounted.
-    scope: Schema.String
+    // Unique to this mounted stack.
+    scope: Schema.Number
   }),
   message: Message,
   restore: false
@@ -148,7 +139,7 @@ const Slide = Native.component({
     width: 0,
     shown: $.props.entries,
     settled: true,
-    scope: ""
+    scope: scopes += 1
   }),
   update: {
     Measured: ($, { width }) => $.evolve({ width: () => width }),
@@ -174,8 +165,7 @@ const Slide = Native.component({
         ? $.evolve({ settled: () => true })
         : $.model
     },
-    Started: ($) => $.evolve({ settled: () => false }),
-    Scoped: ($, { scope }) => $.evolve({ scope: () => scope })
+    Started: ($) => $.evolve({ settled: () => false })
   },
   view: (h, model) => {
     const { draw, entries } = h.props
@@ -186,8 +176,8 @@ const Slide = Native.component({
     const leaving = width === 0 ? [] : leavingOf(entries, model.shown)
     const fresh = !model.shown.some((e) => e.id === entries[top]?.id)
     const moving = !model.settled || fresh || leaving.length > 0
-    const { scope } = model
-    const name = (entry: Entry | undefined) => h.id(scope, entry?.id ?? "none")
+    const name = (entry: Entry | undefined) =>
+      h.id(String(model.scope), entry?.id ?? "none")
     const screen = (entry: Entry, index: number, gone: boolean) => {
       const x = gone ? width : index === top ? 0 : under * width
       const shown = gone || index === top || (index === top - 1 && moving)
@@ -213,10 +203,7 @@ const Slide = Native.component({
             }
           })
         )
-      if (
-        swipe === undefined || gone || index !== top || top === 0 ||
-        scope === ""
-      ) {
+      if (swipe === undefined || gone || index !== top || top === 0) {
         return element
       }
       const below = name(entries[top - 1])

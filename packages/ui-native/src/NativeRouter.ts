@@ -74,20 +74,8 @@ import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { handle } from "./kit/internal/back.ts"
 import * as Linking from "./kit/Linking.ts"
+import type { StackEntry } from "./kit/Stack.ts"
 import * as Native from "./Native.ts"
-
-/**
- * A history entry the root holds: its route, and an `id` that stays the
- * same while the entry is in the stack. Key its screen by the `id`.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export interface Entry<A> {
-  readonly id: number
-  readonly route: A
-}
 
 /**
  * The entries up to the current one, the current one last.
@@ -96,7 +84,7 @@ export interface Entry<A> {
  * @category models
  * @since 0.1.0
  */
-export type Stack<A> = ReadonlyArray<Entry<A>>
+export type Stack<A> = ReadonlyArray<StackEntry<A>>
 
 /**
  * The Schema of a `Stack` of the routes, for a root's props and Model.
