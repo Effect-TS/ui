@@ -441,69 +441,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       }))
     }))
 
-  it.live("stops recording a tag from the overlay, so a tick burst keeps the click, and remembers it for the tab", () =>
-    Effect.gen(function*() {
-      const ClockMessage = UiSchema.TaggedEnum({ Ticked: {}, Clicked: {} })
-      const Clock = Html.component({
-        name: "Clock",
-        model: Schema.Struct({ ticks: Schema.Number, clicks: Schema.Number }),
-        message: ClockMessage
-      }).make({
-        init: () => ({ ticks: 0, clicks: 0 }),
-        update: {
-          Ticked: ($) => $.evolve({ ticks: $.model.ticks + 1 }),
-          Clicked: ($) => $.evolve({ clicks: $.model.clicks + 1 })
-        },
-        view: (h) =>
-          h.div(
-            h.button.on("click", ClockMessage.Ticked()).children("Tick"),
-            h.button.on("click", ClockMessage.Clicked()).children("Click")
-          )
-      })
-      const updates = (root: HTMLElement, tag: string) =>
-        HtmlLocator.queryAllByRole(root, "button", {
-          name: new RegExp("Update " + tag + "$")
-        }).filter((node) => node.classList.contains("row-button"))
-      const session = Effect.fnUntraced(function*() {
-        localStorage.clear()
-        const app = document.body.appendChild(document.createElement("div"))
-        yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
-        yield* Layer.build(DevTools.layer({ size: 3 })).pipe(
-          Effect.flatMap((services) =>
-            BrowserHost.mountEffect(Clock, {}, app).pipe(
-              Effect.provide(services)
-            )
-          )
-        )
-        yield* settle
-        const root = overlay()
-        yield* open(root)
-        const tick = HtmlLocator.getByRole(app, "button", { name: "Tick" })
-        const ticks = Effect.fnUntraced(function*(count: number) {
-          for (let n = 0; n < count; n++) yield* click(tick)
-        })
-        return { app, root, ticks }
-      })
-
-      yield* Effect.scoped(Effect.gen(function*() {
-        const { app, root, ticks } = yield* session()
-        yield* ticks(1)
-        yield* click(updates(root, "Ticked")[0]!)
-        yield* stopRecording(root, "Ticked in Clock")
-        yield* click(HtmlLocator.getByRole(app, "button", { name: "Click" }))
-        yield* ticks(5)
-        assert.lengthOf(updates(root, "Clicked"), 1)
-      }))
-
-      // A reload in the same tab keeps the runtime choice.
-      yield* Effect.scoped(Effect.gen(function*() {
-        const { root, ticks } = yield* session()
-        yield* ticks(1)
-        assert.lengthOf(updates(root, "Ticked"), 0)
-      }))
-    }))
-
-  it.live("stops recording a tag in one component or a whole subtree, hiding and restoring the rows already held", () =>
+  it.live("stops recording by component tag or subtree, hiding and restoring held rows, and remembers rules for the tab", () =>
     Effect.gen(function*() {
       const Tile = Html.component({
         name: "Tile",
@@ -562,88 +500,104 @@ describe("DevTools overlay", { concurrent: false }, () => {
             Counter(h, { key: "c", props: {} })
           )
       })
-      localStorage.clear()
-      sessionStorage.clear()
-      const app = document.body.appendChild(document.createElement("div"))
-      yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
-      yield* Layer.build(DevTools.layer({ size: 6 })).pipe(
-        Effect.flatMap((services) =>
-          BrowserHost.mountEffect(App, {}, app).pipe(Effect.provide(services))
+      const session = Effect.fnUntraced(function*() {
+        localStorage.clear()
+        const app = document.body.appendChild(document.createElement("div"))
+        yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+        yield* Layer.build(DevTools.layer({ size: 6 })).pipe(
+          Effect.flatMap((services) =>
+            BrowserHost.mountEffect(App, {}, app).pipe(Effect.provide(services))
+          )
         )
-      )
-      yield* settle
-      const root = overlay()
-      yield* open(root)
-      const press = (name: string, times = 1) =>
-        Effect.forEach(
-          Array.from({ length: times }),
-          () => click(HtmlLocator.getByRole(app, "button", { name })),
-          { discard: true }
+        yield* settle
+        const root = overlay()
+        yield* open(root)
+        const press = (name: string, times = 1) =>
+          Effect.forEach(
+            Array.from({ length: times }),
+            () => click(HtmlLocator.getByRole(app, "button", { name })),
+            { discard: true }
+          )
+        const rows = (pattern: RegExp) =>
+          Array.from(root.querySelectorAll(".row")).filter((row) =>
+            pattern.test(text(row))
+          )
+        const select = (pattern: RegExp) =>
+          click(rows(pattern)[0]!.querySelector(".row-button")!)
+        return { app, root, press, rows, select }
+      })
+
+      yield* Effect.scoped(Effect.gen(function*() {
+        const { app, press, root, rows, select } = yield* session()
+        yield* press("Tick wall")
+        yield* press("Tick counter")
+        yield* select(/TickedWall/)
+        yield* stopRecording(root, "Ticked in Wall")
+        assert.lengthOf(rows(/TickedWall/), 0)
+        assert.lengthOf(rows(/TickedCounter/), 1)
+
+        // Each stopped tick re-renders both tiles, and neither the tick nor
+        // the PropsChanged it causes takes a slot from the click.
+        yield* press("Click")
+        yield* press("Tick wall", 3)
+        assert.lengthOf(rows(/ClickedCounter/), 1)
+        assert.lengthOf(rows(/TickedCounter/), 1)
+        // The props rows the stopped tick caused stay hidden after it's evicted.
+        yield* press("Click", 2)
+        yield* click(
+          HtmlLocator.getByRole(root, "button", { name: "Everything" })
         )
-      const rows = (pattern: RegExp) =>
-        Array.from(root.querySelectorAll(".row")).filter((row) =>
-          pattern.test(text(row))
+        assert.lengthOf(rows(/Tile/), 0)
+        yield* click(
+          HtmlLocator.getByRole(root, "button", {
+            name: "Start recording Ticked in Wall"
+          })
         )
-      const select = (pattern: RegExp) =>
-        click(rows(pattern)[0]!.querySelector(".row-button")!)
+        assert.lengthOf(rows(/Tile/), 2)
 
-      yield* press("Tick wall")
-      yield* press("Tick counter")
-      yield* select(/TickedWall/)
-      yield* stopRecording(root, "Ticked in Wall")
-      assert.lengthOf(rows(/TickedWall/), 0)
-      assert.lengthOf(rows(/TickedCounter/), 1)
+        yield* select(/Tile/)
+        yield* stopRecording(root, "Wall[w] and below")
+        assert.lengthOf(rows(/Wall|Tile/), 0)
+        yield* press("Tick wall", 2)
+        yield* press("Click")
+        assert.lengthOf(rows(/ClickedCounter/), 4)
+        assert.lengthOf(rows(/Wall|Tile/), 0)
 
-      // Each stopped tick re-renders both tiles, and neither the tick nor
-      // the PropsChanged it causes takes a slot from the click.
-      yield* press("Click")
-      yield* press("Tick wall", 3)
-      assert.lengthOf(rows(/ClickedCounter/), 1)
-      assert.lengthOf(rows(/TickedCounter/), 1)
-      // The props rows the stopped tick caused stay hidden after it's evicted.
-      yield* press("Click", 2)
-      yield* click(
-        HtmlLocator.getByRole(root, "button", { name: "Everything" })
-      )
-      assert.lengthOf(rows(/Tile/), 0)
-      yield* click(
-        HtmlLocator.getByRole(root, "button", {
-          name: "Start recording Ticked in Wall"
-        })
-      )
-      assert.lengthOf(rows(/Tile/), 2)
+        // Time travel paints the wall as it was at an entry from before the stop.
+        yield* select(/TickedCounter/)
+        yield* click(
+          HtmlLocator.getByRole(root, "button", { name: "Time travel" })
+        )
+        assert.deepStrictEqual(
+          Array.from(
+            app.nextElementSibling!.querySelectorAll("[data-tile]"),
+            (tile) => tile.textContent
+          ),
+          ["true", "false"]
+        )
+        assert.deepStrictEqual(
+          Array.from(
+            app.querySelectorAll("[data-tile]"),
+            (tile) => tile.textContent
+          ),
+          ["false", "true"]
+        )
+        yield* click(
+          HtmlLocator.getByRole(root, "button", {
+            name: "Resume the live page"
+          })
+        )
+      }))
 
-      yield* select(/Tile/)
-      yield* stopRecording(root, "Wall[w] and below")
-      assert.lengthOf(rows(/Wall|Tile/), 0)
-      yield* press("Tick wall", 2)
-      yield* press("Click")
-      assert.lengthOf(rows(/ClickedCounter/), 4)
-      assert.lengthOf(rows(/Wall|Tile/), 0)
-
-      // Time travel paints the wall as it was at an entry from before the stop.
-      yield* select(/TickedCounter/)
-      yield* click(
-        HtmlLocator.getByRole(root, "button", { name: "Time travel" })
-      )
-      assert.deepStrictEqual(
-        Array.from(
-          app.nextElementSibling!.querySelectorAll("[data-tile]"),
-          (tile) => tile.textContent
-        ),
-        ["true", "false"]
-      )
-      assert.deepStrictEqual(
-        Array.from(
-          app.querySelectorAll("[data-tile]"),
-          (tile) => tile.textContent
-        ),
-        ["false", "true"]
-      )
-      yield* click(
-        HtmlLocator.getByRole(root, "button", { name: "Resume the live page" })
-      )
-    }).pipe(Effect.scoped))
+      // A reload in the same tab keeps the runtime choice.
+      yield* Effect.scoped(Effect.gen(function*() {
+        const { press, rows } = yield* session()
+        yield* press("Tick wall")
+        yield* press("Tick counter")
+        assert.lengthOf(rows(/Wall|Tile/), 0)
+        assert.lengthOf(rows(/TickedCounter/), 1)
+      }))
+    }))
 
   it.live("paints a stopped child at the shown update that mounted it, after it updated or a stopped update unmounted it", () =>
     Effect.gen(function*() {
@@ -676,8 +630,6 @@ describe("DevTools overlay", { concurrent: false }, () => {
             added ? Item(h, { key: "i", props: {} }) : null
           )
       })
-      localStorage.clear()
-      sessionStorage.clear()
       const app = document.body.appendChild(document.createElement("div"))
       yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
       yield* Layer.build(
