@@ -2,11 +2,24 @@ import * as MessageLog from "@effect/ui/MessageLog"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 
+export const Rule = Schema.Struct({
+  tag: Schema.optionalKey(Schema.String),
+  component: Schema.optionalKey(Schema.String),
+  path: Schema.optionalKey(Schema.String)
+})
+
+export type Rule = typeof Rule.Type
+
+// Saved runtime choices, oldest first.
+export const isChoices = Schema.is(
+  Schema.Array(Schema.Tuple([Rule, Schema.Boolean]))
+)
+
 export const Request = Schema.Union([
   Schema.TaggedStruct("Show", { session: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Resume", {}),
   Schema.TaggedStruct("SetRecording", {
-    tag: Schema.String,
+    rule: Rule,
     recording: Schema.Boolean
   }),
   Schema.TaggedStruct("MessageSchema", {
@@ -60,7 +73,7 @@ export const ToServer = Schema.Union([
   Schema.TaggedStruct("State", {
     sessions: Schema.Array(Schema.String),
     paused: Schema.NullOr(Paused),
-    notRecording: Schema.Array(Schema.String),
+    notRecording: Schema.Array(Rule),
     // The last pick of each session.
     picks: Schema.Array(Picked)
   }),

@@ -375,7 +375,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
 
         assert.notInclude(yield* labels, "UpdatedDraft")
         const [session] = yield* agent.call("list_sessions")
-        assert.deepStrictEqual(session.notRecording, ["UpdatedDraft"])
+        assert.deepStrictEqual(session.notRecording, [{ tag: "UpdatedDraft" }])
 
         assert.deepStrictEqual(
           yield* agent.call("set_recording", {
@@ -526,6 +526,136 @@ describe("DevToolsServer", { concurrent: false }, () => {
         const state = yield* agent.call("get_state", { instance: 1 })
         assert.deepStrictEqual(state.props, { id: "c" })
         assert.strictEqual(state.queries.note[2], "Note c")
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
+    "keeps a stopped instance's query results and unmount, for its state and a late viewer",
+    () =>
+      Effect.gen(function*() {
+        const { agent, url } = yield* serve()
+        const socket = yield* connectSocket(url.replace("http", "ws") + "/log")
+        yield* Effect.addFinalizer(() => Effect.sync(() => socket.close()))
+        const stopped = { ...at, excluded: true }
+        const update = (seq: number, queries?: object) => ({
+          _tag: "Update",
+          ...stopped,
+          seq,
+          source: { _tag: "Dispatch" },
+          message: { _tag: "Ticked" },
+          props: {},
+          model: seq,
+          ...(queries === undefined ? undefined : { queries }),
+          commands: [],
+          events: [],
+          lists: [],
+          sends: []
+        })
+        for (
+          const frame of [
+            { _tag: "Hello", version: 1, host: "test" },
+            { _tag: "SessionStarted", ...at, seq: 0, app: "App" },
+            {
+              _tag: "Mounted",
+              ...at,
+              seq: 1,
+              props: {},
+              model: 1,
+              queries: { a: 1, b: 2 },
+              commands: [],
+              events: [],
+              adopted: false
+            },
+            update(2),
+            { _tag: "QueryChanged", ...stopped, seq: 3, name: "a", result: 3 },
+            update(4),
+            // A shown entry, so the next stopped update doesn't replace #4.
+            { _tag: "PropsChanged", ...at, seq: 5, props: {} },
+            update(6, { a: 3, b: 4 }),
+            update(7),
+            { _tag: "Unmounted", ...stopped, seq: 8 },
+            // Shown FetchStarted closes the interval so Child's stopped unmount replays.
+            {
+              _tag: "Mounted",
+              ...stopped,
+              path: "/App/Child",
+              instance: 2,
+              seq: 9,
+              props: {},
+              model: 0,
+              commands: [],
+              events: [],
+              adopted: false
+            },
+            {
+              _tag: "FetchStarted",
+              session: "s",
+              at: 0,
+              seq: 10,
+              query: "q",
+              logKey: "q",
+              trigger: "get",
+              restart: false,
+              inWindow: true,
+              stored: false
+            },
+            {
+              _tag: "Unmounted",
+              ...stopped,
+              path: "/App/Child",
+              instance: 2,
+              seq: 11
+            },
+            // A run that started while shown ends for a late viewer too.
+            {
+              _tag: "CommandStarted",
+              ...at,
+              path: "/App/Other",
+              instance: 3,
+              seq: 12,
+              name: "Load",
+              issued: { seq: 12, index: 0 },
+              spanId: "a",
+              traceId: "b"
+            },
+            {
+              _tag: "CommandEnded",
+              ...stopped,
+              path: "/App/Other",
+              instance: 3,
+              seq: 13,
+              name: "Load",
+              issued: { seq: 12, index: 0 },
+              spanId: "a",
+              traceId: "b",
+              silent: false
+            }
+          ]
+        ) socket.send(JSON.stringify(frame))
+
+        const state = yield* agent.call<any>("get_state", { instance: 1 }).pipe(
+          Effect.filterOrFail((state) => state.at === 13),
+          Effect.retry(Schedule.spaced("10 millis")),
+          Effect.timeout("5 seconds")
+        )
+        assert.deepStrictEqual(state.queries, { a: 3, b: 4 })
+        const before = yield* agent.call("get_state", { instance: 1, at: 5 })
+        assert.deepStrictEqual(before.queries, { a: 3, b: 2 })
+
+        const watch = yield* connectSocket(url.replace("http", "ws") + "/watch")
+        yield* Effect.addFinalizer(() => Effect.sync(() => watch.close()))
+        const frames: Array<any> = []
+        watch.addEventListener("message", (event) => {
+          const frame = JSON.parse(String(event.data))
+          if (frame._tag !== "Held") frames.push(frame)
+        })
+        yield* until(() => frames.some((frame) => frame.seq === 13))
+        const viewer = Inspector.make()
+        viewer.ingest(frames)
+        assert.strictEqual(viewer.sessions()[0]!.summary(1)?.unmounted, 8)
+        assert.strictEqual(viewer.sessions()[0]!.summary(2)?.unmounted, 11)
+        assert.strictEqual(viewer.sessions()[0]!.summary(3)?.running, 0)
       }).pipe(Effect.scoped),
     30_000
   )

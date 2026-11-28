@@ -219,10 +219,15 @@ ${markRules}
 .right { overflow: auto; min-height: 0; min-width: 0; display: flex; flex-direction: column; container: detail / inline-size; }
 .ehead { padding: 16px 24px 4px; }
 .ehead-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.stop, .show { flex: none; margin-top: 1px; padding: 2px 10px; color: var(--muted); white-space: nowrap; }
-.stop { margin-left: auto; }
+.stop > summary, .show { flex: none; margin-top: 1px; padding: 2px 10px; color: var(--muted); white-space: nowrap; }
+.stop { position: relative; flex: none; margin-left: auto; }
+.stop > summary { list-style: none; cursor: pointer; }
+.stop > summary::-webkit-details-marker { display: none; }
+.stop-menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 2; display: grid; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); box-shadow: 0 6px 18px light-dark(rgb(0 0 0 / .12), rgb(0 0 0 / .45)); }
+.stop-menu button { padding: 4px 10px; border-radius: 6px; text-align: left; white-space: nowrap; }
+.stop-menu button:hover { background: var(--sel); }
 .show { border: 1px solid var(--line); border-radius: 6px; }
-.stop:hover, .show:hover { color: var(--ink); }
+.stop > summary:hover, .stop[open] > summary, .show:hover { color: var(--ink); }
 .show.on { background: var(--ink); border-color: var(--ink); color: var(--bg); }
 .show:disabled { opacity: .5; cursor: default; }
 .headline { font-size: 17px; line-height: 24px; font-weight: 600; overflow-wrap: anywhere; }

@@ -25,7 +25,7 @@ export interface Options {
 interface Page extends Tools.Page {
   readonly sessions: Set<string>
   paused: Control.Paused | null
-  notRecording: ReadonlyArray<string>
+  notRecording: ReadonlyArray<Control.Rule>
 }
 
 interface Meta {
