@@ -49,8 +49,7 @@ const Feed = Native.component({
 const setup = (os: string) =>
   FakeFabric.mount(
     (root) => Renderer.mount(Feed, {}, root),
-    (color) => `processed ${String(color)}`,
-    os
+    { color: (color) => `processed ${String(color)}`, os }
   )
 
 describe("RefreshControl", () => {

@@ -59,9 +59,10 @@
  * @since 0.1.0
  */
 import type * as View from "@effect/ui/View"
-import processColor from "react-native/Libraries/StyleSheet/processColor"
+import { props as setters } from "../internal/kinds.ts"
 import { touch } from "../internal/touch.ts"
 import type * as Native from "../Native.ts"
+import type { NativeNode } from "../NativeHost.ts"
 import { press, type PressOptions } from "./internal/press.ts"
 import { bind, ignore, insets } from "./internal/view.ts"
 
@@ -128,6 +129,24 @@ export interface PressableProps {
  */
 export type PressableElement<Msg> = Native.Element<Msg, any, any, any, any>
 
+// The ripple goes through kit-private props, whose setters process its
+// colour, so the native props given directly stay as written.
+const setRipple =
+  (name: string) => (n: NativeNode, ripple: any, host: Native.ViewHost) =>
+    host.set(
+      n,
+      name,
+      ripple && {
+        type: "RippleAndroid",
+        color: host.color(ripple.color),
+        borderless: ripple.borderless === true,
+        rippleRadius: ripple.radius,
+        alpha: ripple.alpha ?? null
+      }
+    )
+const background = /* @__PURE__ */ setRipple("nativeBackgroundAndroid")
+const foreground = /* @__PURE__ */ setRipple("nativeForegroundAndroid")
+
 /**
  * Makes an element pressable. Call it with the caller's `h`, then chain
  * styles and children.
@@ -180,6 +199,8 @@ export const Pressable = <
   } = {}
 ): B => {
   touch.press = press
+  setters.set("ripple:background", background)
+  setters.set("ripple:foreground", foreground)
   const element: any = options.element ?? h.view
   const props = options.props ?? {}
   return element.forward((node: any) => {
@@ -219,16 +240,8 @@ export const Pressable = <
     if (hitSlop !== undefined) out = out.prop("hitSlop", hitSlop)
     return rippled
       ? out.prop(
-        ripple.foreground === true
-          ? "nativeForegroundAndroid"
-          : "nativeBackgroundAndroid",
-        {
-          type: "RippleAndroid",
-          color: processColor(ripple.color),
-          borderless: ripple.borderless === true,
-          rippleRadius: ripple.radius,
-          alpha: ripple.alpha ?? null
-        }
+        ripple.foreground === true ? "ripple:foreground" : "ripple:background",
+        ripple
       )
       : out
   })

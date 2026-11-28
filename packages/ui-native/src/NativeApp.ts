@@ -146,8 +146,7 @@ export const mountEffect = <
     const made = NativeHost.make({
       ui: global.nativeFabricUIManager,
       rootTag: surface.rootTag,
-      os: Platform.OS,
-      processColor,
+      device,
       onCommit: options?.onCommit
     })
     const services = Context.make(Renderer.Renderer, { host: made.host }).pipe(

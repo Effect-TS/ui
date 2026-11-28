@@ -59,7 +59,6 @@
  */
 import * as View from "@effect/ui/View"
 import { dual } from "effect/Function"
-import { get } from "react-native/Libraries/TurboModule/TurboModuleRegistry"
 import { commits, props } from "../internal/kinds.ts"
 import { container, rootOf, surface } from "../internal/node.ts"
 import type * as Native from "../Native.ts"
@@ -437,6 +436,9 @@ interface Source {
 
 /** What the driver follows on one surface. */
 interface Driver {
+  readonly module: AnimatedModule
+  /** An operation batch is open on Android. */
+  batching: boolean
   readonly entries: Map<NativeNode, Entry>
   readonly sources: Map<string, Source>
 }
@@ -467,12 +469,11 @@ interface AnimatedModule {
   finishOperationBatch?(): void
 }
 
-const drivers = new WeakMap<Native.ViewHost, Driver>()
+// `null` for a host whose device has no native driver.
+const drivers = new WeakMap<Native.ViewHost, Driver | null>()
 // The specs shown without a native driver.
 const plain = new WeakMap<NativeNode, Spec>()
-let animated: AnimatedModule | null | undefined
 let installed = false
-let batching = false
 let fallback: Transition | undefined
 // React Native's `Animated` counts node tags and animation ids from 1.
 // Starting far above keeps the two apart in an app that loads both.
@@ -486,17 +487,22 @@ const install = () => {
   commits.add(flush)
 }
 
-const driverOf = (host: Native.ViewHost): Driver | undefined => {
-  // Bridgeless iOS registers the module under its TurboModule name.
-  if (animated === undefined) {
-    animated = (host.os === "ios"
-      ? get<AnimatedModule>("NativeAnimatedTurboModule")
-      : null) ?? get<AnimatedModule>("NativeAnimatedModule") ?? null
-  }
-  if (animated === null) return undefined
+const driverOf = (host: Native.ViewHost): Driver | null => {
   let d = drivers.get(host)
   if (d === undefined) {
-    drivers.set(host, d = { entries: new Map(), sources: new Map() })
+    // Bridgeless iOS registers the module under its TurboModule name.
+    const module: AnimatedModule | undefined = (host.os === "ios"
+      ? host.device.module("NativeAnimatedTurboModule")
+      : null) ?? host.device.module("NativeAnimatedModule")
+    drivers.set(
+      host,
+      d = module == null ? null : {
+        module,
+        batching: false,
+        entries: new Map(),
+        sources: new Map()
+      }
+    )
   }
   return d
 }
@@ -504,7 +510,7 @@ const driverOf = (host: Native.ViewHost): Driver | undefined => {
 const setSpec = (n: NativeNode, value: unknown, host: Native.ViewHost) => {
   const spec = value as Spec | undefined
   const d = driverOf(host)
-  if (d === undefined) {
+  if (d === null) {
     // Without a native driver, the view shows its targets.
     for (const key in plain.get(n)) {
       if (spec?.[key] === undefined) host.set(n, key, undefined)
@@ -551,7 +557,7 @@ const setSpec = (n: NativeNode, value: unknown, host: Native.ViewHost) => {
 
 const setSource = (n: NativeNode, name: unknown, host: Native.ViewHost) => {
   const d = driverOf(host)
-  if (d === undefined) return
+  if (d === null) return
   for (const s of d.sources.values()) if (s.node === n) s.node = undefined
   if (typeof name === "string") sourceOf(d, name).node = n
 }
@@ -642,23 +648,23 @@ const shapeOf = (spec: Spec): string => {
 }
 
 // Android runs the operations of a batch together, in one frame.
-const native = (): AnimatedModule => {
-  if (!batching) {
-    batching = true
-    animated!.startOperationBatch?.()
+const native = (d: Driver): AnimatedModule => {
+  if (!d.batching) {
+    d.batching = true
+    d.module.startOperationBatch?.()
   }
-  return animated!
+  return d.module
 }
 
 const flush = (host: Native.ViewHost) => {
   const d = drivers.get(host)
-  if (d === undefined) return
+  if (d == null) return
   for (const [n, e] of d.entries) {
     const top = rootOf(n).kind
     // A node outside a surface or a kept child's container has been dropped.
     if (e.spec === undefined || (top !== surface && top !== container)) {
-      release(e)
-      for (const t of e.targets.values()) drop(t)
+      release(d, e)
+      for (const t of e.targets.values()) drop(d, t)
       d.entries.delete(n)
       continue
     }
@@ -671,7 +677,7 @@ const flush = (host: Native.ViewHost) => {
     for (const c of e.graph!.props) {
       const view = top === surface ? (c.outer ? n.outer! : n).tag : 0
       if (view === c.view) continue
-      const m = native()
+      const m = native(d)
       if (c.view !== 0) m.disconnectAnimatedNodeFromView(c.tag, c.view)
       if (view !== 0) m.connectAnimatedNodeToView(c.tag, view)
       c.view = view
@@ -682,21 +688,21 @@ const flush = (host: Native.ViewHost) => {
     if (top !== undefined && top !== surface && top !== container) {
       s.node = undefined
     }
-    bind(s, top === surface && s.users > 0 ? s.node!.tag : 0, host.os)
+    bind(d, s, top === surface && s.users > 0 ? s.node!.tag : 0, host.os)
     if (s.users === 0) {
-      if (s.x !== undefined) native().dropAnimatedNode(s.x)
-      if (s.y !== undefined) native().dropAnimatedNode(s.y)
+      if (s.x !== undefined) native(d).dropAnimatedNode(s.x)
+      if (s.y !== undefined) native(d).dropAnimatedNode(s.y)
       s.x = s.y = undefined
       if (s.node === undefined) d.sources.delete(name)
     }
   }
-  if (!batching) return
-  batching = false
+  if (!d.batching) return
+  d.batching = false
   // iOS runs graph operations at the next mount, which a commit that only
   // changes the graph doesn't make. Stopping an animation that doesn't
   // exist runs them now.
-  if (host.os === "ios") animated!.stopAnimation(0)
-  animated!.finishOperationBatch?.()
+  if (host.os === "ios") d.module.stopAnimation(0)
+  d.module.finishOperationBatch?.()
 }
 
 const mapping = (axis: "x" | "y", tag: number) => ({
@@ -704,9 +710,9 @@ const mapping = (axis: "x" | "y", tag: number) => ({
   animatedValueTag: tag
 })
 
-const bind = (s: Source, view: number, os: string) => {
+const bind = (d: Driver, s: Source, view: number, os: string) => {
   if (view === s.bound) return
-  const m = native()
+  const m = native(d)
   for (const axis of ["x", "y"] as const) {
     const tag = s[axis]
     if (tag === undefined) continue
@@ -743,7 +749,13 @@ const update = (
     const target = e.targets.get(path)
     if (target === undefined || target.to === value) return
     changed = true
-    go(e, target, value as number, layer.transition ?? (fallback ??= timing()))
+    go(
+      d,
+      e,
+      target,
+      value as number,
+      layer.transition ?? (fallback ??= timing())
+    )
   })
   // An immediate change ends at once. Report it after the commit.
   if (changed && idle(e)) {
@@ -761,8 +773,8 @@ const rebuild = (
   spec: Spec,
   outer: RegExp | undefined
 ) => {
-  const m = native()
-  release(e)
+  const m = native(d)
+  release(d, e)
   const kept = new Set<string>()
   const nodes: Array<number> = []
   const edges: Array<number> = []
@@ -868,13 +880,19 @@ const rebuild = (
   e.graph = { props, nodes, edges, sources }
   for (const [path, t] of e.targets) {
     if (kept.has(path)) continue
-    drop(t)
+    drop(d, t)
     e.targets.delete(path)
   }
 }
 
-const go = (e: Entry, t: Target, to: number, transition: Transition) => {
-  const m = native()
+const go = (
+  d: Driver,
+  e: Entry,
+  t: Target,
+  to: number,
+  transition: Transition
+) => {
+  const m = native(d)
   if (t.anim !== 0) m.stopAnimation(t.anim)
   t.to = to
   t.anim = 0
@@ -907,10 +925,10 @@ const settle = (e: Entry) => {
 }
 
 // Disconnects the graph and drops its nodes, but not the targets.
-const release = (e: Entry) => {
+const release = (d: Driver, e: Entry) => {
   const g = e.graph
   if (g === undefined) return
-  const m = native()
+  const m = native(d)
   e.graph = undefined
   for (const c of g.props) {
     if (c.view !== 0) m.disconnectAnimatedNodeFromView(c.tag, c.view)
@@ -922,8 +940,8 @@ const release = (e: Entry) => {
   for (const s of g.sources) s.users--
 }
 
-const drop = (t: Target) => {
-  const m = native()
+const drop = (d: Driver, t: Target) => {
+  const m = native(d)
   if (t.anim !== 0) m.stopAnimation(t.anim)
   t.anim = 0
   m.dropAnimatedNode(t.tag)

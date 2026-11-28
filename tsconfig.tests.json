@@ -8,7 +8,9 @@
     "./packages/*/typetest/**/*.ts",
     "./packages/*/benchmark/**/*.ts",
     // The `virtual:@effect/ui/document` types, which the Vite fixture's server entry uses.
-    "./packages/ui/src/html/HtmlServerViteDocument.d.ts"
+    "./packages/ui/src/html/HtmlServerViteDocument.d.ts",
+    // The React Native modules ui-native's tests import, such as its asset registry.
+    "./packages/ui-native/src/internal/reactNative.d.ts"
   ],
   "exclude": [
     "**/node_modules/**",
