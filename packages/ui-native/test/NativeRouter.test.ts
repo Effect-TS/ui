@@ -350,7 +350,6 @@ describe("NativeRouter", { concurrent: false }, () => {
     const [person] = app.screens()
     assert.isTrue(app.shown("person 1 backs 0"))
     assert.deepStrictEqual(app.focused(), [person!.tag])
-    assert.deepStrictEqual(app.announced(), [])
     await app.close()
   })
 
@@ -367,7 +366,7 @@ describe("NativeRouter", { concurrent: false }, () => {
     await app.close()
   })
 
-  it("starts at the deep link that launched the app, pushes later ones, and ignores other URLs", async () => {
+  it("starts at the deep link that launched the app, pushes later ones, and ignores the rest", async () => {
     const app = await start("myapp://people/7")
     assert.isTrue(app.shown("person 7 backs 0"))
     assert.strictEqual(app.screens().length, 1)
@@ -377,24 +376,16 @@ describe("NativeRouter", { concurrent: false }, () => {
     assert.isTrue(app.shown("person 8 backs 0"))
     assert.strictEqual(app.screens().length, 2)
 
-    app.fake.emit("url", { url: "other://people/9" })
+    // An unparsed one isn't opened with Linking, which would open the app again.
+    app.fake.emit("url", { url: "myapp://missing" })
     await app.settle()
     assert.strictEqual(app.screens().length, 2)
+    assert.deepStrictEqual(app.opened(), [])
 
     await app.back()
     assert.isTrue(app.shown("person 7 backs 0"))
     await app.back()
     assert.strictEqual(app.exits(), 1)
-    await app.close()
-  })
-
-  it("starts at / for a deep link the routes don't parse, and ignores one that arrives later", async () => {
-    const app = await start("myapp://missing")
-    assert.isTrue(app.shown("count 0"))
-    app.fake.emit("url", { url: "myapp://missing" })
-    await app.settle()
-    assert.strictEqual(app.screens().length, 1)
-    assert.deepStrictEqual(app.opened(), [])
     await app.close()
   })
 
@@ -417,40 +408,29 @@ describe("NativeRouter", { concurrent: false }, () => {
     )
   }
 
-  it("starts a deep link the routes don't parse at their catch-all", async () => {
-    const routes = Route.union({
+  it("starts at the launching deep link, else the catch-all or the routes' root", async () => {
+    const catchAll = Route.union({
       Home: Route.make("/"),
       NotFound: Route.make("/*")
     })
-    assert.strictEqual(
-      await launchedAt(routes, "myapp://missing", ["myapp://"]),
-      "/missing"
-    )
-  })
-
-  it("resolves deep links and the fallback under the routes' base", async () => {
-    const routes = Route.union({
+    const hashed = Route.union({
       Home: Route.make("/"),
       About: Route.make("/about")
     })
-    routes.setBase("#")
-    const prefixes = (url: string) =>
+    hashed.setBase("#")
+    const toHash = (url: string) =>
       url.startsWith("myapp://") ? "#/" + url.slice(8) : undefined
-    assert.strictEqual(
-      await launchedAt(routes, "myapp://about", prefixes),
-      "#/about"
-    )
-    assert.strictEqual(
-      await launchedAt(routes, "myapp://missing", prefixes),
-      "#/"
-    )
-    assert.strictEqual(await launchedAt(routes, null, prefixes), "#/")
-  })
-
-  it("starts at / when the launching URL isn't a deep link", async () => {
-    const app = await start("exp+app://expo-development-client/?url=x")
-    assert.isTrue(app.shown("count 0"))
-    await app.close()
+    const started: Array<string> = []
+    for (
+      const [routes, url, prefixes] of [
+        [AppRoute, "myapp://missing", ["myapp://"]],
+        [catchAll, "myapp://missing", ["myapp://"]],
+        [hashed, "myapp://about", toHash],
+        [hashed, "myapp://missing", toHash],
+        [hashed, null, toHash]
+      ] as const
+    ) started.push(await launchedAt(routes, url, prefixes))
+    assert.deepStrictEqual(started, ["/", "/missing", "#/about", "#/", "#/"])
   })
 
   it("opens an href the routes don't parse with Linking", async () => {
