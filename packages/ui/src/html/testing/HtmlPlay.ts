@@ -158,9 +158,9 @@ export interface HtmlPlay<Model, Msg, Events, Props = never>
     value: string | Partial<Html.InputPayload>
   ): Effect.Effect<void, Play.StepError>
   /**
-   * Presses `key`: sends `keydown` with the modifier keys, `composing`,
-   * `repeat` and selection given, each `false` or `null` otherwise. `editable`
-   * defaults from the matched element unless given.
+   * Presses `key`: sends `keydown` with `code`, the modifier keys, `composing`,
+   * `repeat` and selection given, defaulting to `""`, `false` or `null`.
+   * `editable` defaults from the matched element unless given.
    */
   keydown(
     locator: Locator.Locator,

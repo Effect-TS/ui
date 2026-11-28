@@ -2321,6 +2321,54 @@ describe("BrowserHost", { concurrent: false }, () => {
           ])
         }).pipe(Effect.scoped))
 
+      it.effect("keydown and keyup forward KeyboardEvent.code on elements and the document", () =>
+        Effect.gen(function*() {
+          const app = yield* container
+          const KeyCodes = Html.component({
+            name: "KeyCodes",
+            model: Schema.Array(Schema.String),
+            message: Schema.String
+          }).make({
+            init: (): ReadonlyArray<string> => [],
+            update: ($, entry) => [...$.model, entry],
+            view: (h) =>
+              h.div
+                .on("keydown", ({ code, key }) => `el:down:${key}:${code}`)
+                .on("keyup", ({ code, key }) => `el:up:${key}:${code}`)
+                .children(h.button.attr("id", "kc-btn").children("Press")),
+            subscriptions: () => [
+              HtmlSubscription.onDocument(
+                "keydown",
+                ({ code, key }) => `doc:down:${key}:${code}`
+              ),
+              HtmlSubscription.onDocument(
+                "keyup",
+                ({ code, key }) => `doc:up:${key}:${code}`
+              )
+            ]
+          })
+          const root = yield* BrowserHost.mountEffect(KeyCodes, {}, app)
+          yield* tick
+          const button = app.querySelector("#kc-btn")!
+          for (const type of ["keydown", "keyup"]) {
+            button.dispatchEvent(
+              new KeyboardEvent(type, { key: "∑", code: "KeyW", bubbles: true })
+            )
+          }
+          HtmlLocator.keydown(button, "w")
+          yield* tick
+          expect(root.model()).toEqual([
+            "el:down:∑:KeyW",
+            "doc:down:∑:KeyW",
+            "el:up:∑:KeyW",
+            "doc:up:∑:KeyW",
+            "el:down:w:",
+            "doc:down:w:",
+            "el:up:w:",
+            "doc:up:w:"
+          ])
+        }).pipe(Effect.scoped))
+
       it.effect("document listeners receive the DOM event timeStamp", () =>
         Effect.gen(function*() {
           const app = yield* container

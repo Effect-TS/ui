@@ -235,6 +235,7 @@ export const payloadOf = (
       const e = event as KeyboardEvent
       return {
         key: e.key ?? "",
+        code: e.code ?? "",
         ...modifiers(event),
         composing: isComposingKey(e) || composingKeyups.has(event),
         repeat: e.repeat === true,

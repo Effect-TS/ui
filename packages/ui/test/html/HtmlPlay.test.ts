@@ -267,7 +267,8 @@ describe("HtmlPlay", () => {
         view: (h, entries) =>
           h.div.on(
             "keydown",
-            ({ editable, key, repeat }) => `${key}:${editable}:${repeat}`
+            ({ code, editable, key, repeat }) =>
+              `${key}:${code}:${editable}:${repeat}`
           ).children(
             h.div.prop("contentEditable", "true").children(
               h.span.attr("id", "play-ce-child").children("Edit")
@@ -277,11 +278,12 @@ describe("HtmlPlay", () => {
       })
       const p = yield* HtmlPlay.make(Keys, {})
       yield* p.keydown(Locator.attr("id", "play-ce-child"), "g")
-      yield* p.keydown(Locator.attr("id", "play-ce-child"), "g", {
+      yield* p.keydown(Locator.attr("id", "play-ce-child"), "∑", {
+        code: "KeyW",
         repeat: true,
         editable: false
       })
-      yield* p.expect(log).toHaveText("g:true:false,g:false:true")
+      yield* p.expect(log).toHaveText("g::true:false,∑:KeyW:false:true")
     }).pipe(play))
 
   it.effect("click sends pointerdown, mousedown, pointerup, mouseup, click in order, settles between press and release, and follows browser cancel rules", () =>

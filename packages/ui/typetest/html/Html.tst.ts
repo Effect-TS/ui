@@ -400,6 +400,7 @@ describe("Html", () => {
           "selectionchange",
           () => Msg.Mounted()
         )
+        expect<Html.KeyPayload["code"]>().type.toBe<string>()
         expect<Html.KeyPayload["repeat"]>().type.toBe<boolean>()
         expect<Html.KeyPayload["editable"]>().type.toBe<boolean>()
         const shortcutHandler = HtmlKeyboard.shortcuts([
