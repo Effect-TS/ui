@@ -39,6 +39,9 @@ export const make = () => {
     parents.set(child.tag, parentTag)
   }
   let committed: ReadonlyArray<ShadowNode> = []
+  // The LayoutAnimation configured for the next completeRoot, and each one's.
+  let layout: object | undefined
+  const layouts: Array<object | undefined> = []
   let handler:
     | ((handle: unknown, type: string, payload: unknown) => void)
     | undefined
@@ -109,6 +112,8 @@ export const make = () => {
       count("completeRoot")
       set.forEach(seal)
       committed = set
+      layouts.push(layout)
+      layout = undefined
     },
     registerEventHandler(h) {
       handler = h
@@ -121,6 +126,10 @@ export const make = () => {
     },
     setIsJSResponder(node: any, isResponder, block) {
       responders.push([node.tag, isResponder, block])
+    },
+    configureNextLayoutAnimation(config) {
+      count("configureNextLayoutAnimation")
+      layout = config
     }
   }
   return {
@@ -128,6 +137,8 @@ export const make = () => {
     calls,
     commands,
     responders,
+    /** The LayoutAnimation config of each completeRoot, `undefined` for none. */
+    layouts,
     /** Places the view with `tag` on screen, for hit tests and `measure`. */
     place: (n: ShadowNode, rect: readonly [number, number, number, number]) =>
       rects.set(n.tag, rect),
@@ -162,6 +173,17 @@ export const find = (
 
 export const byText = (s: string) => (n: ShadowNode) =>
   n.viewName === "RCTRawText" && n.props.text === s
+
+/** Presses `node`, or ends the touch with `end` at `at`. */
+export const touch = (
+  fabric: ReturnType<typeof make>,
+  node: ShadowNode,
+  end: "topTouchEnd" | "topTouchCancel" = "topTouchEnd",
+  at = { pageX: 10, pageY: 10 }
+) => {
+  fabric.emit(node, "topTouchStart", {})
+  fabric.emit(node, end, { changedTouches: [at] })
+}
 
 export const byName = (name: string) => (n: ShadowNode) => n.viewName === name
 

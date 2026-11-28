@@ -9,6 +9,13 @@ import type { NativeNode } from "../NativeHost.ts"
 export const surface: ViewKind = { viewName: "" }
 
 /**
+ * The kind of the node holding a kept child out of the tree.
+ *
+ * @internal
+ */
+export const container: ViewKind = { viewName: "" }
+
+/**
  * The root of the tree the node is in: a surface's root while mounted.
  *
  * @internal

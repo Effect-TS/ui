@@ -73,15 +73,7 @@ const setup = async () => {
   return { ...mounted, colors }
 }
 
-const touch = (
-  fabric: ReturnType<typeof FakeFabric.make>,
-  node: FakeFabric.ShadowNode,
-  end: "topTouchEnd" | "topTouchCancel" = "topTouchEnd",
-  at = { pageX: 10, pageY: 10 }
-) => {
-  fabric.emit(node, "topTouchStart", {})
-  fabric.emit(node, end, { changedTouches: [at] })
-}
+const touch = FakeFabric.touch
 
 describe("NativeHost", () => {
   it("presses the nearest view with a press handler, unless cancelled or outside it", async () => {

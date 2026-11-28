@@ -15,11 +15,13 @@
 // with `export * as`, in alphabetical order.
 
 export * from "./ActivityIndicator.ts"
+export * as Animation from "./Animation.ts"
 export * as Css from "./Css.ts"
 export * from "./Drawer.ts"
 export * from "./Image.ts"
 export * from "./ImageBackground.ts"
 export * from "./InputAccessory.ts"
+export * as LayoutAnimation from "./LayoutAnimation.ts"
 export * from "./Modal.ts"
 export * from "./Pan.ts"
 export * from "./Pressable.ts"

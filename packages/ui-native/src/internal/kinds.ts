@@ -185,6 +185,23 @@ const input: ViewKind = {
 }
 
 /**
+ * Setters for props any element takes, added by kit modules such as
+ * `Animation`, so the host carries none of their code.
+ *
+ * @internal
+ */
+export const props = new Map<
+  string,
+  (node: NativeNode, value: unknown, host: ViewHost) => void
+>()
+
+/** Called after every commit, by kit modules that follow nodes. @internal */
+export const commits = new Set<(host: ViewHost) => void>()
+
+/** `LayoutAnimation` configs by view transition type. @internal */
+export const layouts = new Map<string, object>()
+
+/**
  * Seeded with core vocabulary kinds here so `NativeHost` keeps them even when
  * `Native.tags` is tree-shaken.
  *

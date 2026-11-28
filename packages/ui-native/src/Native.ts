@@ -958,7 +958,8 @@ export interface ContentSizeChangePayload {
 /**
  * The events of a `view`. A press ends on the element, or at most 20 points
  * outside it. `layout` fires when layout changes the element's position or
- * size.
+ * size. `animationEnd` fires when every transition `Animation.style` started
+ * on the element has reached its target.
  *
  * `accessibilityTap` (iOS) fires when VoiceOver activates an `accessible`
  * element, and `accessibilityEscape` (iOS) on VoiceOver's escape gesture.
@@ -970,6 +971,7 @@ export interface ContentSizeChangePayload {
 export interface ViewEvents {
   readonly press: PressPayload
   readonly layout: LayoutPayload
+  readonly animationEnd: {}
   readonly accessibilityAction: AccessibilityActionPayload
   readonly accessibilityTap: {}
   readonly accessibilityEscape: {}
@@ -1150,6 +1152,12 @@ export interface ViewHost {
   readonly fire: (node: NativeNode, event: string, payload: unknown) => void
   /** Commits the surface's changes now, outside a render. */
   readonly commit: () => void
+  /**
+   * Gives the node a new native view, with a new tag, at the next commit.
+   * Its descendants get new views too, and native state such as a scroll
+   * offset is lost.
+   */
+  readonly recreate: (node: NativeNode) => void
 }
 
 /**
