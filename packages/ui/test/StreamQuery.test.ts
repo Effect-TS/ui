@@ -196,10 +196,12 @@ describe("Stream queries", () => {
     }).pipe(provide)
   })
 
-  it.effect("pushes update the base value under optimistic patches, a run's end and invalidate restart the stream", () => {
+  it.effect("pushes update the base value under optimistic patches, a run's end and invalidate restart the stream, each in its own trace", () => {
     const { GetNote, provide, streams } = makeNotes()
     return Effect.gen(function*() {
       const cache = Query.internals(yield* Query.Cache)
+      const parents: Array<string | undefined> = []
+      const off = cache.onFetch((event) => parents.push(event.parentSpanId))
       const fetcher = (yield* GetNote) as unknown as (
         args: unknown
       ) => Effect.Effect<any, any>
@@ -212,7 +214,12 @@ describe("Stream queries", () => {
         undefined,
         { patched: true }
       )
-      yield* Effect.addFinalizer(() => Effect.sync(handle.unregister))
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          handle.unregister()
+          off()
+        })
+      )
       yield* flush
       streams[0].emit("v1")
       yield* flush
@@ -255,13 +262,15 @@ describe("Stream queries", () => {
       yield* flush
       assert.strictEqual(seen.at(-1), "v4")
 
-      yield* GetNote.invalidate({ id: "1" })
+      // An invalidation under a span reopens the stream without it: a stream's span lasts as long as the stream.
+      yield* Effect.withSpan(GetNote.invalidate({ id: "1" }), "edit")
       yield* flush
       assert.isTrue(streams[1].closed)
       assert.strictEqual(seen.at(-1), "v4 waiting")
       streams[2].emit("v5")
       yield* flush
       assert.strictEqual(seen.at(-1), "v5")
+      assert.deepStrictEqual(parents, [undefined, undefined, undefined])
     }).pipe(provide)
   })
 

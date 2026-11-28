@@ -237,10 +237,7 @@ export abstract class Cursor {
   }
   fail(target: Steps.Target, error: unknown): this {
     const entry = engine.findRunning(this.state, target, this.name("fail"))
-    const reject = entry.command.reject as
-      | ((error: unknown) => unknown)
-      | undefined
-    if (reject === undefined) {
+    if (entry.command.reject === undefined) {
       throw new Error(
         `${this.name("fail")}: ${
           engine.describe(entry.command)
@@ -251,7 +248,10 @@ export abstract class Cursor {
       "fail",
       "acting",
       (state) =>
-        engine.exited(state, entry, { message: reject(error), awaiting: [] })
+        engine.exited(state, entry, {
+          message: engine.failWith(entry, error),
+          awaiting: []
+        })
     )
   }
   next(target: Steps.StreamTarget, result: unknown): this {
