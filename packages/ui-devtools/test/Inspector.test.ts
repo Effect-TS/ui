@@ -549,6 +549,44 @@ describe("Inspector", () => {
       late.sessions()[0].instances().map((instance) => instance.path),
       ["/A", "/B"]
     )
+
+    // Replaced stopped ticks must not retain completed command runs.
+    const ticking = Inspector.make({ size: 2 })
+    ticking.ingest([mounted(1, 1, "/A", "A", 0)])
+    for (let seq = 2; seq < 300; seq += 3) {
+      const issued = { seq, index: 0 }
+      const run = {
+        ...base(1, "/A", "A"),
+        at: seq,
+        excluded: true,
+        name: "Load",
+        issued,
+        spanId: "a",
+        traceId: "b"
+      }
+      ticking.ingest([
+        {
+          ...update(seq, 1, "/A", "A", "Ticked", seq) as Update,
+          excluded: true,
+          commands: [{ _tag: "Effect", name: "Load", group: null, args: null }]
+        } as Entry,
+        { ...run, _tag: "CommandStarted", seq: seq + 1 } as Entry,
+        { ...run, _tag: "CommandEnded", seq: seq + 2, silent: false } as Entry
+      ])
+    }
+    assert.lengthOf(ticking.sessions()[0].records(1), 1)
+    ticking.ingest([
+      {
+        ...base(1, "/A", "A"),
+        _tag: "Unmounted",
+        seq: 302,
+        at: 302,
+        excluded: true
+      } as Entry
+    ])
+    // Clear evicts the hidden end with its update, then reaches it again.
+    ticking.sessions()[0].clear()
+    assert.deepStrictEqual(ticking.sessions()[0].records(1), [])
   })
 
   it("summarizes instances as entries arrive and leave", () => {

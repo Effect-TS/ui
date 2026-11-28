@@ -1,7 +1,7 @@
 import * as MessageLog from "@effect/ui/MessageLog"
 import type * as Schema from "effect/Schema"
 import type * as Inspector from "../Inspector.ts"
-import { isRun, nameOf, reasonTone, tagOf } from "./read.ts"
+import { isRun, nameOf, reasonTone } from "./read.ts"
 
 type Entry = MessageLog.WireEntry
 type InstanceEntry = Exclude<
@@ -133,17 +133,15 @@ const push = <K, V>(map: Map<K, Array<V>>, key: K, value: V) => {
   else list.push(value)
 }
 
-export const matchTags =
-  (tags: ReadonlySet<string>) => (entry: MessageLog.Entry | Entry): boolean => {
-    if (entry._tag !== "Update") return false
-    const tag = tagOf(entry.message)
-    return tag !== undefined && tags.has(tag)
-  }
+type IsExcluded = (
+  entry: Entry,
+  resolve: (session: string, seq: number) => Entry | undefined
+) => boolean
 
 const makeSession = (
   id: string,
   size: number,
-  isExcluded: ((entry: Entry) => boolean) | undefined
+  isExcluded: IsExcluded | undefined
 ) => {
   const entries = new Map<number, Entry>()
   const hidden = new Set<number>()
@@ -160,6 +158,10 @@ const makeSession = (
   const active = new Set<InstanceState>()
   let app: string | undefined
   let last = -Infinity
+  // Instance numbers grow, so one above `settled` mounted since the last shown entry.
+  let newest = -1
+  let settled = -1
+  const resolve = (_: string, seq: number) => entries.get(seq)
 
   const link = (
     from: number,
@@ -288,6 +290,11 @@ const makeSession = (
     const run = runs.get(runKey(issued))
     if (run !== undefined && run.end === undefined) close(run, seq, reason)
   }
+
+  const endsHeld = (seq: number) =>
+    ended.get(seq)?.some((record) =>
+      entries.has(record.issued?.seq ?? -1) || entries.has(record.start ?? -1)
+    ) === true
 
   const linkSource = (inst: InstanceState, from: number, source: Source) => {
     switch (source._tag) {
@@ -489,7 +496,8 @@ const makeSession = (
   }
 
   const evict = (seq: number, entry: Entry, prune = true) => {
-    entries.delete(seq)
+    // An end evicted with its issuer may be visited again.
+    if (!entries.delete(seq)) return
     hidden.delete(seq)
     previous.delete(seq)
     for (const named of back.get(seq) ?? []) {
@@ -501,6 +509,14 @@ const makeSession = (
       else forward.set(named.seq, kept)
     }
     back.delete(seq)
+    // A hidden end kept for the run this entry issued or started goes with it.
+    for (const naming of forward.get(seq)?.slice() ?? []) {
+      const end = entries.get(naming.seq)
+      if (
+        end !== undefined && hidden.has(naming.seq) && ended.has(naming.seq) &&
+        !endsHeld(naming.seq)
+      ) evict(naming.seq, end)
+    }
     for (const record of ended.get(seq) ?? []) {
       const owner = instances.get(record.instance)!
       owner.records.splice(owner.records.indexOf(record), 1)
@@ -597,27 +613,45 @@ const makeSession = (
     ingest: (entry: Entry) => {
       if (entry.seq <= last) return
       last = entry.seq
+      let transient = false
+      if ("instance" in entry) newest = Math.max(newest, entry.instance)
       if (
-        entry._tag === "Update" &&
-        (entry.excluded === true || isExcluded?.(entry) === true)
+        "instance" in entry &&
+        (entry.excluded === true || isExcluded?.(entry, resolve) === true)
       ) {
-        const replaced = coalesced.get(entry.instance)
+        const instance = entry.instance
+        hidden.add(entry.seq)
+        const state = entry._tag === "Update" || entry._tag === "Mounted" ||
+          entry._tag === "Waiting"
+        const gone = entry._tag === "Unmounted"
+        const fleeting = gone && instance > settled
+        // Only the latest state counts, and an instance that came and went
+        // between shown entries leaves no trace.
+        const replaced = state || fleeting ? coalesced.get(instance) : undefined
         if (replaced !== undefined) {
-          const inst = instances.get(entry.instance)
+          const inst = instances.get(instance)
           if (inst?.state === replaced.seq) {
             inst.state = previous.get(replaced.seq)?.seq
           }
           evict(replaced.seq, replaced, false)
         }
-        hidden.add(entry.seq)
-        coalesced.set(entry.instance, entry)
-      } else coalesced.clear()
+        if (state) coalesced.set(instance, entry)
+        else if (fleeting) coalesced.delete(instance)
+        // Keep other unmounts, and run ends a held entry started, without a
+        // slot so a late viewer replays them. The rest only update records.
+        transient = fleeting || !(state || gone)
+      } else {
+        // Any shown entry, FetchStarted included, closes the coalescing interval.
+        settled = newest
+        coalesced.clear()
+      }
       entries.set(entry.seq, entry)
       if (entry.causedBy !== undefined) {
         link(entry.seq, "causedBy", entry.causedBy)
       }
       if (entry._tag === "SessionStarted") app = entry.app
       else if (entry._tag !== "FetchStarted") track(entry)
+      if (transient && !endsHeld(entry.seq)) return evict(entry.seq, entry)
       for (const [seq, oldest] of entries) {
         if (entries.size - hidden.size <= size) break
         evict(seq, oldest)
@@ -628,7 +662,7 @@ const makeSession = (
 
 export const make = (options: {
   readonly size?: number | undefined
-  readonly isExcluded?: ((entry: Entry) => boolean) | undefined
+  readonly isExcluded?: IsExcluded | undefined
 }): Inspector.Inspector & {
   /** Every entry held, excluded ones too, oldest first. */
   readonly frames: (session: string) => Iterable<Entry>

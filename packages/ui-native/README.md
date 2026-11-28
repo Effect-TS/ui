@@ -4,7 +4,7 @@ React Native vocabulary and Fabric host for `@effect/ui`. Apps render native vie
 
 ## Requirements
 
-- Peer dependencies: `effect`, `@effect/ui`, `react-native` (`>=0.88.0`), and `vite` (`^8`) for pre-bundled release builds
+- Peer dependencies: `effect`, `@effect/ui`, `react-native` (`>=0.88.0`), `vite` (`^8`) for pre-bundled release builds, and `flow-remove-types` and `sucrase` for tests
 - The New Architecture (Fabric) and Hermes
 
 ## Modules
@@ -16,7 +16,7 @@ React Native vocabulary and Fabric host for `@effect/ui`. Apps render native vie
 - `NativeApp`: `mount`, `mountEffect`, and `register`, which runs an app on every surface native starts; the `Surface` service, whose `props` follow the surface's props as native updates them
 - `NativeRouter`: `layer`, which provides `@effect/ui`'s `Router` on a history in memory, with Android Back and deep links; `Stack`, `Navigation`, `props`, `subscription` and `follow` for a root that holds the screens
 - `@effect/ui-native/networking`: opt-in side-effect entry that installs React Native's networking globals (`fetch`, `XMLHttpRequest`, `WebSocket`, `URL`, `AbortController`)
-- `@effect/ui-native/node`: `NativeMetro.withEffectUi`, the Metro configuration
+- `@effect/ui-native/node`: `NativeMetro.withEffectUi`, the Metro configuration, and `NativeVitest.plugin`, the Vitest configuration
 - `@effect/ui-native/testing`: `TestDevice`, a fake `Native.Device` for Play tests
 
 ## Setup
@@ -145,7 +145,24 @@ NativeApp.register(
 
 ## Testing
 
-Tests run in Node with `@effect/ui/testing`. Import kit modules by their subpaths there, such as `@effect/ui-native/kit/Alert`: the `kit` entry also loads modules that import `react-native`.
+Use `NativeVitest.plugin()` to import `@effect/ui-native/kit` in Node tests without mocking React Native imports. The plugin compiles the Flow sources used by `Css` and `Image`.
+
+Use Node 22.15 or later and install `flow-remove-types` and `sucrase` as dev dependencies. Then add the plugin to your Vitest configuration:
+
+```ts
+// vitest.config.ts
+import { NativeVitest } from "@effect/ui-native/node"
+import { defineConfig } from "vitest/config"
+
+export default defineConfig({ plugins: [NativeVitest.plugin()] })
+```
+
+The loader runs before your test setup files, so those files can import the kit too. It supports the non-React modules the kit uses, not React Native's React components.
+
+- `NativeVitest.plugin({ platform: "android" })` selects React Native's Android files; the default is `"ios"`. This affects values such as `Css.color("red")`, not the OS that kit components read from `Native.Device`.
+- Compiled files are cached in `node_modules/.cache/@effect/ui-native/vitest` under the project root.
+
+Write tests with `@effect/ui/testing`.
 
 The examples test `Draft`, a screen with an `input`. While it holds text, Back shows an alert, and its `"discard"` button clears the text.
 

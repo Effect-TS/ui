@@ -259,6 +259,11 @@ export interface InstanceBase extends Base {
   readonly path: string
   readonly instance: number
   readonly component: Component.Any
+  /**
+   * Marks an entry DevTools stopped recording. It gets no row or slot;
+   * DevTools keeps only what the next shown entry's diff and Time travel need.
+   */
+  readonly excluded?: boolean | undefined
 }
 
 /**
@@ -308,12 +313,6 @@ export interface Update extends InstanceBase {
    * renders with are always ready.
    */
   readonly boundary?: number | undefined
-  /**
-   * Marks an update for coalescing, such as a message `_tag` that DevTools
-   * has stopped recording. DevTools hides its row and replaces it with the
-   * instance's next excluded update unless a shown entry intervenes.
-   */
-  readonly excluded?: boolean | undefined
 }
 
 /**
@@ -1079,7 +1078,8 @@ const InstanceWire = {
   ...BaseWire,
   path: Schema.String,
   instance: Schema.Number,
-  component: Schema.String
+  component: Schema.String,
+  excluded: Schema.optionalKey(Schema.Boolean)
 }
 const IssuedWire = Schema.Struct({ seq: Schema.Number, index: Schema.Number })
 const CommandWire = Schema.Struct({
@@ -1240,8 +1240,7 @@ export const Wire = Schema.Union([
       Schema.Struct({ owner: Schema.String, message: Schema.Json })
     ),
     viewTransition: Schema.optionalKey(Schema.Array(Schema.String)),
-    boundary: Schema.optionalKey(Schema.Number),
-    excluded: Schema.optionalKey(Schema.Boolean)
+    boundary: Schema.optionalKey(Schema.Number)
   }),
   Schema.TaggedStruct("PropsChanged", { ...InstanceWire, props: Schema.Json }),
   Schema.TaggedStruct("QueryChanged", {
@@ -1607,8 +1606,7 @@ export const makeEncoder = (options?: {
             ...(entry.viewTransition === undefined
               ? undefined
               : { viewTransition: entry.viewTransition }),
-            ...boundaryOf(entry),
-            ...(entry.excluded === true ? { excluded: true } : undefined)
+            ...boundaryOf(entry)
           }
         case "PropsChanged":
           return {
@@ -1770,7 +1768,8 @@ const instanceBase = (entry: InstanceBase) => ({
   ...base(entry),
   path: entry.path,
   instance: entry.instance,
-  component: entry.component.definition.name
+  component: entry.component.definition.name,
+  ...(entry.excluded === true ? { excluded: true } : undefined)
 })
 
 // JSON has no `-0`, and `structural` has the placeholder for a number that isn't finite.

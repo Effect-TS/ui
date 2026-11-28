@@ -35,9 +35,8 @@
  * @stability experimental
  * @since 0.1.0
  */
-import { getAssetByID } from "react-native/asset-registry"
 import * as Native from "../Native.ts"
-import { resolveAsset } from "./internal/asset.ts"
+import { getAssetByID, resolveAsset } from "./internal/asset.ts"
 
 /**
  * How an image fits inside its frame.
@@ -235,7 +234,7 @@ const emptyHeaders: Readonly<Record<string, string>> = {}
 
 const normalizeSources = (
   value: unknown,
-  os: string
+  device: Native.Device
 ): ReadonlyArray<ImageURISource> | undefined => {
   if (value === undefined) return undefined
   const out: Array<ImageURISource> = []
@@ -245,7 +244,7 @@ const normalizeSources = (
     >
   ) {
     const one = typeof source === "number"
-      ? resolveAsset(source, os)
+      ? resolveAsset(source, device)
       : typeof source === "string"
       ? { uri: source }
       : source
@@ -324,7 +323,7 @@ const image = Native.defineView(
         host.set(n, "resizeMode", value ?? "cover"),
       overflow: (n, value, host) => host.set(n, "overflow", value ?? "hidden"),
       source(n, value, host) {
-        const sources = normalizeSources(value, host.os)
+        const sources = normalizeSources(value, host.device)
         if (same(n.props.source, sources)) return
         host.set(n, "source", sources)
         if (host.os === "android") {

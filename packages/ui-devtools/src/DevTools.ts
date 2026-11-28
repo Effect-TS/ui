@@ -48,6 +48,7 @@
  * @since 0.1.0
  */
 import type * as Layer from "effect/Layer"
+import type * as Inspector from "./Inspector.ts"
 import * as internal from "./internal/layer.ts"
 import * as internalWorkbench from "./internal/workbench.ts"
 
@@ -89,21 +90,21 @@ export type WebMcpOptions = internal.WebMcpOptions
  * of each session (1,000 by default). To send entries to another sink as
  * well, combine both with `MessageLog.fanout`.
  *
- * `exclude` lists message `_tag` values, matched across every component, to
- * keep noisy updates such as pointer moves out of the timeline. An excluded
- * `Update` gets no row and replaces the instance's earlier excluded entry
- * when no shown entry sits between them, so a burst takes one slot per
- * instance and does not evict shown entries while still keeping Model diffs
- * and Time travel accurate. `exclude` is not a way to hide sensitive data:
- * later entries still carry whatever an excluded message changed in the
- * Model. Use `Schema.Redacted` for sensitive values.
+ * `exclude` stops recording noisy entries: a string matches a message `_tag`
+ * across components, and an `Inspector.Exclusion` matches by `tag`,
+ * `component`, or instance `path` (and everything below it). Tag rules also
+ * exclude the `PropsChanged` entries their updates cause. Excluded entries
+ * take no buffer slots while keeping Model diffs and Time travel accurate.
+ * `exclude` does not hide sensitive data, since later entries still carry
+ * what an excluded message changed in the Model; use `Schema.Redacted`.
  *
- * `exclude` sets the initial recording policy. Select an update and click
- * Stop recording to exclude future updates with its `_tag`. Click a tag in
- * the Not recording strip to resume, or use the `set_recording` MCP tool
- * for either action. These choices override `exclude` and persist through
- * reloads in `sessionStorage` until the tab closes. Excluded Wire frames
- * carry the same policy to the DevTools server.
+ * Select an entry and pick from Stop recording (or use `set_recording`) to
+ * change the policy at runtime. Matching rows already buffered are hidden,
+ * and future matching entries are not recorded. Click a rule in the Not
+ * recording strip to resume recording and show previously buffered rows
+ * again; entries logged while stopped can't be recovered. Choices override
+ * `exclude`, persist in `sessionStorage` until the tab closes, and travel on
+ * excluded Wire frames to the DevTools server.
  *
  * Clear empties the timeline while keeping mounted instances and each
  * instance's pre-clear state for the next entry's diff and Time travel. Clear
@@ -151,7 +152,7 @@ export type WebMcpOptions = internal.WebMcpOptions
 export const layer = (options?: {
   readonly position?: Position | undefined
   readonly size?: number | undefined
-  readonly exclude?: ReadonlyArray<string> | undefined
+  readonly exclude?: ReadonlyArray<string | Inspector.Exclusion> | undefined
   readonly server?: string | undefined
   readonly webMcp?: boolean | WebMcpOptions | undefined
   readonly fields?: ReadonlyArray<string> | undefined

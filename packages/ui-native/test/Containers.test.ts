@@ -17,7 +17,11 @@ const mountOn = <A>(
   mount: (
     container: NativeHost.NativeNode
   ) => Effect.Effect<A, never, Renderer.Renderer | Native.Host | Scope.Scope>
-) => FakeFabric.mount(mount, (color) => `processed ${String(color)}`, os)
+) =>
+  FakeFabric.mount(mount, {
+    color: (color) => `processed ${String(color)}`,
+    os
+  })
 
 describe("Modal and SafeArea", () => {
   const Message = UiSchema.TaggedEnum({

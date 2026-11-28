@@ -200,24 +200,32 @@ export const touch = (
 export const byName = (name: string) => (n: ShadowNode) => n.viewName === name
 
 /**
- * Runs `mount` with a NativeHost on `os` (Android by default) over a new
- * fake Fabric, as `NativeApp` does, and waits for the first commit.
- * `settle` waits for the next one.
+ * A device for a host: `Native.Device`'s default on Android, unless
+ * `device` says otherwise.
+ */
+export const device = (device: Partial<Native.Device> = {}): Native.Device => ({
+  ...Native.Device.defaultValue(),
+  os: "android",
+  ...device
+})
+
+/**
+ * Runs `mount` with a NativeHost on `device` over a new fake Fabric, as
+ * `NativeApp` does, and waits for the first commit. `settle` waits for the
+ * next one.
  */
 export const mount = async <A>(
   mount: (
     container: NativeHost.NativeNode
   ) => Effect.Effect<A, never, Renderer.Renderer | Native.Host | Scope.Scope>,
-  processColor: (color: unknown) => unknown = (color) => color,
-  os = "android"
+  options?: Partial<Native.Device>
 ) => {
   const fabric = make()
   let commits = 0
   const made = NativeHost.make({
     ui: fabric.ui,
     rootTag: 1,
-    os,
-    processColor,
+    device: device(options),
     onCommit: () => commits++
   })
   const scope = Scope.makeUnsafe()

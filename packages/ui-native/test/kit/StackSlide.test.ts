@@ -13,26 +13,12 @@ import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
-import { assert, describe, it, vi } from "vitest"
+import { assert, describe, it } from "vitest"
 import * as FakeAnimated from "../utils/FakeAnimated.ts"
 import * as FakeDevice from "../utils/FakeDevice.ts"
 import * as FakeFabric from "../utils/FakeFabric.ts"
 
-const native = vi.hoisted(() => ({ animated: undefined as any }))
-vi.mock(
-  "react-native/Libraries/TurboModule/TurboModuleRegistry",
-  () => ({ get: () => native.animated.module })
-)
-vi.mock(
-  "react-native/Libraries/StyleSheet/processColor",
-  () => ({ default: (color: unknown) => color })
-)
-vi.mock(
-  "react-native/Libraries/Components/Sound/NativeSoundManager",
-  () => ({ default: null })
-)
-native.animated = FakeAnimated.make()
-const animated: ReturnType<typeof FakeAnimated.make> = native.animated
+const animated = FakeAnimated.make()
 
 const AppRoute = Route.union({
   Home: Route.make("/"),
@@ -114,7 +100,7 @@ const start = async (
   options?: { readonly app?: typeof App; readonly measured?: boolean }
 ) => {
   let router: Router.Router | undefined
-  const fake = FakeDevice.make(os, {})
+  const fake = FakeDevice.make(os, { NativeAnimatedModule: animated.module })
   const mounted = await FakeFabric.mount(
     (container) =>
       Effect.gen(function*() {
@@ -127,8 +113,7 @@ const start = async (
           (props) => Renderer.mount(options?.app ?? App, props, container)
         ).pipe(Effect.provide(context))
       }).pipe(Effect.provideService(Native.Device, fake.device)),
-    undefined,
-    os
+    { os, module: fake.device.module }
   )
   const { fabric, find } = mounted
   const stack = () => find((n) => n.props.overflow === "hidden")

@@ -1,5 +1,7 @@
 import { getAssetByID, type PackagerAsset } from "react-native/asset-registry"
-import { get as getTurboModule } from "react-native/Libraries/TurboModule/TurboModuleRegistry"
+import type { Device } from "../../Native.ts"
+
+export { getAssetByID }
 
 export interface ResolvedAsset {
   readonly __packager_asset: true
@@ -72,29 +74,19 @@ const localScriptDir = (
   return dir.includes("://") ? dir : `file://${dir}`
 }
 
-const deviceScale = (): number => {
-  const dims = getTurboModule<{
-    readonly getConstants: () => {
-      readonly Dimensions?: {
-        readonly window?: { readonly scale?: number }
-        readonly windowPhysicalPixels?: { readonly scale?: number }
-      }
-    }
-  }>("DeviceInfo")?.getConstants()?.Dimensions
+const deviceScale = (device: Device): number => {
+  const dims = device.module("DeviceInfo")?.getConstants()?.Dimensions
   return (dims?.window ?? dims?.windowPhysicalPixels)?.scale ?? 1
 }
 
-const scriptURL = (): string | null | undefined =>
-  getTurboModule<{
-    readonly getConstants: () => { readonly scriptURL?: string | null }
-  }>("SourceCode")?.getConstants()?.scriptURL
-
 const resolvePackagerAsset = (
   asset: PackagerAsset,
-  os: string
+  device: Device
 ): ResolvedAsset => {
-  const scale = pickScale(asset.scales, deviceScale())
-  const url = scriptURL()
+  const os = device.os
+  const scale = pickScale(asset.scales, deviceScale(device))
+  const url: string | null | undefined = device.module("SourceCode")
+    ?.getConstants()?.scriptURL
   const serverURL = url?.match(/^https?:\/\/.*?\//)?.[0] ?? null
   let uri: string
   if (serverURL !== null && !(asset.type === "xml" && os === "android")) {
@@ -126,15 +118,17 @@ const resolvePackagerAsset = (
   }
 }
 
-// Asset ids count up from 1.
-const cache: Array<ResolvedAsset | undefined> = []
+// Asset URLs and scales depend on the device. Asset ids count up from 1.
+const caches = new WeakMap<Device, Array<ResolvedAsset | undefined>>()
 
 export const resolveAsset = (
   id: number,
-  os: string
+  device: Device
 ): ResolvedAsset | undefined => {
+  let cache = caches.get(device)
+  if (cache === undefined) caches.set(device, cache = [])
   const cached = cache[id]
   if (cached !== undefined) return cached
   const asset = getAssetByID(id)
-  return asset && (cache[id] = resolvePackagerAsset(asset, os))
+  return asset && (cache[id] = resolvePackagerAsset(asset, device))
 }

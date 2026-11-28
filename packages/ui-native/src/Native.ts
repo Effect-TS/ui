@@ -1297,6 +1297,8 @@ export interface ViewHost {
   readonly set: (node: NativeNode, name: string, value: unknown) => void
   /** Converts a colour for Fabric, for colours nested inside a prop. */
   readonly color: (value: unknown) => unknown
+  /** The device the surface is on. */
+  readonly device: Device
   /** Dispatches a native command; no-op before the node's first commit. */
   readonly command: (
     node: NativeNode,

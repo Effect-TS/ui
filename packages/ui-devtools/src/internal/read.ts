@@ -26,7 +26,6 @@ export type Filter = "messages" | "commands" | "all"
 const updateTags: ReadonlySet<string> = new Set([
   "Update",
   "Failed",
-  "PropsChanged",
   "QueryChanged"
 ])
 const commandTags: ReadonlySet<string> = new Set([

@@ -20,11 +20,13 @@ export interface History {
   readonly holds: (session: string, seq: number) => boolean
   /** An entry held, shown or excluded. */
   readonly entry: (session: string, seq: number) => Entry | undefined
-  /** The last seq recorded, excluded updates included. */
+  /** Retained cause of a held shown `PropsChanged`, even after eviction. */
+  readonly cause: (session: string, seq: number) => Entry | undefined
+  /** The last seq recorded, excluded entries included. */
   readonly latest: (session: string) => number | undefined
   /**
    * Why a seq up to `latest` isn't held: older than every entry kept, in a
-   * range that never arrived, or else an excluded update replaced since.
+   * range that never arrived, or else an excluded entry not kept.
    */
   readonly missing: (
     session: string,
@@ -94,28 +96,114 @@ const isDirty = (dirty: ReadonlySet<string>, path: string) => {
   return false
 }
 
+// The slot an excluded entry takes in its instance's coalesced entries.
+const keyOf = (entry: Entry): string | undefined => {
+  switch (entry._tag) {
+    case "Waiting":
+    case "Mounted":
+    case "Update":
+      return "state"
+    case "PropsChanged":
+      return "props"
+    case "QueryChanged":
+      return "query:" + entry.name
+  }
+}
+
+type StateEntry = Extract<
+  Entry,
+  { readonly _tag: "Waiting" | "Mounted" | "Update" }
+>
+
+// A state entry without query results keeps those of the one it replaces,
+// with any kept `QueryChanged` newer than it applied.
+const carryQueries = (
+  entry: StateEntry,
+  replaced: StateEntry,
+  kept: ReadonlyMap<string, Entry>
+): Entry => {
+  if (entry.queries !== undefined || replaced.queries === undefined) {
+    return entry
+  }
+  let queries: unknown = replaced.queries
+  for (const changed of kept.values()) {
+    if (changed._tag === "QueryChanged" && changed.seq > replaced.seq) {
+      queries = merge(queries, changed.name, changed.result)
+    }
+  }
+  return queries === undefined ? entry : { ...entry, queries } as Entry
+}
+
 const makeSession = (size: number) => {
   const base = new Map<number, Held>()
-  const entries: Array<Entry> = []
-  const shown = new Map<number, Entry>()
-  const coalesced = new Map<number, Entry>()
+  const entries = new Map<number, Entry>()
+  const shown = new Set<number>()
+  const causes = new Map<number, Entry>()
+  // Excluded entries since the last shown entry, keyed by slot per instance.
+  const coalesced = new Map<number, Map<string, Entry>>()
   // Ranges of seqs that never arrived, kept until older than the entries held.
   const gaps: Array<readonly [number, number]> = []
   let floor = -Infinity
   let last = -Infinity
-  const drop = () => {
-    const oldest = entries.shift()!
+  // Instance numbers grow, so one above `settled` mounted since the last shown entry.
+  let newest = -1
+  let settled = -1
+  let shownSeq = -Infinity
+  const painting = new Set<string>()
+  const drop = (oldest: Entry) => {
+    entries.delete(oldest.seq)
     floor = oldest.seq
     shown.delete(oldest.seq)
-    if (oldest._tag === "Update" && coalesced.get(oldest.instance) === oldest) {
-      coalesced.delete(oldest.instance)
+    causes.delete(oldest.seq)
+    const kept = "instance" in oldest
+      ? coalesced.get(oldest.instance)
+      : undefined
+    if (kept !== undefined) {
+      for (const [key, entry] of kept) {
+        if (entry === oldest) kept.delete(key)
+      }
     }
     apply(base, oldest, false)
     while (gaps.length > 0 && gaps[0]![1] < floor) gaps.shift()
   }
+  const exclude = (entry: Entry & { readonly instance: number }) => {
+    let kept = coalesced.get(entry.instance)
+    if (entry._tag === "Unmounted") {
+      // An instance that came and went between shown entries leaves no trace,
+      // but for a mount a shown entry caused or one Clear folded into `base`.
+      if (entry.instance > settled && !base.has(entry.instance)) {
+        const mount = kept?.get("mount")
+        if (kept !== undefined) {
+          for (const replaced of kept.values()) {
+            if (replaced !== mount) entries.delete(replaced.seq)
+          }
+        }
+        coalesced.delete(entry.instance)
+        if (mount === undefined) return
+      }
+      entries.set(entry.seq, entry)
+      return
+    }
+    // Preserve only the first mount per path caused by a shown entry; Time
+    // travel at that entry paints it and cannot use later mounts at that path.
+    const causal = (entry._tag === "Mounted" || entry._tag === "Waiting") &&
+      entry.causedBy !== undefined && entry.causedBy <= shownSeq &&
+      !painting.has(entry.path)
+    const key = causal ? "mount" : keyOf(entry)
+    if (key === undefined) return
+    if (causal) painting.add(entry.path)
+    if (kept === undefined) coalesced.set(entry.instance, kept = new Map())
+    const replaced = kept.get(key)
+    if (replaced !== undefined) entries.delete(replaced.seq)
+    const held = key === "state" && replaced !== undefined
+      ? carryQueries(entry as StateEntry, replaced as StateEntry, kept)
+      : entry
+    kept.set(key, held)
+    entries.set(held.seq, held)
+  }
   const fold = (seq: number) => {
     const states = new Map(base)
-    for (const entry of entries) {
+    for (const entry of entries.values()) {
       if (entry.seq > seq) break
       apply(states, entry, true)
     }
@@ -128,32 +216,35 @@ const makeSession = (size: number) => {
         gaps.push([last + 1, entry.seq - 1])
       }
       last = entry.seq
-      if (entry._tag === "Update" && entry.excluded === true) {
-        const replaced = coalesced.get(entry.instance)
-        if (replaced !== undefined) {
-          entries.splice(entries.lastIndexOf(replaced), 1)
-        }
-        const queries = replaced !== undefined && "queries" in replaced
-          ? replaced.queries
-          : undefined
-        const merged = entry.queries === undefined && queries !== undefined
-          ? { ...entry, queries } as Entry
-          : entry
-        entries.push(merged)
-        coalesced.set(entry.instance, merged)
-        return
+      if ("instance" in entry) {
+        newest = Math.max(newest, entry.instance)
+        if (entry.excluded === true) return exclude(entry)
       }
       coalesced.clear()
-      entries.push(entry)
-      shown.set(entry.seq, entry)
-      while (shown.size > size) drop()
+      painting.clear()
+      settled = newest
+      shownSeq = entry.seq
+      entries.set(entry.seq, entry)
+      shown.add(entry.seq)
+      const cause =
+        entry._tag === "PropsChanged" && entry.causedBy !== undefined
+          ? entries.get(entry.causedBy)
+          : undefined
+      if (cause !== undefined) causes.set(entry.seq, cause)
+      for (const oldest of entries.values()) {
+        if (shown.size <= size) break
+        drop(oldest)
+      }
     },
     clear: (upTo: number) => {
-      while (entries.length > 0 && entries[0]!.seq <= upTo) drop()
+      for (const oldest of entries.values()) {
+        if (oldest.seq > upTo) break
+        drop(oldest)
+      }
     },
     holds: (seq: number) => shown.has(seq),
-    entry: (seq: number) =>
-      shown.get(seq) ?? entries.find((entry) => entry.seq === seq),
+    entry: (seq: number) => entries.get(seq),
+    cause: (seq: number) => causes.get(seq),
     latest: () => last,
     missing: (seq: number) =>
       seq <= floor
@@ -173,7 +264,7 @@ const makeSession = (size: number) => {
       // A render can log child mounts after the selected entry, even when their
       // cause is at or before it. Changes to a path or ancestor block reuse.
       const dirty = new Set<string>()
-      for (const entry of entries) {
+      for (const entry of entries.values()) {
         if (entry.seq <= seq) continue
         switch (entry._tag) {
           case "Mounted":
@@ -222,6 +313,7 @@ export const make = (size: number): History => {
     },
     holds: (session, seq) => sessions.get(session)?.holds(seq) ?? false,
     entry: (session, seq) => sessions.get(session)?.entry(seq),
+    cause: (session, seq) => sessions.get(session)?.cause(seq),
     latest: (session) => sessions.get(session)?.latest(),
     missing: (session, seq) => sessions.get(session)?.missing(seq) ?? "evicted",
     at: (session, seq) => {
