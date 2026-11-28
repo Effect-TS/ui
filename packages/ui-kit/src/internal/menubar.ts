@@ -1,3 +1,4 @@
+import * as Component from "@effect/ui/Component"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
 import { Orientation } from "../ListNavigation.ts"
@@ -44,3 +45,12 @@ export const MenubarMessage = UiSchema.TaggedEnum({
 })
 
 export type MenubarMessage = typeof MenubarMessage.Type
+
+// Menus name the menubar by its key, so a standalone menu doesn't bundle `Menubar`.
+export const MenubarKey = Component.sharedKey({
+  name: "Menubar",
+  schema: MenubarShared,
+  message: MenubarMessage,
+  receives: ["Navigated", "FocusedTrigger"],
+  reports: MenubarMenu
+})

@@ -89,6 +89,80 @@ describe("$.send to an owner", () => {
         ])
       )
     })))
+
+  it.effect("delivers a send to a shared key to an adopting owner, and drops it without one", () =>
+    provideHost(Effect.gen(function*() {
+      const KeyLog = Component.sharedKey({
+        name: "KeyLog",
+        schema: Schema.Array(Schema.String),
+        message: LogMessage,
+        receives: ["Add"]
+      })
+      const Owner = Component.define({
+        name: "KeyLog",
+        model: Schema.Array(Schema.String),
+        message: LogMessage,
+        shares: {
+          key: KeyLog,
+          value: ({ model }) => model,
+          schema: Schema.Array(Schema.String),
+          receives: ["Add"]
+        }
+      }).make({
+        init: () => [],
+        update: ($, { id }) => [...$.model, id]
+      })
+      const Sender = Component.define({
+        name: "KeySender",
+        props: Schema.Struct({ label: Schema.String, id: Schema.String }),
+        model: Schema.Null,
+        message: LogMessage,
+        reads: { log: { owner: KeyLog, optional: true } }
+      }).make({
+        init: () => null,
+        update: ($, message) => $.send(KeyLog, message),
+        view: (h) =>
+          h.el("button")
+            .on("click", LogMessage.Add({ id: h.props.id }))
+            .children(
+              `${h.props.label}:${h.reads.log?.join(",") ?? "alone"}`
+            )
+      })
+      const Host = Component.define({
+        name: "KeyHost",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          h.el("div", [
+            Sender(h, { key: "out", props: { label: "out", id: "x" } }),
+            Owner(h, {
+              key: "log",
+              view: () =>
+                Sender(h, { key: "in", props: { label: "in", id: "a" } })
+            })
+          ])
+      })
+      const root = yield* TestHost.mount(Host, {})
+      yield* TestHost.settle
+      Locator.fire(
+        root.get(Locator.text("out:alone", { exact: true })),
+        "click"
+      )
+      Locator.fire(root.get(Locator.text("in:", { exact: true })), "click")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "out:alonein:a")
+      const dropped = root.log().filter((
+        entry
+      ): entry is MessageLog.SendDropped => entry._tag === "SendDropped")
+      assert.deepStrictEqual(dropped.map((entry) => entry.owner), ["KeyLog"])
+      const [sent] = updates(root.log(), "/KeyHost/KeyLog[log]/KeySender[in]")
+      assert.deepStrictEqual(sent.sends?.map(MessageLog.encodeSend), [
+        { owner: "KeyLog", message: { _tag: "Add", id: "a" } }
+      ])
+    })))
 })
 
 describe("Story and sends", () => {

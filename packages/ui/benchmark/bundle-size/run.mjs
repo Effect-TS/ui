@@ -99,6 +99,45 @@ async function checkFeatures(chunks) {
   })
 }
 
+async function checkMenu(chunks) {
+  await inWindow(async (window, document) => {
+    // happy-dom has no popover API, which the menu's positioner uses.
+    const open = new Set()
+    const element = window.HTMLElement.prototype
+    element.showPopover = function() {
+      open.add(this)
+      this.dispatchEvent(
+        Object.assign(new window.Event("beforetoggle"), { newState: "open" })
+      )
+    }
+    element.hidePopover = function() {
+      open.delete(this)
+    }
+    const matches = window.Element.prototype.matches
+    window.Element.prototype.matches = function(selector) {
+      return selector === ":popover-open"
+        ? open.has(this)
+        : matches.call(this, selector)
+    }
+    document.body.innerHTML = "<div id=\"app\"></div>"
+    await evaluate(window, chunks)
+    const trigger = document.querySelector("#app button")
+    assert.ok(trigger, "the menu did not mount")
+    assert.equal(trigger.getAttribute("aria-expanded"), "false")
+    trigger.click()
+    await window.happyDOM.waitUntilComplete()
+    assert.equal(
+      trigger.getAttribute("aria-expanded"),
+      "true",
+      "the menu did not open"
+    )
+    assert.ok(
+      document.querySelector("#app [role=menuitem]"),
+      "the menu did not draw its item"
+    )
+  })
+}
+
 async function checkRouting(chunks, entry) {
   const directory = fs.mkdtempSync(
     path.join(tmpdir(), "ui-bundle-size-routing-")
@@ -196,32 +235,29 @@ function install(root, packed, name) {
 }
 
 const benchmark = (file) => path.join(import.meta.dirname, file)
+const single = (file) => (root) => {
+  const input = path.join(root, file)
+  fs.copyFileSync(benchmark(file), input)
+  return { root, input }
+}
 const apps = [
   {
     name: "counter",
     variant: "",
     check: checkCounter,
-    prepare: (root) => {
-      const input = path.join(root, "counter.ts")
-      fs.copyFileSync(
-        benchmark("counter.ts"),
-        input
-      )
-      return { root, input }
-    }
+    prepare: single("counter.ts")
   },
   {
     name: "features",
     variant: "",
     check: checkFeatures,
-    prepare: (root) => {
-      const input = path.join(root, "features.ts")
-      fs.copyFileSync(
-        benchmark("features.ts"),
-        input
-      )
-      return { root, input }
-    }
+    prepare: single("features.ts")
+  },
+  {
+    name: "menu",
+    variant: "",
+    check: checkMenu,
+    prepare: single("menu.ts")
   },
   {
     name: "routing",

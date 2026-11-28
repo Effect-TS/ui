@@ -3,7 +3,7 @@ import type * as Component from "../Component.ts"
 import * as View from "../View.ts"
 import { sharedEqual } from "./equal.ts"
 import * as Kernel from "./kernel.ts"
-import { ownerValue, readsOf } from "./shared.ts"
+import { keyOf, ownerValue, readsOf } from "./shared.ts"
 
 type Inst = Kernel.Instance
 
@@ -17,7 +17,7 @@ interface Owning {
 }
 
 interface Reading {
-  readonly owners: Map<Component.Definition.Any, Inst>
+  readonly owners: Map<Component.SharedKey.Any, Inst>
   readonly seen: Map<Inst, unknown>
 }
 
@@ -118,16 +118,13 @@ const above = (
   return found
 }
 
-const nearest = (inst: Inst, definition: Component.Definition.Any) =>
-  above(inst, (owner) => definitionOf(owner) === definition)
+const nearest = (inst: Inst, key: Component.SharedKey.Any) =>
+  above(inst, (owner) => keyOf(definitionOf(owner)) === key)
 
-const absent = (inst: Inst, definition: Component.Definition.Any): string => {
-  const other = above(
-    inst,
-    (owner) => definitionOf(owner).name === definition.name
-  )
+const absent = (inst: Inst, key: Component.SharedKey.Any): string => {
+  const other = above(inst, (owner) => definitionOf(owner).name === key.name)
   return other === undefined
-    ? "and no " + definition.name + " is above it"
+    ? "and no " + key.name + " is above it"
     : "but a different component with the same name is above it at " +
       other.path
 }
@@ -135,7 +132,7 @@ const absent = (inst: Inst, definition: Component.Definition.Any): string => {
 const bindAll = (inst: Inst): boolean => {
   const reading = inst.reading as Reading
   for (const read of readsOf(definitionOf(inst))) {
-    const owned = read.owner.definition
+    const owned = read.key
     const was = reading.owners.get(owned)
     const owner = nearest(inst, owned)
     if (owner === was && (owner !== undefined || read.optional)) continue
@@ -176,8 +173,7 @@ export const first = (inst: Inst): void => {
     if (!bindAll(inst)) return
     sharedOf(inst.tree).readers.add(inst)
     inst.look = (owner) =>
-      (reading.owners.get(owner.definition)?.owning as Owning | undefined)
-        ?.value
+      (reading.owners.get(keyOf(owner))?.owning as Owning | undefined)?.value
   }
   if (definition.shares !== undefined) {
     const saved = inst.owning as Partial<Owning> | undefined
@@ -278,7 +274,7 @@ const report = (inst: Inst): void => {
   if (reading === undefined) return
   for (const read of readsOf(definitionOf(inst))) {
     if (read.report === undefined) continue
-    const owner = reading.owners.get(read.owner.definition)
+    const owner = reading.owners.get(read.key)
     if (owner !== undefined && definitionOf(owner).collects !== undefined) {
       due(owner)
     }
@@ -327,7 +323,7 @@ const round = (owner: Inst): void => {
     reading.seen.set(owner, value)
     const read = readsOf(definitionOf(reader)).find((read) =>
       read.onChange !== undefined &&
-      reading.owners.get(read.owner.definition) === owner
+      reading.owners.get(read.key) === owner
     )!
     let message: unknown
     try {
@@ -359,7 +355,7 @@ const collect = (owner: Inst): void => {
     for (const read of readsOf(definitionOf(reader))) {
       if (
         read.report === undefined ||
-        reading.owners.get(read.owner.definition) !== owner
+        reading.owners.get(read.key) !== owner
       ) continue
       try {
         reports.push(
@@ -404,8 +400,8 @@ const send = (
   ) return
   for (let index = 0; index < sends.length; index++) {
     if (inst.closed) return
-    const definition = sends[index]!.owner.definition
-    const owner = nearest(inst, definition)
+    const key = keyOf(sends[index]!.owner)
+    const owner = nearest(inst, key)
     if (owner !== undefined) {
       Kernel.send(owner, sends[index]!.message, {
         _tag: "Send",
@@ -414,12 +410,12 @@ const send = (
       })
     } else if (
       readsOf(definitionOf(inst)).some((read) =>
-        read.optional && read.owner.definition === definition
+        read.optional && read.key === key
       )
     ) {
       inst.tree.log?.(inst, {
         _tag: "SendDropped",
-        owner: definition.name,
+        owner: key.name,
         issued: { seq, index }
       })
     } else {
@@ -427,8 +423,7 @@ const send = (
         inst,
         "send",
         new Error(
-          inst.path + " sent to " + definition.name + ", " +
-            absent(inst, definition)
+          inst.path + " sent to " + key.name + ", " + absent(inst, key)
         )
       )
     }

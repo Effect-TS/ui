@@ -1490,12 +1490,12 @@ export const makeEncoder = (options?: {
     for (const read of sharedReads.readsOf(component.definition)) {
       const value = shared[read.name]
       if (value === undefined) continue
-      const schema = read.owner.definition.sharesSchema
+      const schema = read.key.sharesSchema
       out[read.name] = schema === undefined
         ? structural(value)
         : encodeWith(
           schema,
-          `${read.owner.definition.name}.shares`,
+          `${read.key.name}.shares`,
           value
         ) as Schema.Json
     }
@@ -1826,7 +1826,7 @@ const encodeGroup = (command: Command.Command<any, any>): string | null => {
 }
 
 /**
- * Encodes a `$.send` as the owner's definition name and the message. The
+ * Encodes a `$.send` as the owner's name and the message. The
  * message goes through the owner's `receives` Schema the way `encodeArgs`
  * encodes Command args: redacted, with a structural fallback for what doesn't
  * encode.
@@ -1838,7 +1838,7 @@ const encodeGroup = (command: Command.Command<any, any>): string | null => {
 export const encodeSend = (
   send: Component.Send
 ): { readonly owner: string; readonly message: Schema.Json } => ({
-  owner: send.owner.definition.name,
+  owner: sharedReads.keyOf(send.owner).name,
   message: encodeArgs(send.owner.receives, send.message)
 })
 

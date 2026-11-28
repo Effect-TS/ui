@@ -151,6 +151,7 @@ import {
   TrackDirection
 } from "./internal/direction.ts"
 import { valued } from "./internal/list.ts"
+import { ToolbarKey, ToolbarShared } from "./internal/toolbar.ts"
 import * as ListNavigation from "./ListNavigation.ts"
 
 /**
@@ -437,6 +438,7 @@ export const Toolbar = Html.component({
   message: ToolbarMessage,
   restore: false,
   shares: {
+    key: ToolbarKey,
     value: ({ props }) => ({
       disabled: props.disabled === true,
       orientation: props.orientation ?? "horizontal",
@@ -444,11 +446,7 @@ export const Toolbar = Html.component({
         item
       ) => item.value)
     }),
-    schema: Schema.Struct({
-      disabled: Schema.Boolean,
-      orientation: ToolbarOrientation,
-      disabledItems: Schema.Array(Schema.String)
-    })
+    schema: ToolbarShared
   },
   reads: {
     provider: { owner: DirectionProvider, optional: true }

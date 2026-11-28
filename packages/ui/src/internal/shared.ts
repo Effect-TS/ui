@@ -10,7 +10,10 @@ import type * as Component from "../Component.ts"
 export interface Read {
   /** The local name `h.reads`, `p.reads` and `$.reads` read the owner under. */
   readonly name: string
-  readonly owner: Component.Headless.Any
+  /** The owner component or key, as `reads` names it. */
+  readonly owner: Component.Shared.Owner
+  /** What the runtime matches the owner by. */
+  readonly key: Component.SharedKey.Any
   readonly optional: boolean
   readonly report:
     | ((
@@ -20,6 +23,18 @@ export interface Read {
     ) => unknown)
     | undefined
   readonly onChange: ((value: unknown) => unknown) | undefined
+}
+
+/**
+ * What the runtime matches an owner by: the key it adopts, else its definition. A key is its own.
+ *
+ * @internal
+ */
+export const keyOf = (
+  owner: Component.Shared.Owner | Component.Definition.Any
+): Component.SharedKey.Any => {
+  const at = typeof owner === "function" ? owner.definition : owner
+  return (at as Partial<Component.Definition.Any>).sharedKey ?? at
 }
 
 const none: ReadonlyArray<Read> = []
@@ -39,26 +54,21 @@ export const readsOf = (
   if (declared === undefined) return none
   let reads = cache.get(declared)
   if (reads === undefined) {
-    reads = Object.entries(declared).map(([name, entry]): Read =>
-      // A component is a function, and the long form a plain object.
-      typeof entry === "function"
-        ? {
-          name,
-          owner: entry,
-          optional: false,
-          report: undefined,
-          onChange: undefined
-        }
-        : {
-          name,
-          owner: entry.owner === "self"
-            ? self as unknown as Component.Headless.Any
-            : entry.owner,
-          optional: entry.optional === true,
-          report: entry.report as Read["report"],
-          onChange: entry.onChange as Read["onChange"]
-        }
-    )
+    reads = Object.entries(declared).map(([name, entry]): Read => {
+      const long: Exclude<Component.SharedRead, Component.Shared.Owner> =
+        "owner" in entry ? entry : { owner: entry }
+      const owner = long.owner === "self"
+        ? self as unknown as Component.Headless.Any
+        : long.owner
+      return {
+        name,
+        owner,
+        key: keyOf(owner),
+        optional: long.optional === true,
+        report: long.report as Read["report"],
+        onChange: long.onChange as Read["onChange"]
+      }
+    })
     cache.set(declared, reads)
   }
   return reads
@@ -66,7 +76,7 @@ export const readsOf = (
 
 const missing = (name: string, read: Read): never => {
   throw new Error(
-    `${name} reads the shared state of ${read.owner.definition.name}, and nothing supplies it: render it below a ${read.owner.definition.name}`
+    `${name} reads the shared state of ${read.key.name}, and nothing supplies it: render it below a ${read.key.name}`
   )
 }
 
@@ -141,9 +151,9 @@ export const unsupplied = (
 export const check = (definition: Component.Definition.Any): void => {
   const { name, reads: declared } = definition
   if (declared === undefined) return
-  const handled = new Map<Component.Definition.Any, string>()
+  const handled = new Map<Component.SharedKey.Any, string>()
   for (const [key, entry] of Object.entries(declared)) {
-    if (typeof entry === "function") continue
+    if (!("owner" in entry)) continue
     if (entry.owner === "self") {
       if (definition.shares === undefined) {
         throw new Error(
@@ -157,7 +167,7 @@ export const check = (definition: Component.Definition.Any): void => {
       }
     }
     if (entry.onChange === undefined) continue
-    const owner = entry.owner === "self" ? definition : entry.owner.definition
+    const owner = keyOf(entry.owner === "self" ? definition : entry.owner)
     const before = handled.get(owner)
     if (before !== undefined) {
       throw new Error(

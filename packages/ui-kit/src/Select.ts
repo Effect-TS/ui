@@ -254,6 +254,7 @@ import { grouped, valued } from "./internal/list.ts"
 import { holdLayer, nextLayerOrder } from "./internal/modal.ts"
 import { listenOutside, releasedOutside } from "./internal/outside.ts"
 import { clamp, fillValue } from "./internal/range.ts"
+import { ToolbarKey } from "./internal/toolbar.ts"
 import { layered, raiseAbove } from "./internal/topLayer.ts"
 import {
   frameOf,
@@ -263,7 +264,6 @@ import {
 } from "./internal/transition.ts"
 import * as ListNavigation from "./ListNavigation.ts"
 import * as Positioning from "./Positioning.ts"
-import { Toolbar } from "./Toolbar.ts"
 import * as Typeahead from "./Typeahead.ts"
 
 const itemSchema = <S extends Schema.Codec<string, string>>(value: S) =>
@@ -1428,7 +1428,7 @@ export const makeSelect = <V extends string>(
     events,
     restore: false,
     reads: {
-      toolbar: { owner: Toolbar, optional: true }
+      toolbar: { owner: ToolbarKey, optional: true }
     }
   }).make({
     init: () => ({

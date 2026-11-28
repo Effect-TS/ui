@@ -110,7 +110,10 @@ import * as Schema from "effect/Schema"
 import { flag } from "./internal/attributes.ts"
 import {
   CheckboxGroupItem,
-  CheckboxGroupMessage
+  CheckboxGroupKey,
+  CheckboxGroupMessage,
+  CheckboxGroupReport,
+  CheckboxGroupShared
 } from "./internal/checkboxGroup.ts"
 import { toggled } from "./internal/formInputs.ts"
 
@@ -174,17 +177,6 @@ const CheckboxGroupModel = Schema.Struct({
 })
 
 type CheckboxGroupModel = typeof CheckboxGroupModel.Type
-
-const CheckboxGroupShared = Schema.Struct({
-  value: Schema.Array(Schema.String),
-  disabled: Schema.Boolean,
-  name: Schema.NullOr(Schema.String),
-  parent: Schema.NullOr(Schema.Struct({
-    checked: Schema.Boolean,
-    indeterminate: Schema.Boolean,
-    controls: Schema.String
-  }))
-})
 
 const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 
@@ -265,6 +257,7 @@ export const CheckboxGroup = Html.component({
   message: CheckboxGroupMessage,
   events: CheckboxGroupEvents,
   shares: {
+    key: CheckboxGroupKey,
     value: ({ model, props }) => ({
       value: props.value,
       disabled: props.disabled === true,
@@ -274,7 +267,7 @@ export const CheckboxGroup = Html.component({
     schema: CheckboxGroupShared,
     receives: ["ToggledItem", "ToggledParent"],
     collects: {
-      schema: Schema.NullOr(CheckboxGroupItem),
+      schema: CheckboxGroupReport,
       onChange: (reports) =>
         CheckboxGroupMessage.ChangedItems({
           items: reports

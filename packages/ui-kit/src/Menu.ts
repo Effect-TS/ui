@@ -296,6 +296,7 @@ import { methodOf, onEscape } from "./internal/interaction.ts"
 import { grouped, keyed } from "./internal/list.ts"
 import {
   barTriggers,
+  MenubarKey,
   MenubarMessage,
   menubarOf,
   MenubarShared,
@@ -309,6 +310,7 @@ import {
   inSafeArea,
   type Point
 } from "./internal/safeArea.ts"
+import { ToolbarKey } from "./internal/toolbar.ts"
 import { layered, raiseAbove } from "./internal/topLayer.ts"
 import {
   frameOf,
@@ -317,9 +319,7 @@ import {
   transitionAttrs
 } from "./internal/transition.ts"
 import * as ListNavigation from "./ListNavigation.ts"
-import { Menubar } from "./Menubar.ts"
 import * as Positioning from "./Positioning.ts"
-import { Toolbar } from "./Toolbar.ts"
 import * as Typeahead from "./Typeahead.ts"
 
 /**
@@ -1193,7 +1193,7 @@ const toSibling = (
     key === opens && model.active !== null && isSubmenu(model, model.active)
   ) return undefined
   const from = nested ? null : ownTrigger(model, $.props)
-  return $.send(Menubar, MenubarMessage.Navigated({ from, key, open: true }))
+  return $.send(MenubarKey, MenubarMessage.Navigated({ from, key, open: true }))
     .set(model)
 }
 
@@ -2621,7 +2621,7 @@ export const Menu = Html.component({
       onChange: (parent) => MenuMessage.ChangedParent({ parent })
     },
     menubar: {
-      owner: Menubar,
+      owner: MenubarKey,
       optional: true,
       report: (model, props) => ({
         open: props.open,
@@ -2631,7 +2631,7 @@ export const Menu = Html.component({
       }),
       onChange: (menubar) => MenuMessage.ChangedMenubar({ menubar })
     },
-    toolbar: { owner: Toolbar, optional: true },
+    toolbar: { owner: ToolbarKey, optional: true },
     provider: { owner: DirectionProvider, optional: true }
   },
   restore: false
@@ -2948,7 +2948,7 @@ export const Menu = Html.component({
       disabledOf($)
         ? $.model
         : $.send(
-          Menubar,
+          MenubarKey,
           MenubarMessage.Navigated({ from: trigger, key, open: $.props.open })
         ),
     FocusedBarTrigger: ($, { key, triggerId }) => {
@@ -2965,7 +2965,7 @@ export const Menu = Html.component({
       return (stays
         ? $
         : open($.model, $, reason, "keyboard", key, triggerId, { group: true }))
-        .send(Menubar, MenubarMessage.FocusedTrigger({ trigger: key }))
+        .send(MenubarKey, MenubarMessage.FocusedTrigger({ trigger: key }))
     },
     ChangedMenubar: ($, { menubar }) => {
       const current = menubar.current

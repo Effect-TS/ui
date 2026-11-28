@@ -157,6 +157,7 @@ import { isRtl, rightToLeft } from "./internal/direction.ts"
 import { isHTMLElement } from "./internal/dom.ts"
 import {
   barTriggers,
+  MenubarKey,
   MenubarMenu,
   MenubarMessage,
   MenubarShared,
@@ -333,6 +334,7 @@ export const Menubar = Html.component({
   model: MenubarModel,
   message: MenubarMessage,
   shares: {
+    key: MenubarKey,
     // A menu applies the `DirectionProvider` it reads on top of `rtl`.
     value: ({ model, props }) => ({
       ...stateOf(model, props),

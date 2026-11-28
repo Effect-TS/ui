@@ -5,10 +5,11 @@
  * a tooltip provider that knows which tooltip is open, tooltips that read it
  * and tell it when they're focused, and a scene of one tooltip with no
  * provider mounted. Then an optional owner, the reports readers give it, a
- * reader's `onChange`, a component that reads and sends to its own kind, and
- * an owner that shares what it derives from the one above it.
+ * reader's `onChange`, a component that reads and sends to its own kind, an
+ * owner that shares what it derives from the one above it, and a shared key
+ * that names an owner without importing it.
  */
-import { UiSchema } from "@effect/ui"
+import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene, Story } from "@effect/ui/testing"
 import { Effect, Schema } from "effect"
@@ -149,7 +150,7 @@ export const focused = Effect.gen(function*() {
   const s = yield* Scene.make(Tooltip, { label: "B", tip: "Bold" })
   s.fire(Locator.text("B"), "focus")
   const [enter] = s.current.sent
-  console.log(enter?.owner?.definition.name) // "TooltipProvider"
+  console.log(enter?.owner === TooltipProvider) // true
   const message = enter!.message as typeof TooltipMessage.Type
   s.sent(TooltipProvider, message)
   // What the provider would make of it, given by hand: the tooltip shows.
@@ -408,4 +409,66 @@ export const nestedLock = Effect.gen(function*() {
   })
   lock.expect(Locator.text("open")).toExist()
   lock.shared(Lock, { locked: true }).expect(Locator.text("locked")).toExist()
+})
+
+// ---------------------------------------------------------------------------
+// A shared key: naming an owner without importing it
+// ---------------------------------------------------------------------------
+
+// Importing an owner component for an optional read can retain its
+// implementation even when the app never renders it. Use a shared key to
+// avoid that dependency. In an app, put the key in a separate module that
+// the owner and its readers both import.
+const SidebarMessage = UiSchema.TaggedEnum({ Collapsed: {} })
+const SidebarShared = Schema.Struct({ collapsed: Schema.Boolean })
+
+export const SidebarKey = Component.sharedKey({
+  name: "Sidebar",
+  schema: SidebarShared,
+  message: SidebarMessage,
+  receives: ["Collapsed"]
+})
+
+// `shares.key` checks that the owner's name, shared value, received messages
+// and collected reports match the key's types. Readers of SidebarKey and
+// Sidebar resolve to the same owner instance.
+export const Sidebar = Html.component({
+  name: "Sidebar",
+  model: SidebarShared,
+  message: SidebarMessage,
+  shares: {
+    key: SidebarKey,
+    value: ({ model }) => model,
+    schema: SidebarShared,
+    receives: ["Collapsed"]
+  }
+}).make({
+  init: () => ({ collapsed: false }),
+  update: () => ({ collapsed: true })
+})
+
+const NavLinkMessage = UiSchema.TaggedEnum({ Clicked: {} })
+
+export const NavLink = Html.component({
+  name: "NavLink",
+  model: Schema.Null,
+  message: NavLinkMessage,
+  reads: { sidebar: { owner: SidebarKey, optional: true } }
+}).make({
+  init: () => null,
+  update: ($) => $.send(SidebarKey, SidebarMessage.Collapsed()),
+  view: (h) =>
+    h.button.on("click", NavLinkMessage.Clicked()).children(
+      h.reads.sidebar?.collapsed === true ? "H" : "Home"
+    )
+})
+
+// Supply the owner's value without mounting Sidebar. For required reads of
+// a key, this step is mandatory: the key has no implementation to initialize.
+export const navLink = Effect.gen(function*() {
+  const link = yield* Scene.make(NavLink, {})
+  link.shared(SidebarKey, { collapsed: false })
+  link.click("Home").sent(SidebarKey, SidebarMessage.Collapsed())
+  link.shared(SidebarKey, { collapsed: true })
+    .expect(Locator.text("H")).toExist()
 })

@@ -247,7 +247,7 @@ export const replayLog = <
       const value = Object.hasOwn(encoded, read.name)
         ? encoded[read.name]
         : undefined
-      const schema = read.owner.definition.sharesSchema
+      const schema = read.key.sharesSchema
       out[read.name] = value === undefined || schema === undefined
         ? value
         : decodeWith(wire, `shared "${read.name}"`, schema, value)

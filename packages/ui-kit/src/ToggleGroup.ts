@@ -115,8 +115,8 @@ import { DirectionProvider } from "./DirectionProvider.ts"
 import { flag, pressedAttrs } from "./internal/attributes.ts"
 import { rightToLeft, TrackDirection } from "./internal/direction.ts"
 import { valued } from "./internal/list.ts"
+import { ToolbarKey } from "./internal/toolbar.ts"
 import * as ListNavigation from "./ListNavigation.ts"
-import { Toolbar } from "./Toolbar.ts"
 
 /**
  * The direction a toggle group's items run in, which picks its arrow keys.
@@ -366,7 +366,7 @@ export const makeToggleGroup = <V extends string>(
     restore: false,
     reads: {
       provider: { owner: DirectionProvider, optional: true },
-      toolbar: { owner: Toolbar, optional: true }
+      toolbar: { owner: ToolbarKey, optional: true }
     }
   }).make({
     init: () => ({ active: null, rtl: false }),
