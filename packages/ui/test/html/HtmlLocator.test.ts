@@ -319,6 +319,25 @@ describe("HtmlLocator", () => {
         .toBeDefined()
     })
 
+    it("associated labels name buttons ahead of their content, behind ARIA names", () => {
+      const container = document.createElement("div")
+      container.innerHTML = `
+        <label>Notifications <button role="switch" aria-checked="false"></button></label>
+        <label for="theme">Theme</label><button id="theme">Dark</button>
+        <label for="mute">Sound</label><button id="mute" aria-label="Mute">Off</button>
+        <span id="help-name">Help</span><label for="help">Ignored</label><button id="help" aria-labelledby="help-name">?</button>
+        <label for="volume">Sound <button>Reset</button></label><input id="volume">
+        <label>Start <button id="go">Go</button></label><label for="go">later</label>`
+      expect(
+        HtmlLocator.getByRole(container, "switch", { name: "Notifications" })
+      ).toBeDefined()
+      expect(
+        HtmlLocator.queryAllByRole(container, "button").map((node) =>
+          HtmlLocator.nameOf(container, node)
+        )
+      ).toEqual(["Theme", "Mute", "Help", "Reset", "Start later"])
+    })
+
     it("getByRole lists what's there when nothing matches", () => {
       const tree = el(
         "div",
