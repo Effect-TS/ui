@@ -120,6 +120,12 @@ export * as LayoutAnimation from "./LayoutAnimation.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * from "./Link.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as Linking from "./Linking.ts"
 
 /**
@@ -169,6 +175,24 @@ export * from "./SafeArea.ts"
  * @since 0.1.0
  */
 export * as Share from "./Share.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * from "./Stack.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as StackSlide from "./StackSlide.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as StackSwipe from "./StackSwipe.ts"
 
 /**
  * @stability experimental

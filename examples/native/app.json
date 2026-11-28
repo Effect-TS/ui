@@ -2,6 +2,7 @@
   "expo": {
     "name": "Effect UI Native",
     "slug": "effect-ui-native",
+    "scheme": "effect-ui",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",

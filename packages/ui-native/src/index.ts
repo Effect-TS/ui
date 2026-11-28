@@ -24,3 +24,9 @@ export * as NativeApp from "./NativeApp.ts"
  * @since 0.1.0
  */
 export * as NativeHost from "./NativeHost.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as NativeRouter from "./NativeRouter.ts"

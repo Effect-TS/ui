@@ -38,6 +38,13 @@
  * `pointerLeave` events. Enable React Native's W3C pointer events at app
  * launch as described in `Native.ViewEvents`.
  *
+ * **Keyboard and TalkBack**
+ *
+ * The element is `focusable` unless the caller sets it, as in React
+ * Native, so on Android a keyboard or TalkBack can activate it. That sends
+ * `onPress`, with the element's center, and no `onPressIn` or
+ * `onPressOut`.
+ *
  * **Disabled**
  *
  * A disabled `Pressable` has no handlers and `accessibilityState.disabled`,
@@ -63,7 +70,7 @@ import { props as setters } from "../internal/kinds.ts"
 import { touch } from "../internal/touch.ts"
 import type * as Native from "../Native.ts"
 import type { NativeNode } from "../NativeHost.ts"
-import { press, type PressOptions } from "./internal/press.ts"
+import { click, press, type PressOptions } from "./internal/press.ts"
 import { bind, ignore, insets } from "./internal/view.ts"
 
 /**
@@ -199,6 +206,7 @@ export const Pressable = <
   } = {}
 ): B => {
   touch.press = press
+  touch.click = click
   setters.set("ripple:background", background)
   setters.set("ripple:foreground", foreground)
   const element: any = options.element ?? h.view
@@ -234,10 +242,13 @@ export const Pressable = <
         retention: [side("left"), side("top"), side("right"), side("bottom")],
         delayLongPress: props.delayLongPress,
         ripple: rippled,
-        sound: props.android_disableSound !== true
+        sound: props.android_disableSound !== true,
+        // Not in the options' type: only `Link` passes it.
+        link: (options as { readonly link?: PressOptions["link"] }).link
       } satisfies PressOptions
     )
     if (hitSlop !== undefined) out = out.prop("hitSlop", hitSlop)
+    if (node.props.focusable === undefined) out = out.prop("focusable", true)
     return rippled
       ? out.prop(
         ripple.foreground === true ? "ripple:foreground" : "ripple:background",

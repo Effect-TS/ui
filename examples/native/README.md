@@ -1,6 +1,6 @@
 # Native example
 
-An Expo app built with `@effect/ui-native`: a counter, a controlled name input that Reset clears, nested text, and a scrolling list. The list's sticky header follows the scroll on the native driver, and new rows fade in with `LayoutAnimation`. It has no React components of its own; React Native's renderer is replaced by `NativeApp.register` in `src/main.ts`.
+An Expo app built with `@effect/ui-native`, with two screens under `NativeRouter`. The first has a counter, a controlled name input that Reset clears, nested text, and a scrolling list. The list's sticky header follows the scroll on the native driver, and new rows fade in with `LayoutAnimation`. It has no React components of its own; React Native's renderer is replaced by `NativeApp.register` in `src/main.ts`.
 
 The commands below run from this directory after `pnpm install` at the repository root, with the Android SDK and a JDK installed. The `android` and `ios` directories are generated and not committed.
 
@@ -23,6 +23,16 @@ adb shell am start -a android.intent.action.VIEW \
 ```
 
 Metro serves the TypeScript sources of this app and of the workspace packages. Editing a module that exports only components, such as `src/App.ts`, swaps them in place and keeps their state. Other edits reload the app.
+
+## Screens and deep links
+
+The About button is a `Link` that pushes the About screen over the first, which stays mounted with its count. The screens slide in and out with `StackSlide`. Android Back returns to the first screen, and from there closes the app. On iOS, a swipe from the left edge does the same. The app's scheme is `effect-ui`, so `effect-ui://about` opens the About screen:
+
+```sh
+adb shell am start -a android.intent.action.VIEW -d "effect-ui://about" dev.effect.ui.example
+```
+
+The scheme is registered by `pnpm prebuild` or `pnpm android`, so run one of them again after adding it to `app.json`. A URL that doesn't start with `effect-ui://`, such as the development client's own, starts the app at the first screen.
 
 ## Release build
 

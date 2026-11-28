@@ -1,14 +1,20 @@
 // Every export of this module is a component, so an edit to it swaps in
-// place in the dev client and keeps the count, the name and the list.
+// place in the dev client and keeps the stack, the count, the name and the
+// list.
 import {
   Animation,
   Image,
   LayoutAnimation,
+  Link,
   Pan,
   Pressable,
+  Stack,
+  StackSlide,
+  StackSwipe,
   VirtualView
 } from "@effect/ui-native/kit"
 import * as Native from "@effect/ui-native/Native"
+import * as NativeRouter from "@effect/ui-native/NativeRouter"
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
 import * as Renderer from "@effect/ui/Renderer"
@@ -19,6 +25,7 @@ import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
 import mark from "./assets/mark.png"
 import { ListDemo } from "./ListDemo.ts"
+import { AppRoute } from "./routes.ts"
 
 const Rect = Schema.Struct({
   x: Schema.Number,
@@ -98,8 +105,8 @@ const pressable = (
     }
   }).style(button).children(h.text.style(label).children(text))
 
-export const App = Native.component({
-  name: "App",
+export const Home = Native.component({
+  name: "Home",
   model: Schema.Struct({
     count: Schema.Number,
     name: Schema.String,
@@ -297,7 +304,9 @@ export const App = Native.component({
       h.view.style({ flexDirection: "row", gap: 12 }).children(
         pressable(h, Message.ClickedAdd(), "Add to list"),
         pressable(h, Message.ToggledVirtual(), "Virtual list"),
-        pressable(h, Message.ToggledList(), "Long list")
+        pressable(h, Message.ToggledList(), "Long list"),
+        Link(h, { href: AppRoute.print(AppRoute.About()) }).style(button)
+          .children(h.text.style(label).children("About"))
       ),
       h.text.style({ fontSize: 16, color: "#374151" }).children(
         model.selected === "" ? "Tap an item" : `Selected ${model.selected}`,
@@ -333,4 +342,62 @@ export const App = Native.component({
       )
     )
   }
+})
+
+export const About = Native.component({
+  name: "About",
+  model: Schema.Null,
+  message: Schema.Never
+}).make({
+  init: () => null,
+  update: ($) => $.model,
+  view: (h) =>
+    h.view.style({
+      flex: 1,
+      paddingTop: 64,
+      paddingHorizontal: 24,
+      gap: 16,
+      backgroundColor: "white"
+    }).children(
+      h.text.style({ fontSize: 32, fontWeight: "bold", color: "#1f2937" })
+        .children("About"),
+      h.text.style({ fontSize: 18, color: "#374151" }).children(
+        "A second screen, over the first. Back returns to it, and keeps its count."
+      )
+    )
+})
+
+const AppMessage = UiSchema.TaggedEnum({
+  Navigated: { navigation: NativeRouter.Navigation(AppRoute) }
+})
+
+// The root: the stack of screens the Router has opened.
+export const App = Native.component({
+  name: "App",
+  props: Schema.Struct({ stack: NativeRouter.Stack(AppRoute) }),
+  model: NativeRouter.Stack(AppRoute),
+  message: AppMessage
+}).make({
+  init: ($) => $.props.stack,
+  update: {
+    Navigated: ($, { navigation }) =>
+      $.set(NativeRouter.follow(AppRoute, $.model, navigation))
+  },
+  subscriptions: ({ model }) => [
+    NativeRouter.subscription(
+      AppRoute,
+      model,
+      (navigation) => AppMessage.Navigated({ navigation })
+    )
+  ],
+  view: (h, stack) =>
+    Stack(h, {
+      entries: stack,
+      screen: (s, { route }) =>
+        AppRoute.match(route, {
+          Home: () => Home(s, { key: "home" }),
+          About: () => About(s, { key: "about" })
+        }),
+      transition: StackSlide.slide({ swipeBack: StackSwipe.swipeBack() })
+    })
 })

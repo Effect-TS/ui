@@ -89,6 +89,47 @@ const Fade = Native.component({
     )
 })
 
+let boxName = ""
+
+const Box = Native.component({
+  name: "Box",
+  model: Schema.Struct({ ended: Schema.Number }),
+  message: UiSchema.TaggedEnum({ Ended: {} })
+}).make({
+  init: () => ({ ended: 0 }),
+  update: { Ended: ($) => $.evolve({ ended: (n) => n + 1 }) },
+  view: (h, model) =>
+    h.view(
+      pipe(
+        h.view.style({ height: 10 }).on("animationEnd", { _tag: "Ended" }),
+        Animation.named(boxName = h.id("box")),
+        Animation.style({ opacity: 1 })
+      ),
+      h.text("ended " + model.ended)
+    )
+})
+
+const makeBox = (style: Animation.Style) => {
+  let name = ""
+  const Box = Native.component({
+    name: "Box",
+    model: Schema.Null,
+    message: Schema.Never
+  }).make({
+    init: () => null,
+    update: ($) => $.model,
+    view: (h) =>
+      h.view(
+        pipe(
+          h.view.style({ height: 10 }),
+          Animation.named(name = h.id("box")),
+          Animation.style(style)
+        )
+      )
+  })
+  return { Box, name: () => name }
+}
+
 const Follow = Native.component({
   name: "Follow",
   model: Schema.Struct({ axis: Schema.Literals(["x", "y"]) }),
@@ -198,6 +239,37 @@ describe("Animation", { concurrent: false }, () => {
     assert.isUndefined(panel().props.opacity)
   })
 
+  const both = { opacity: 0.5, transform: [{ translateX: 40 }, { scale: 2 }] }
+  it.each<[Animation.Style, Animation.Style<number>, object]>([
+    [{ opacity: 1 }, both, { opacity: 0.5 }],
+    [{ transform: [{ translateX: 0 }] }, both, {
+      transform: [{ translateX: 40 }]
+    }],
+    // A value from an expression isn't a target.
+    [{ opacity: Animation.scroll("list", "y") }, { opacity: 0.75 }, {
+      opacity: 0
+    }],
+    [{ transform: [{ translateX: 0, scale: 1 }] }, {
+      transform: [{ scale: 2 }]
+    }, { transform: [{ translateX: 0 }, { scale: 2 }] }]
+  ])(
+    "sets only what the element animates without a native driver: %j",
+    async (style, set, shown) => {
+      const { Box, name } = makeBox(style)
+      const { close, find, settle } = await FakeFabric.mount((root) =>
+        Renderer.mount(Box, {}, root)
+      )
+      const box = () => find((n) => n.props.height === 10)
+      Animation.set(name(), set)
+      await settle()
+      assert.deepStrictEqual(
+        { opacity: box().props.opacity, transform: box().props.transform },
+        { opacity: undefined, transform: undefined, ...shown }
+      )
+      await close()
+    }
+  )
+
   it("drives a sticky header from scroll events, across recreated views, until removed", async () => {
     const before = { nodes: animated.nodes(), events: animated.events() }
     const { close, find, root, settle } = await mount((root) =>
@@ -279,6 +351,34 @@ describe("Animation", { concurrent: false }, () => {
 
     await close()
     assert.strictEqual(animated.nodes(), before)
+  })
+
+  it("commits what set shows when it reports the end", async () => {
+    const { close, find, printed, settle } = await mount((root) =>
+      Renderer.mount(Box, {}, root)
+    )
+    const box = () => find((n) => n.props.height === 10)
+    await settle()
+    animated.finish()
+    await settle()
+    const ended = printed().match(/ended (\d+)/)![1]
+    const shown = () => [animated.view(box().tag)?.opacity, box().props.opacity]
+
+    Animation.set(boxName, { opacity: 0.25 }, Animation.immediate)
+    await settle()
+    assert.deepStrictEqual(shown(), [0.25, 0.25])
+    assert.include(printed(), `ended ${Number(ended) + 1}`)
+
+    Animation.set(
+      boxName,
+      { opacity: 0.5 },
+      Animation.timing({ duration: 100 })
+    )
+    animated.finish()
+    await settle()
+    assert.deepStrictEqual(shown(), [0.5, 0.5])
+    assert.include(printed(), `ended ${Number(ended) + 2}`)
+    await close()
   })
 
   it("changes a graph without a mount on iOS, keeping a running fade", async () => {

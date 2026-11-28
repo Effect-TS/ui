@@ -10,6 +10,9 @@
  *   offset, and `interpolate`, `add`, `multiply` and `diffClamp` derive
  *   from it.
  *
+ * `set` shows values on a `named` element at once, with no render, so a
+ * `Pan` can move a view with each touch.
+ *
  * Nothing about an animation is kept in the Model. The `animationEnd` event
  * fires when every target of the element has been reached, so `update` can
  * pick the next one.
@@ -379,6 +382,104 @@ export const source: {
   return self.prop("animationSource", name)
 })
 
+/**
+ * Names the element, so `set` can move it without a render. Make the name
+ * with `h.id`. A name is shared by every surface, and two mounted copies of
+ * a component make the same `h.id`s, so a component that can be mounted
+ * twice adds something unique to each copy.
+ *
+ * @stability experimental
+ * @category combinators
+ * @since 0.1.0
+ */
+export const named: {
+  (
+    name: string
+  ): <B extends Native.Element<any, any, any, any, any>>(self: B) => B
+  <B extends Native.Element<any, any, any, any, any>>(self: B, name: string): B
+} = dual(2, (self: Native.Element<unknown>, name: string) => {
+  install()
+  return self.prop("animationName", name)
+})
+
+/**
+ * Shows `style` on the element `named` `name`, on the UI thread and with
+ * no render, so a `Pan` can move a view with each touch.
+ *
+ * **Details**
+ *
+ * The element's targets stay as its last render set them. A render that
+ * changes a target animates from what `set` shows, and one that doesn't
+ * leaves it there. With `transition`, the values animate to `style` and
+ * become the targets, and `animationEnd` fires when they arrive. Only keys
+ * the element animates are set.
+ *
+ * @stability experimental
+ * @category combinators
+ * @since 0.1.0
+ */
+export const set = (
+  name: string,
+  style: Style<number>,
+  transition?: Transition
+): void => {
+  const n = names.get(name)
+  if (n === undefined) return
+  const d = drivers.get(n.host)
+  const e = d?.entries.get(n)
+  if (d == null || e === undefined) {
+    const shown = plain.get(n)
+    if (shown === undefined) return
+    // As with the driver, only the numeric leaves of the element's style
+    // are set, by their place in it. Fabric shows a transform flattened, one
+    // item per leaf.
+    const was = n.props.transform as ReadonlyArray<object> | undefined
+    let flat: Array<object> | undefined
+    let i = 0
+    leaves(shown, (path, value) => {
+      const [key, item, k] = path.split(".") as [keyof Style, string, string]
+      if (k === undefined) {
+        const v = style[key]
+        if (typeof value === "number" && v !== undefined) n.host.set(n, key, v)
+        return
+      }
+      const v = (style.transform as Transforms | undefined)?.[+item]?.[
+        k as TransformKey
+      ]
+      if (typeof value === "number" && v !== undefined) {
+        ;(flat ??= [...was!])[i] = { [k]: v }
+      }
+      i++
+    })
+    if (flat !== undefined) n.host.set(n, "transform", flat)
+    n.host.commit()
+    if (transition !== undefined) n.host.fire(n, "animationEnd", {})
+    return
+  }
+  const spec: Record<string, Layer> = {}
+  for (const key in style) {
+    spec[key] = {
+      value: style[key as keyof Style]!,
+      transition: undefined,
+      from: undefined
+    }
+  }
+  const m = native(d)
+  leaves(spec, (path, value) => {
+    const t = e.targets.get(path)
+    if (t === undefined) return
+    if (transition !== undefined) {
+      return go(d, e, t, value as number, transition)
+    }
+    if (t.anim !== 0) m.stopAnimation(t.anim)
+    t.anim = 0
+    m.setAnimatedNodeValue(t.tag, value as number)
+  })
+  finish(d, n.host)
+  // An immediate transition has arrived once every value is set.
+  if (transition !== undefined && idle(e)) settle(e)
+}
+
 type Transforms = NonNullable<Style["transform"]>
 
 interface Layer {
@@ -473,6 +574,9 @@ interface AnimatedModule {
 const drivers = new WeakMap<Native.ViewHost, Driver | null>()
 // The specs shown without a native driver.
 const plain = new WeakMap<NativeNode, Spec>()
+// The elements `named` names, and the name of each.
+const names = new Map<string, NativeNode>()
+const nameOf = new WeakMap<NativeNode, string>()
 let installed = false
 let fallback: Transition | undefined
 // React Native's `Animated` counts node tags and animation ids from 1.
@@ -484,6 +588,7 @@ const install = () => {
   installed = true
   props.set("animation", setSpec)
   props.set("animationSource", setSource)
+  props.set("animationName", setName)
   commits.add(flush)
 }
 
@@ -511,13 +616,27 @@ const setSpec = (n: NativeNode, value: unknown, host: Native.ViewHost) => {
   const spec = value as Spec | undefined
   const d = driverOf(host)
   if (d === null) {
-    // Without a native driver, the view shows its targets.
-    for (const key in plain.get(n)) {
+    // Without a native driver, the view shows its targets, and reaches
+    // them at the commit.
+    const last = plain.get(n)
+    for (const key in last) {
       if (spec?.[key] === undefined) host.set(n, key, undefined)
     }
-    for (const key in spec) host.set(n, key, resolve(spec[key]!.value, true))
+    let moved = false
+    for (const key in spec) {
+      const layer = spec[key]!
+      const shown = resolve(layer.value, true)
+      const was = last?.[key]?.value ?? layer.from ?? layer.value
+      if (JSON.stringify(shown) !== JSON.stringify(resolve(was, true))) {
+        moved = true
+      }
+      host.set(n, key, shown)
+    }
     if (spec === undefined) plain.delete(n)
     else plain.set(n, spec)
+    if (moved) {
+      Promise.resolve().then(() => host.fire(n, "animationEnd", {}))
+    }
     return
   }
   const entry = d.entries.get(n)
@@ -553,6 +672,14 @@ const setSpec = (n: NativeNode, value: unknown, host: Native.ViewHost) => {
     const layer = spec[key]!
     host.set(n, key, resolve(layer.from ?? layer.value, true))
   }
+}
+
+const setName = (n: NativeNode, name: unknown) => {
+  const old = nameOf.get(n)
+  if (old !== undefined && names.get(old) === n) names.delete(old)
+  if (typeof name !== "string") return nameOf.delete(n)
+  names.set(name, n)
+  nameOf.set(n, name)
 }
 
 const setSource = (n: NativeNode, name: unknown, host: Native.ViewHost) => {
@@ -657,6 +784,11 @@ const native = (d: Driver): AnimatedModule => {
 }
 
 const flush = (host: Native.ViewHost) => {
+  for (const [name, n] of names) {
+    if (n.host !== host) continue
+    const top = rootOf(n).kind
+    if (top !== surface && top !== container) names.delete(name)
+  }
   const d = drivers.get(host)
   if (d == null) return
   for (const [n, e] of d.entries) {
@@ -696,6 +828,10 @@ const flush = (host: Native.ViewHost) => {
       if (s.node === undefined) d.sources.delete(name)
     }
   }
+  finish(d, host)
+}
+
+const finish = (d: Driver, host: Native.ViewHost) => {
   if (!d.batching) return
   d.batching = false
   // iOS runs graph operations at the next mount, which a commit that only
@@ -911,13 +1047,27 @@ const idle = (e: Entry): boolean => {
   return true
 }
 
-// Commits the end values, so Fabric's shadow tree, and a view it recreates,
-// show what the driver shows.
+// Commits the targets, which `set` can move away from the last render, so
+// Fabric's shadow tree and any view it recreates match the driver.
 const settle = (e: Entry) => {
   const n = e.node
   const spec = e.built!
+  const at = (path: string, v: Value): Value =>
+    typeof v === "number" ? e.targets.get(path)?.to ?? v : v
   for (const key in spec) {
-    const value = resolve(spec[key]!.value, false)
+    const layer = spec[key]!.value
+    const value = resolve(
+      Array.isArray(layer)
+        ? (layer as Transforms).map((item, i) => {
+          const out: Record<string, Value> = {}
+          for (const k in item) {
+            out[k] = at(key + "." + i + "." + k, item[k as TransformKey]!)
+          }
+          return out
+        })
+        : at(key, layer as Value),
+      false
+    )
     if (value !== undefined) n.host.set(n, key, value)
   }
   n.host.commit()

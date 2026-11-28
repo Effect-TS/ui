@@ -27,6 +27,12 @@ export interface PressOptions extends View.EventOptions {
   readonly delayLongPress?: number | undefined
   readonly ripple?: boolean | undefined
   readonly sound?: boolean | undefined
+  /**
+   * Called with `false` when a touch starts on the element and with `true`
+   * when it presses it, before `press`: how `Link` navigates without a
+   * message.
+   */
+  readonly link?: ((n: NativeNode, pressed: boolean) => void) | undefined
 }
 
 // React Native's `Pressability` timings.
@@ -116,6 +122,23 @@ const deactivate = (n: NativeNode, x: number, y: number, now = false) => {
 }
 
 /**
+ * Presses `n` when native activates it without a pointer, as from a
+ * keyboard or TalkBack. Touches never send it, so nothing presses twice.
+ * As React Native's `Pressable`, only the activated element presses.
+ *
+ * @internal
+ */
+export const click = (n: NativeNode) => {
+  const events = n.events
+  if (events?.handlers.pressIn === undefined) return
+  const rect = rectOf(n)
+  const x = rect == null ? 0 : rect[0]! + rect[2]! / 2
+  const y = rect == null ? 0 : rect[1]! + rect[3]! / 2
+  ;(events.options.pressIn as PressOptions | undefined)?.link?.(n, true)
+  fire(n, "press", { x, y })
+}
+
+/**
  * Recognizes presses with `pressIn`, `pressOut` and `longPress`.
  *
  * @internal
@@ -133,6 +156,7 @@ export const press: Recognizer = (phase, target, payload) => {
     x0 = x
     y0 = y
     activate(n, x, y)
+    options.link?.(n, false)
     if (n.events!.handlers.longPress !== undefined) {
       longTimer = setTimeout(() => {
         if (owner === n && inside) {
@@ -166,6 +190,7 @@ export const press: Recognizer = (phase, target, payload) => {
     if (options.sound && n.host.os === "android") {
       n.host.device.module("SoundManager")?.playTouchSound()
     }
+    options.link?.(n, true)
     fire(n, "press", { x, y })
   }
 }

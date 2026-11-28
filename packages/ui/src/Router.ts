@@ -122,6 +122,11 @@ export interface Location {
   readonly action: Action
   /** Counts navigations: 0 for the initial location. */
   readonly seq: number
+  /**
+   * The history entry's index: one more than the previous entry's after a
+   * push, the same after a replace.
+   */
+  readonly index: number
 }
 
 /**
@@ -198,7 +203,9 @@ export type SearchPatch<R> = [R] extends [{ readonly search: infer Q }] ?
  * undeclared params, only a new `#hash` is written and no sequence is bumped.
  * `changes` emits the current location again, so the root hears that a link
  * to its own page was followed. `push` and `replace` of the current route
- * emit nothing.
+ * emit nothing, unless a push writes a new entry for the `#hash`. Back and
+ * forward to another entry of the same route emit the current location
+ * again too, with that entry's `index`.
  *
  * @stability experimental
  * @category models
@@ -710,6 +717,8 @@ export const props = <U extends Routes>(
  * and served at `/some/old-link`.
  * Later locations are always delivered, and the held route is delivered
  * again when a link to it is followed.
+ * `f` also gets the location, whose `index` is the history entry's, as a
+ * screen stack needs.
  * The key stays stable as the held route changes. A subset only sees its own
  * routes. On the server the root is checked once without running its Streams,
  * regardless of the navigation sequence.
@@ -732,7 +741,7 @@ export const props = <U extends Routes>(
 export const subscription = <U extends Routes, Msg>(
   routes: U,
   held: U["Type"],
-  f: (route: U["Type"]) => Msg
+  f: (route: U["Type"], location: Location) => Msg
 ): Subscription.Subscription<Msg, Router> => {
   const union: Route.AnyUnion = routes
   const have = union.print(held)
@@ -777,7 +786,7 @@ export const subscription = <U extends Routes, Msg>(
         }
       }
     }
-    return Option.some(f(route.value as U["Type"]))
+    return Option.some(f(route.value as U["Type"], location))
   }
   const stream = Stream.unwrap(Effect.gen(function*() {
     const router = yield* Router
@@ -1234,6 +1243,13 @@ export interface Options {
   /** Called with `true` when the first block is held and `false` when the last is released. */
   readonly onBlocked?: ((blocked: boolean) => void) | undefined
   /**
+   * Saves each entry's state when the Router leaves it and restores it on
+   * back and forward. Defaults to `true`. Turn it off for a host that keeps
+   * the pages of earlier entries mounted, such as a native screen stack,
+   * where nothing would read the saves.
+   */
+  readonly restore?: boolean | undefined
+  /**
    * Throttles the replaces that stay on the page, such as a `patchSearch` per
    * keystroke, to stay under the browser's rate limit on history calls. The
    * first is written at once, and then the latest one at the end of each
@@ -1380,8 +1396,9 @@ const commandLayers = Layer.mergeAll(
  * parse is a full page load. It implements blocking, history restore and the
  * settle timing; a host adds scroll, announcements and focus in `onSettled`.
  *
- * History restore: before leaving an entry, the Router saves the encoded
- * state of every mounted instance by path: its Model and query results. It can't save only the page's
+ * History restore: unless `restore` is `false`, before leaving an entry,
+ * the Router saves the encoded state of every mounted instance by path: its
+ * Model and query results. It can't save only the page's
  * subtree, because which instances the navigation unmounts is only known
  * after it. On back and forward, an instance created for the entry adopts its
  * saved state, so only the re-keyed subtree is restored, and an instance that
@@ -1459,6 +1476,7 @@ const build = (
 ): Effect.Effect<Context.Context<Router>, never, Scope.Scope> =>
   Effect.gen(function*() {
     const { history, routes } = options
+    const restore = options.restore !== false
     // With the `#` base the URL is the fragment, so there's no in-page hash.
     const split = (href: string): readonly [string, string] =>
       routes.base() === "#" ? [href, ""] : splitHash(href)
@@ -1487,13 +1505,15 @@ const build = (
       url: initialUrl,
       hash: startHash,
       action: "initial",
-      seq: 0
+      seq: 0,
+      index
     }
     const blocks = new Map<string, number>()
     const snapshots = new Map<number, Record<string, unknown>>()
     const roots = new Set<services.RootHandle>()
-    let restoring: Record<string, unknown> | undefined = readState(start.state)
-      ?.snapshot
+    let restoring: Record<string, unknown> | undefined = restore
+      ? readState(start.state)?.snapshot
+      : undefined
     restoring &&= { ...restoring }
     const forgetRestoring = (root: services.RootHandle) => {
       if (pending !== undefined) return
@@ -1540,7 +1560,7 @@ const build = (
     }
     const leave = () => {
       options.onLeave?.(index)
-      snapshots.set(index, snapshot())
+      if (restore) snapshots.set(index, snapshot())
     }
     const report = (
       problem: SnapshotWriteFailed | PatchSearchLostBlock | HistoryWriteFailed
@@ -1811,7 +1831,7 @@ const build = (
 
     /** Writes `url` as a new or the current entry, and moves to it. */
     const go = (
-      location: Omit<Location, "action" | "seq">,
+      location: Omit<Location, "action" | "seq" | "index">,
       replace: boolean,
       mode: {
         readonly quiet: boolean
@@ -1830,17 +1850,22 @@ const build = (
         leave()
         // The Model snapshot also goes into the entry itself, so it survives a reload. A copy: the one in
         // memory gains the states that encode later, and a history that keeps its state by reference would too.
-        writeSnapshot(current.url + current.hash, {
-          index,
-          snapshot: { ...snapshots.get(index) }
-        })
+        if (restore) {
+          writeSnapshot(current.url + current.hash, {
+            index,
+            snapshot: { ...snapshots.get(index) }
+          })
+        } else flush()
         index++
         for (const key of snapshots.keys()) {
           if (key >= index) snapshots.delete(key)
         }
         history.push(href, writeState({ index }))
       }
-      set({ ...location, action: replace ? "replace" : "push", seq }, mode)
+      set(
+        { ...location, action: replace ? "replace" : "push", seq, index },
+        mode
+      )
     }
 
     const navigate = (
@@ -1875,15 +1900,15 @@ const build = (
             index++
             history.push(current.url + hash, writeState({ index }))
           }
-          current = { ...current, hash }
+          current = { ...current, hash, index }
         }
         // A repeated hash link writes nothing, but the host can still scroll back to it.
         if (changed || (source === "href" && hash !== "")) {
           options.onHash?.(hash, "push", index)
         }
-        // A followed href delivers the location again, with the same sequence: a navigation that is
-        // still settling is left as it is.
-        if (source === "href") publish(current)
+        // A followed href, or a new entry, delivers the location again with the same sequence: a
+        // navigation that is still settling is left as it is.
+        if (source === "href" || (changed && !replace)) publish(current)
         return "navigated"
       }
       // A replace that stays on the page is quiet; a push, such as a `?page=2` link, is loud.
@@ -1967,25 +1992,28 @@ const build = (
       }
       if (Option.isNone(found) || printed === undefined) return
       if (printed === current.url) {
-        if (hash === current.hash) {
-          index = target
-          return
-        }
-        options.onLeave?.(index)
+        // Another entry of the same route: the route doesn't change, but the
+        // location is delivered again with the entry's index.
+        const moved = hash !== current.hash
+        if (moved) options.onLeave?.(index)
         index = target
-        current = { ...current, hash }
-        options.onHash?.(hash, "pop", target)
+        current = { ...current, hash, index, action: "pop" }
+        if (moved) options.onHash?.(hash, "pop", target)
+        publish(current)
         return
       }
       leave()
       index = target
-      const saved = snapshots.get(target) ?? entry?.snapshot
+      const saved = restore
+        ? snapshots.get(target) ?? entry?.snapshot
+        : undefined
       set({
         route: found.value.route,
         url: printed,
         hash,
         action: "pop",
-        seq: current.seq + 1
+        seq: current.seq + 1,
+        index
       }, {
         quiet,
         scroll: true,
@@ -2285,7 +2313,8 @@ const static_ = (
           url: options.routes.print(found.value),
           hash,
           action: "initial",
-          seq: 0
+          seq: 0,
+          index: 0
         }
         const blocked = Effect.succeed<Outcome>("blocked")
         return Effect.succeed<Router>({

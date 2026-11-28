@@ -35,6 +35,11 @@ import { AppRoute } from "./fixtures/routes.ts"
 // `Router.currentRoute(AppRoute)` instead. Both die if the union can't parse
 // the URL, which the `/*` catch-all rules out.
 //
+// On React Native, `NativeRouter.layer` from `@effect/ui-native` provides
+// the same Router on a history in memory, with Android Back and deep links.
+// Its root holds a stack of screens and draws it with the kit's `Stack`,
+// which `StackSlide` and `StackSwipe` can animate.
+//
 // The Router and the HTTP client are the only Layers here. The pages provide
 // their own domain Layers.
 const Main = BrowserHost.mount(
