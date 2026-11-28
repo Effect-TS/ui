@@ -151,8 +151,15 @@ export const make = () => {
       for (const k in calls) delete calls[k]
     },
     committed: () => committed,
-    emit: (node: ShadowNode, type: string, payload: unknown) =>
+    emit: (node: ShadowNode, type: string, payload: any) => {
+      // iOS finds a pointer event's node through the handle, and drops the
+      // event unless that is the current node (UIManagerBinding.cpp:99).
+      if (
+        payload?.pointerId !== undefined &&
+        (node.handle as any)?.stateNode?.node !== node
+      ) return
       handler!(node.handle, type, payload)
+    }
   }
 }
 

@@ -159,6 +159,13 @@ export class NativeNode {
     this.host = host
     this.props = props ?? { ...defaultsOf(this) }
   }
+  /**
+   * Where iOS looks up the node a pointer event is for, as on a React
+   * fiber. Without it iOS drops every pointer event.
+   */
+  get stateNode(): { readonly node: unknown } {
+    return { node: this.shadow }
+  }
 }
 
 const defaultsOf = ({ host, kind: { defaults } }: NativeNode) =>

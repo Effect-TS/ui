@@ -125,9 +125,10 @@ describe("Pressable", { concurrent: false }, () => {
     )
     const row = find((n) => n.props.padding === 2)
     assert.strictEqual(row.props.onPointerEnter, true)
-    fabric.emit(row, "topPointerEnter", {})
-    fabric.emit(find(FakeFabric.byText("Row")), "topPointerEnter", {})
-    fabric.emit(row, "topPointerLeave", {})
+    const pointer = { pointerId: 1 }
+    fabric.emit(row, "topPointerEnter", pointer)
+    fabric.emit(find(FakeFabric.byText("Row")), "topPointerEnter", pointer)
+    fabric.emit(row, "topPointerLeave", pointer)
     await settle()
     assert.deepStrictEqual(root.model()!.log, ["hover in", "hover out"])
   })

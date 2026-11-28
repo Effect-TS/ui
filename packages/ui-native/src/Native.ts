@@ -836,8 +836,10 @@ export interface PressPayload {
 
 /**
  * A W3C pointer event, as React Native's native side sends it. Positions
- * are in points: `x` and `y` from the top left of the screen, `offsetX`
- * and `offsetY` from the top left of the view native hit.
+ * are in points. `x`, `y`, `clientX`, `clientY`, `pageX` and `pageY`
+ * are all from the top left of the root view, `screenX` and `screenY`
+ * from the top left of the screen, and `offsetX` and `offsetY` from the
+ * top left of the view native hit.
  *
  * @stability experimental
  * @category events
@@ -850,6 +852,10 @@ export interface PointerPayload {
   readonly isPrimary: boolean
   readonly x: number
   readonly y: number
+  readonly clientX: number
+  readonly clientY: number
+  readonly pageX: number
+  readonly pageY: number
   readonly offsetX: number
   readonly offsetY: number
   readonly screenX: number
@@ -861,6 +867,8 @@ export interface PointerPayload {
   readonly tiltX: number
   readonly tiltY: number
   readonly twist: number
+  /** Always `0`. */
+  readonly detail: number
   /** The button that changed: `0` primary, `1` middle, `2` secondary, `-1` none. */
   readonly button: number
   /** The buttons held, as a bit mask. */
@@ -870,6 +878,17 @@ export interface PointerPayload {
   readonly metaKey: boolean
   readonly shiftKey: boolean
 }
+
+/**
+ * A `click`: a pointer event, or on Android an empty payload when a
+ * `focusable` view is activated without a pointer, such as from a keyboard
+ * or TalkBack. Check `pointerId !== undefined` before reading the pointer.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export type ClickPayload = PointerPayload | { readonly pointerId?: undefined }
 
 /**
  * A scroll view's offset and sizes, in points.
@@ -1030,7 +1049,8 @@ export interface ContentSizeChangePayload {
  * goes to the nearest element that handles it, as `press` does, except
  * `pointerEnter` and `pointerLeave`, which fire on each element the
  * pointer enters or leaves. `click` fires when a primary button or a touch
- * goes down and up on the element.
+ * goes down and up on the element, and on Android when a `focusable`
+ * element is activated another way.
  *
  * @stability experimental
  * @category events
@@ -1049,7 +1069,7 @@ export interface ViewEvents {
   readonly pointerCancel: PointerPayload
   readonly pointerEnter: PointerPayload
   readonly pointerLeave: PointerPayload
-  readonly click: PointerPayload
+  readonly click: ClickPayload
 }
 
 /**

@@ -235,11 +235,13 @@ export const App = Native.component({
     const list = h.id("list")
     const scrolled = Animation.scroll(list, "y")
     // Pointer events reach this view from whatever is under the pointer.
-    const pointed = (event: string) => (p: Native.PointerPayload) =>
+    const pointed = (event: string) => (p: Native.ClickPayload) =>
       Message.Pointed({
-        pointer: `${p.pointerType} ${event} at ${Math.round(p.x)}, ${
-          Math.round(p.y)
-        }`
+        pointer: p.pointerId === undefined
+          ? `${event} without a pointer`
+          : `${p.pointerType} ${event} at ${Math.round(p.x)}, ${
+            Math.round(p.y)
+          }`
       })
     const screen = h.view.style({
       flex: 1,

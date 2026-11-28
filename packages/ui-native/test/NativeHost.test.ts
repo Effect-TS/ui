@@ -417,6 +417,7 @@ describe("NativeHost", () => {
     fabric.emit(shadow(), "topValueChange", { value: false })
     // The touch recognizer doesn't hide touches from a kind's hooks.
     fabric.emit(shadow(), "topTouchMove", { touches: [] })
+    // The toggle has been cloned since its first commit.
     fabric.emit(shadow(), "topPointerDown", { pointerId: 1 })
     fabric.emit(shadow(), "topPointerEnter", { pointerId: 1 })
     assert.deepStrictEqual(fired, [
