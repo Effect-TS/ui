@@ -29,7 +29,10 @@
  * import { Command, UiSchema } from "@effect/ui"
  * import { Result, Schema } from "effect"
  *
- * const Message = UiSchema.TaggedEnum({ PressedDelete: {}, Confirmed: {} })
+ * const Message = UiSchema.TaggedEnum({
+ *   PressedDelete: {},
+ *   Answered: { deleted: Schema.Boolean }
+ * })
  *
  * const Note = Native.component({
  *   name: "Note",
@@ -47,10 +50,10 @@
  *             { id: "delete", text: "Delete", style: "destructive" }
  *           ]
  *         }).pipe(Command.map((pressed) =>
- *           Result.getOrUndefined(pressed) === "delete" ? Message.Confirmed() : undefined
+ *           Message.Answered({ deleted: Result.getOrUndefined(pressed) === "delete" })
  *         ))
  *       ),
- *     Confirmed: ($) => $.set({ deleted: true })
+ *     Answered: ($, { deleted }) => $.set({ deleted })
  *   },
  *   view: (h) => h.view.on("press", Message.PressedDelete()).children(h.text.children("Delete"))
  * })

@@ -16,6 +16,7 @@ React Native vocabulary and Fabric host for `@effect/ui`. Apps render native vie
 - `NativeApp`: `mount`, `mountEffect`, and `register`, which runs an app on every surface native starts; the `Surface` service, whose `props` follow the surface's props as native updates them
 - `@effect/ui-native/networking`: opt-in side-effect entry that installs React Native's networking globals (`fetch`, `XMLHttpRequest`, `WebSocket`, `URL`, `AbortController`)
 - `@effect/ui-native/node`: `NativeMetro.withEffectUi`, the Metro configuration
+- `@effect/ui-native/testing`: `TestDevice`, a fake `Native.Device` for Play tests
 
 ## Setup
 
@@ -55,7 +56,7 @@ In development Metro serves the sources. Editing a module that exports only comp
 
 ## Device APIs
 
-The kit's device APIs use native modules and device events directly rather than React Native's JavaScript wrappers. `NativeApp.register` provides their `Native.Device` service. Tests can provide a fake device; without one, defaults include a 0×0 window at scale 1, the `"active"` app state, and a hidden keyboard.
+The kit's device APIs use native modules and device events directly rather than React Native's JavaScript wrappers. `NativeApp.register` provides their `Native.Device` service. Tests can provide `TestDevice` (see Testing); without a device, defaults include a 0×0 window at scale 1, the `"active"` app state, and a hidden keyboard.
 
 They come in three forms:
 
@@ -76,6 +77,52 @@ On Android, Back closes the app when nothing handles it. The kit's `BackHandler.
 React Native doesn't load the `expo` package itself: an app that doesn't import it saves about 1 MB of Hermes bytecode.
 
 Networking globals are opt-in, so apps that don't make requests don't bundle React Native's XHR stack. If your app uses `fetch` or `FetchHttpClient`, add `import "@effect/ui-native/networking"` to the entry module.
+
+## Testing
+
+Tests run in Node with `@effect/ui/testing`. Import kit modules by their subpaths there, such as `@effect/ui-native/kit/Alert`: the `kit` entry also loads modules that import `react-native`.
+
+The examples test `Draft`, a screen with an `input`. While it holds text, Back shows an alert, and its `"discard"` button clears the text.
+
+Start with a Scene. Commands and Subscriptions stay data there, so a screen needs no device: the test sends a Subscription's message and resolves a Command.
+
+```ts
+import * as Alert from "@effect/ui-native/kit/Alert"
+import { Locator, Scene } from "@effect/ui/testing"
+import { Effect, Result } from "effect"
+
+Effect.gen(function*() {
+  const s = yield* Scene.make(Draft, {})
+  s.fire(Locator.tag("input"), "input", { value: "Hello" })
+    .subscription("@effect/ui-native/kit/BackHandler", Message.PressedBack())
+    .resolve(Alert.Alert, Result.succeed("discard"))
+    .expect(Locator.text("Empty")).toExist()
+}).pipe(Effect.scoped, Effect.runSync)
+```
+
+A Play runs the kit's Effects, so it needs a device. `TestDevice.layer("android")` or `TestDevice.layer("ios")` provides one that acts as that platform, and its controls speak the kit's terms: `pressBack`, `setColorScheme`, `setAppState`, `showKeyboard`, `resize`, `receiveURL`, `answerAlert`, `answerShare`, `setPermission`, `setAccessibility` and more. A control sends its event at once, so settle before reading the result.
+
+```ts
+import { TestDevice } from "@effect/ui-native/testing"
+import { Locator, Play, TestHost } from "@effect/ui/testing"
+import { Effect, Layer } from "effect"
+
+Effect.gen(function*() {
+  const device = yield* TestDevice.TestDevice
+  const play = yield* Play.make(Draft, {})
+  yield* play.fire(Locator.tag("input"), "input", { value: "Hello" })
+  device.pressBack()
+  yield* TestHost.settle
+  device.answerAlert("Discard")
+  yield* play.expect(Locator.text("Empty")).toExist()
+}).pipe(
+  Effect.scoped,
+  Effect.provide(Layer.merge(TestHost.layer(), TestDevice.layer("android"))),
+  Effect.runPromise
+)
+```
+
+An alert, prompt or share sheet stays open until the test answers it, by a button's text. `device.log()` lists what the app asked the device to do, such as the URLs it opened, the alerts it showed and its status bar style. An app never imports `@effect/ui-native/testing`, so it adds nothing to the bundle.
 
 ## Touches
 

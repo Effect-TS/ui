@@ -50,6 +50,7 @@ import * as Schema from "effect/Schema"
 import type * as Stream from "effect/Stream"
 import * as Native from "../Native.ts"
 import type { NativeNode } from "../NativeHost.ts"
+import { settings } from "./internal/accessibility.ts"
 import * as device from "./internal/device.ts"
 
 /**
@@ -81,49 +82,6 @@ export type Setting =
   | "darkerSystemColors"
   | "highTextContrast"
   | "accessibilityService"
-
-// Each setting's getter and event, on Android then iOS.
-const settings: Record<
-  Setting,
-  readonly [
-    android: readonly [string, string] | undefined,
-    ios?: readonly [string, string]
-  ]
-> = {
-  screenReader: [
-    ["isTouchExplorationEnabled", "touchExplorationDidChange"],
-    ["getCurrentVoiceOverState", "screenReaderChanged"]
-  ],
-  reduceMotion: [
-    ["isReduceMotionEnabled", "reduceMotionDidChange"],
-    ["getCurrentReduceMotionState", "reduceMotionChanged"]
-  ],
-  invertColors: [
-    ["isInvertColorsEnabled", "invertColorDidChange"],
-    ["getCurrentInvertColorsState", "invertColorsChanged"]
-  ],
-  grayscale: [
-    ["isGrayscaleEnabled", "grayscaleModeDidChange"],
-    ["getCurrentGrayscaleState", "grayscaleChanged"]
-  ],
-  boldText: [undefined, ["getCurrentBoldTextState", "boldTextChanged"]],
-  reduceTransparency: [undefined, [
-    "getCurrentReduceTransparencyState",
-    "reduceTransparencyChanged"
-  ]],
-  darkerSystemColors: [undefined, [
-    "getCurrentDarkerSystemColorsState",
-    "darkerSystemColorsChanged"
-  ]],
-  highTextContrast: [[
-    "isHighTextContrastEnabled",
-    "highTextContrastDidChange"
-  ]],
-  accessibilityService: [[
-    "isAccessibilityServiceEnabled",
-    "accessibilityServiceDidChange"
-  ]]
-}
 
 const android = (d: Native.Device) => d.os === "android"
 
