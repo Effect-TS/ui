@@ -373,11 +373,10 @@ the app runs under a span.
 
 Refetches caused by a run's `invalidates`, or by `Query.invalidate` inside
 its work, are children of the run's span. When several runs invalidate one
-entry before it refetches, the refetch is a child of the latest one. A fetch
-nothing invalidated, such as a watch or a stream query reopened by an
-invalidation, starts its own trace. On the server, fetches stay under the
-request's span. In the message log, `CommandStarted` and
-`FetchStarted` carry the parent span id.
+entry before it refetches, the parent is the latest. Other fetches, such as a
+watch's first fetch or a reopened stream query, start their own trace. On the
+server, fetches stay under the request's span. In the message log,
+`CommandStarted` and `FetchStarted` carry the parent span id.
 
 ### Changing the Model
 

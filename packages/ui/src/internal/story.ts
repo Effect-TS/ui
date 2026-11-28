@@ -115,7 +115,7 @@ export interface Ack<Msg> {
   readonly mounts: ReadonlyArray<LiveMount>
   /** The view `mounts` were taken from, `undefined` before the first render or after `given`. */
   readonly tree: View.Node<any, any> | undefined
-  /** How many Commands were issued since `init` or `given`: numbers each run's span, so a story's spans are deterministic. */
+  /** Commands issued since `init` or `given`: numbers each run's span deterministically. */
   readonly spanSeq: number
 }
 
@@ -2456,7 +2456,7 @@ export const acknowledgeSent = <Props, Model, Msg, Events>(
   return update(story, { sent: story.sent.slice(1) })
 }
 
-/** Each run's span, from when it was issued: its stream elements and its settle all read it. */
+/** Each run's span, fixed when it is issued. */
 const spans = new WeakMap<Pending<any>, Command.SpanContext>()
 
 const carrySpan = (from: Pending<any>, to: Pending<any>): void => {

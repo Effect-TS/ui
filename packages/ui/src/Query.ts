@@ -2868,9 +2868,9 @@ interface FetchEvent {
   readonly page?: number
   /** On an infinite query: the encoded cursor of the page, absent for the first. */
   readonly cursor?: Schema.Json
-  /** The parent span's trace id, when a Command's invalidation or span parented this fetch. */
+  /** The parent span's trace id, absent when the fetch starts its own trace. */
   readonly traceId?: string
-  /** The parent span id, when a Command's invalidation or span parented this fetch. */
+  /** The parent span id, absent when the fetch starts its own trace. */
   readonly parentSpanId?: string
 }
 
@@ -5027,9 +5027,8 @@ const buildCache = (
     : undefined
   const requestParent = requestSpan && queryCore.spanContextOf(requestSpan)
   /**
-   * A fetch's span: named after the query, it parents the spans the fetcher opens. It continues
-   * `parent`, or the caller's span for `"caller"`. Otherwise the fetch starts its own trace: the
-   * cache's context is the mount's, stale for a later fetch.
+   * A fetch's span, named after the query. It continues `parent`, or the caller's span for
+   * `"caller"`; otherwise it starts its own trace, since the cache's context is the mount's.
    */
   const traced = <A, E>(
     def: QueryDef,

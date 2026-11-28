@@ -892,9 +892,9 @@ export interface FetchStarted extends Base {
   readonly stored: boolean
   readonly page?: number
   readonly cursor?: Schema.Json
-  /** The parent span's trace id, when a Command's invalidation or span parented this fetch. */
+  /** The parent span's trace id, absent when the fetch starts its own trace. */
   readonly traceId?: string
-  /** The parent span id, when a Command's invalidation or span parented this fetch. */
+  /** The parent span id, absent when the fetch starts its own trace. */
   readonly parentSpanId?: string
 }
 

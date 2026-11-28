@@ -1824,8 +1824,8 @@ export const afterRefetch: {
  *
  * Works on issued and unmatched Commands of both `"Effect"` and `"Stream"`
  * kinds, on either side of `match` and `map`. Passing `null`, `undefined`
- * or the all-zero span a mapping gets outside any trace is a no-op. Sets `parentSpan` on the issued Command data so a Story test
- * can assert it without running anything.
+ * or the all-zero span a mapping gets outside any trace is a no-op. Sets
+ * `parentSpan` on the issued Command, so a Story test can assert it.
  *
  * **Example** (Continuing a preflight trace after confirmation)
  *

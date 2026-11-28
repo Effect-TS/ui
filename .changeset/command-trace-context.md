@@ -2,4 +2,4 @@
 "@effect/ui": minor
 ---
 
-Add `Command.withParentSpan` to continue a settled Command's trace in a later Command: `map` and `match` now receive the run's `SpanContext`. Refetches started by a Command's invalidation become children of that Command's span, and the `CommandStarted` and `FetchStarted` log entries record the parent.
+Add `Command.withParentSpan`, which continues an earlier Command's trace using the span context that `map` and `match` now pass as their second argument. Refetches caused by a Command's invalidation become children of its span.
