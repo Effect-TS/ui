@@ -349,7 +349,7 @@ export type SelectInteraction = typeof SelectInteraction.Type
  * - `"item-press"`: an item was picked
  * - `"outside-press"`: a press outside the trigger and the popup, other
  *   than on a scrollbar
- * - `"escape-key"`: Escape in the popup
+ * - `"escape-key"`: Escape in the popup or on the open trigger
  * - `"focus-out"`: focus left the trigger and the popup, or Shift+Tab in
  *   the popup
  * - `"close-press"`: the visually hidden dismiss button in a `modal`
@@ -1712,6 +1712,8 @@ export const makeSelect = <V extends string>(
             (event) =>
               event.composing
                 ? undefined
+                : open && event.key === "Escape"
+                ? SelectMessage.PressedPopupKey({ key: event.key })
                 : (arrowsOpen &&
                     (event.key === "ArrowDown" || event.key === "ArrowUp")) ||
                     (Typeahead.isPrintable(event) &&
