@@ -40,7 +40,7 @@ const inside = (id: string, locator: Locator.Locator) =>
 const show = HtmlLocator.role("button", { name: "Show code" })
 const hide = HtmlLocator.role("button", { name: "Hide code" })
 
-it.layer(TestLayer, { buildPerTest: true })(
+it.layer(TestLayer, { buildPerTest: true, concurrent: false })(
   "CodePreview",
   (it) => {
     it.effect("opens a file on its own, and scrolls to it when it closes", () =>

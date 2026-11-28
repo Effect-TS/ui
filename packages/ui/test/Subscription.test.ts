@@ -157,4 +157,35 @@ describe("Subscription", () => {
       assert.isTrue(detached)
       assert.isUndefined(fire)
     }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("settle waits for a Promise-backed Subscription to emit", () =>
+    Effect.gen(function*() {
+      const Message = UiSchema.TaggedEnum({
+        Got: { value: Schema.String }
+      })
+
+      const AsyncSub = Component.define({
+        name: "AsyncSub",
+        model: Schema.String,
+        message: Message
+      }).make({
+        init: () => "waiting",
+        update: {
+          Got: (_, { value }) => value
+        },
+        subscriptions: () => [
+          Subscription.make(
+            "native",
+            Stream.fromEffect(
+              Effect.promise(() => Promise.resolve("ready"))
+            ).pipe(Stream.map((value) => Message.Got({ value })))
+          )
+        ],
+        view: (h, model) => h.text(model)
+      })
+
+      const root = yield* TestHost.mount(AsyncSub, {})
+      yield* TestHost.settle
+      assert.strictEqual(root.model(), "ready")
+    }).pipe(Effect.provide(TestHost.layer())))
 })

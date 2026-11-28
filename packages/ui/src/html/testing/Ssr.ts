@@ -284,11 +284,6 @@ const liveDocument = Effect.fnUntraced(function*(parsed: Document) {
   return live
 })
 
-const nextMacrotask = Effect.callback<void>((resume) => {
-  const handle = setTimeout(() => resume(Effect.void), 0)
-  return Effect.sync(() => clearTimeout(handle))
-})
-
 /** Sleeps no tree ever wakes from: past this, a step gives up. */
 const stepLimit = 10_000
 
@@ -421,7 +416,7 @@ export const ssr = <
           continue
         }
         quiet++
-        yield* nextMacrotask
+        yield* TestHost.nextMacrotask
       }
     })
     /** Steps the clock to each wake of the tree's sleepers until `done`, or no wake is left by `deadline`. */

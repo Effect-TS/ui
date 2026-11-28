@@ -138,7 +138,7 @@ const badge = (text: string) =>
     })
   )
 
-describe("slots", () => {
+describe("slots", { concurrent: false }, () => {
   it.effect("content's handlers, emits and failures reach the parent that wrote it", () =>
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(Page, {})
