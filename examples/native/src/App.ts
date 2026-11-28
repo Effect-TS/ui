@@ -35,6 +35,8 @@ const Message = UiSchema.TaggedEnum({
   ChangedNotes: { value: Schema.String },
   ClickedAdd: {},
   SelectedItem: { item: Schema.String },
+  HoveredItem: { item: Schema.String },
+  Pointed: { pointer: Schema.String },
   Dragged: { dx: Schema.Number },
   Dropped: {},
   CancelledDrag: {},
@@ -104,6 +106,9 @@ export const App = Native.component({
     notes: Schema.String,
     items: Schema.Array(Schema.String),
     selected: Schema.String,
+    hovered: Schema.String,
+    // The last pointer event anywhere on the screen.
+    pointer: Schema.String,
     // The handle's offset while dragged, and where it was last dropped.
     dragged: Schema.Number,
     dropped: Schema.Number,
@@ -119,6 +124,8 @@ export const App = Native.component({
     notes: "",
     items: [],
     selected: "",
+    hovered: "",
+    pointer: "",
     dragged: 0,
     dropped: 0,
     showVirtual: false,
@@ -142,6 +149,8 @@ export const App = Native.component({
         ]
       }).viewTransition([LayoutAnimation.easeInEaseOut]),
     SelectedItem: ($, { item }) => $.evolve({ selected: item }),
+    HoveredItem: ($, { item }) => $.evolve({ hovered: item }),
+    Pointed: ($, { pointer }) => $.evolve({ pointer }),
     Dragged: ($, { dx }) => $.evolve({ dragged: $.model.dropped + dx }),
     Dropped: ($) => $.evolve({ dropped: $.model.dragged }),
     CancelledDrag: ($) => $.evolve({ dragged: $.model.dropped }),
@@ -225,13 +234,22 @@ export const App = Native.component({
     }
     const list = h.id("list")
     const scrolled = Animation.scroll(list, "y")
-    return h.view.style({
+    // Pointer events reach this view from whatever is under the pointer.
+    const pointed = (event: string) => (p: Native.PointerPayload) =>
+      Message.Pointed({
+        pointer: `${p.pointerType} ${event} at ${Math.round(p.x)}, ${
+          Math.round(p.y)
+        }`
+      })
+    const screen = h.view.style({
       flex: 1,
       paddingTop: 64,
       paddingHorizontal: 24,
       gap: 20,
       backgroundColor: "white"
-    }).children(
+    }).on("pointerDown", pointed("down")).on("pointerUp", pointed("up"))
+      .on("pointerMove", pointed("move")).on("click", pointed("click"))
+    return screen.children(
       h.view.style({
         flexDirection: "row",
         alignItems: "center",
@@ -282,7 +300,9 @@ export const App = Native.component({
         pressable(h, Message.ToggledList(), "Long list")
       ),
       h.text.style({ fontSize: 16, color: "#374151" }).children(
-        model.selected === "" ? "Tap an item" : `Selected ${model.selected}`
+        model.selected === "" ? "Tap an item" : `Selected ${model.selected}`,
+        model.hovered === "" ? "" : `, hovering ${model.hovered}`,
+        model.pointer === "" ? "" : `\nPointer: ${model.pointer}`
       ),
       pipe(h.scroll.style({ flex: 1 }), Animation.source(list)).children(
         // A sticky header: it moves down as far as the list scrolls up, on
@@ -303,6 +323,8 @@ export const App = Native.component({
         ...model.items.map((item) =>
           Pressable(h, {
             onPress: Message.SelectedItem({ item }),
+            onHoverIn: Message.HoveredItem({ item }),
+            onHoverOut: Message.HoveredItem({ item: "" }),
             props: { pressedStyle: { backgroundColor: "#f3f4f6" } }
           }).key(item).style({ paddingVertical: 8 }).children(
             h.text.style({ fontSize: 16, color: "#111827" }).children(item)

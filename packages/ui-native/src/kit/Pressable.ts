@@ -32,6 +32,13 @@
  * or a render. To change anything else while pressed, such as children,
  * keep a `pressed` flag in the Model from `onPressIn` and `onPressOut`.
  *
+ * **Hovering**
+ *
+ * `onHoverIn` and `onHoverOut` fire when a pointer enters and leaves the
+ * element, as its `pointerEnter` and `pointerLeave` events. They need the
+ * app to turn on React Native's pointer events, described on
+ * `Native.ViewEvents`, as React Native's own `onHoverIn` does.
+ *
  * **Disabled**
  *
  * A disabled `Pressable` has no handlers and `accessibilityState.disabled`,
@@ -165,6 +172,12 @@ export const Pressable = <
     readonly onLongPress?:
       | View.Handler<NoInfer<Msg>, Native.PressPayload>
       | undefined
+    readonly onHoverIn?:
+      | View.Handler<NoInfer<Msg>, Native.PointerPayload>
+      | undefined
+    readonly onHoverOut?:
+      | View.Handler<NoInfer<Msg>, Native.PointerPayload>
+      | undefined
   } = {}
 ): B => {
   touch.press = press
@@ -191,7 +204,9 @@ export const Pressable = <
         press: options.onPress,
         pressIn: options.onPressIn ?? ignore,
         pressOut: options.onPressOut,
-        longPress: options.onLongPress
+        longPress: options.onLongPress,
+        pointerEnter: options.onHoverIn,
+        pointerLeave: options.onHoverOut
       },
       "pressIn",
       {

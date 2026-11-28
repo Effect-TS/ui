@@ -33,7 +33,7 @@ import {
   mounted,
   surface
 } from "./internal/node.ts"
-import { drop, fire, rectOf, route } from "./internal/touch.ts"
+import { drop, fire, nearest, rectOf, route } from "./internal/touch.ts"
 import * as Native from "./Native.ts"
 
 /**
@@ -503,6 +503,8 @@ const setProp = (n: NativeNode, name: string, value: unknown) => {
 const propOf = (name: string): string =>
   "on" + name[0]!.toUpperCase() + name.slice(1)
 
+const bubbles = /^top(Pointer(Down|Up|Move|Cancel)|Click)$/
+
 // Native reports every surface's events through one handler, with the
 // instance handle the host gave `createNode`.
 const listening = new WeakSet<UIManager>()
@@ -517,9 +519,12 @@ const listen = (ui: UIManager) => {
     if (type === "topFocus") focus.node = handle
     else if (type === "topBlur" && focus.node === handle) focus.node = undefined
     const hook = handle.kind.events?.[type]
-    // Strip Fabric's "top" prefix: topLayout -> layout.
     if (hook === undefined) {
-      return fire(handle, type[3]!.toLowerCase() + type.slice(4), payload)
+      // Strip Fabric's "top" prefix: topLayout -> layout.
+      const name = type[3]!.toLowerCase() + type.slice(4)
+      // Native sends these to the deepest view under the pointer.
+      const n = bubbles.test(type) ? nearest(handle, name) : handle
+      return n !== undefined && fire(n, name, payload)
     }
     hook(handle, payload, handle.host)
     // After the microtask render, restore rejected controlled edits if still mounted.
