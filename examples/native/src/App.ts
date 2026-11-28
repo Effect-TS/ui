@@ -18,6 +18,7 @@ import { pipe } from "effect/Function"
 import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
 import mark from "./assets/mark.png"
+import { ListDemo } from "./ListDemo.ts"
 
 const Rect = Schema.Struct({
   x: Schema.Number,
@@ -38,6 +39,7 @@ const Message = UiSchema.TaggedEnum({
   Dropped: {},
   CancelledDrag: {},
   ToggledVirtual: {},
+  ToggledList: {},
   JumpedFar: {},
   ModeChanged: {
     id: Schema.String,
@@ -106,6 +108,7 @@ export const App = Native.component({
     dragged: Schema.Number,
     dropped: Schema.Number,
     showVirtual: Schema.Boolean,
+    showList: Schema.Boolean,
     hidden: Schema.Record(Schema.String, Rect)
   }),
   message: Message
@@ -119,6 +122,7 @@ export const App = Native.component({
     dragged: 0,
     dropped: 0,
     showVirtual: false,
+    showList: false,
     hidden: {}
   }),
   update: {
@@ -143,6 +147,7 @@ export const App = Native.component({
     CancelledDrag: ($) => $.evolve({ dragged: $.model.dropped }),
     ToggledVirtual: ($) =>
       $.evolve({ showVirtual: (show) => !show, hidden: () => ({}) }),
+    ToggledList: ($) => $.evolve({ showList: (show) => !show }),
     JumpedFar: ($) => $.run(ScrollFar.make()),
     ModeChanged: ($, { id, mode, rect }) =>
       $.evolve({
@@ -156,6 +161,18 @@ export const App = Native.component({
       })
   },
   view: (h, model) => {
+    if (model.showList) {
+      return h.view.style({ flex: 1, paddingTop: 48, backgroundColor: "white" })
+        .children(
+          h.view.style({
+            paddingHorizontal: 12,
+            paddingBottom: 8,
+            alignItems: "flex-start"
+          })
+            .children(pressable(h, Message.ToggledList(), "Back")),
+          ListDemo(h, {})
+        )
+    }
     if (model.showVirtual) {
       const rendered = virtualRows.length - Object.keys(model.hidden).length
       return h.view.style({
@@ -261,7 +278,8 @@ export const App = Native.component({
       }).children(h.text.style({ fontSize: 16 }).children("Drag me")),
       h.view.style({ flexDirection: "row", gap: 12 }).children(
         pressable(h, Message.ClickedAdd(), "Add to list"),
-        pressable(h, Message.ToggledVirtual(), "Virtual list")
+        pressable(h, Message.ToggledVirtual(), "Virtual list"),
+        pressable(h, Message.ToggledList(), "Long list")
       ),
       h.text.style({ fontSize: 16, color: "#374151" }).children(
         model.selected === "" ? "Tap an item" : `Selected ${model.selected}`

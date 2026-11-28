@@ -432,6 +432,27 @@ describe("VirtualList", () => {
       )
     }))
 
+  it.effect("keeps the last sticky item above the viewport rendered at its place", () =>
+    Effect.gen(function*() {
+      const scene = yield* Scene.make(
+        VirtualList,
+        { ...base, sticky: [0, 40, 60] },
+        makeStandIn()
+      )
+      scene.mounted(tracked(scene), moved(1000)).emitted(
+        scrolled(50, 54, { offset: 1000 })
+      )
+      assert.deepStrictEqual(indices(scene), [40, ...span(47, 57)])
+      assert.include(
+        scene.get(listLoc).attrs?.style ?? "",
+        "padding-block-start:800px"
+      )
+      assert.strictEqual(
+        scene.all(itemLoc)[1]!.attrs?.style,
+        "margin-block-start:120px"
+      )
+    }))
+
   it.effect("stands in for the rows left out of a table body with empty rows", () =>
     Effect.gen(function*() {
       const scene = yield* Scene.make(VirtualList, {
