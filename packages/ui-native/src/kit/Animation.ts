@@ -398,11 +398,10 @@ export const source: {
  * - `inverted`, as `invertStickyHeaders`: headers dock at the bottom,
  *   for a list that starts at its end.
  *
- * The native driver moves each header, so docking follows the scroll on the
- * UI thread. Shortly after the scroll stops, the position native reports is
- * committed, so a press on a docked header lands on it. A header shows
- * above the rows (`zIndex` 10), and its `transform` is the driver's. Its
- * own `zIndex` and `transform` show again once it stops being a header.
+ * The native driver moves the headers on the UI thread. Shortly after the
+ * scroll stops, their position is committed, so a press on a docked header
+ * lands on it. A header shows above the rows (`zIndex` 10) and the driver
+ * owns its `transform`; its own come back once it stops being a header.
  * Headers dock below a `contentInset` top.
  *
  * **Gotchas**
@@ -591,13 +590,13 @@ interface AnimatedModule {
 const drivers = new WeakMap<Native.ViewHost, Driver | null>()
 // The specs shown without a native driver.
 const plain = new WeakMap<NativeNode, Spec>()
-// Each node's spec from `style`, the sticky headers, and the header of
-// each node native reports the value of.
+// Each node's spec from `style`.
 const own = new WeakMap<NativeNode, Spec>()
 const headers = new WeakMap<NativeNode, Header>()
+// The header each listened node's value reports go to.
 const heard = new Map<number, NativeNode>()
-// The own values of the props a header, or a scroll view with headers,
-// shows in their place, to show again after.
+// The node's own values of the props a header, or a scroll view with
+// headers, shows in their place.
 const kept = new WeakMap<NativeNode, Record<string, unknown>>()
 // Each scroll view's sticky source, kept when its headers go.
 const named = new WeakMap<NativeNode, string>()
@@ -657,7 +656,7 @@ const keep =
   }
 
 // Shows `values` in place of the node's own. A node can be both a header
-// and a scroll view with headers, so each key is kept once.
+// and a scroll view with headers, so each own value is kept once.
 const replace = (n: NativeNode, values: Record<string, unknown>) => {
   let mine = kept.get(n)
   if (mine === undefined) kept.set(n, mine = {})
@@ -793,9 +792,8 @@ const setSticky = (n: NativeNode, value: unknown, host: Native.ViewHost) => {
   }
 }
 
-// Before a commit: makes the scroll views' children at their indices
-// sticky headers, and the others not. A scroll view that no longer has
-// headers, or was removed, is forgotten.
+// Before a commit: makes the children at each scroll view's indices its
+// headers, and forgets scroll views without headers or out of the tree.
 const assign = (host: Native.ViewHost) => {
   const d = drivers.get(host)
   if (d == null) return
@@ -833,10 +831,10 @@ const assign = (host: Native.ViewHost) => {
       translate(d, h)
     }
     if (live) {
-      // As React Native's `ScrollView`: the offset starts at `contentOffset`,
-      // and a top inset, which iOS reports as a negative offset at rest, is
-      // added to it. The value follows the view until it leaves the tree,
-      // so headers that come back start where native has it scrolled.
+      // As React Native's `ScrollView`: the offset starts at `contentOffset`
+      // plus a top inset, which iOS reports as a negative offset at rest.
+      // The value stays bound until the view leaves the tree, so headers
+      // that come back start where native has it scrolled.
       const s = sourceOf(d, st.source)
       s.node = n
       s.pinned = true
@@ -854,8 +852,8 @@ const assign = (host: Native.ViewHost) => {
   }
 }
 
-// After a commit: lays each header's translation out from where native
-// laid the headers out, as React Native's `ScrollViewStickyHeader`.
+// After a commit: builds each header's translation from where native laid
+// the headers out, as React Native's `ScrollViewStickyHeader` does.
 const measure = (d: Driver, n: NativeNode, st: Sticky) => {
   const content = rectOf(n.inner!, false)
   const height = st.options?.inverted ? rectOf(n, false)?.[3] : undefined

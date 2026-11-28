@@ -166,8 +166,8 @@ const coasting = new WeakMap<NativeNode, number>()
 
 let target: NativeNode | undefined
 let taken = false
-// Whether a `"handled"` scroll view takes the touch's press, leaving the
-// touch to the pans.
+// Whether a `"handled"` scroll view takes only the touch's press, leaving
+// the touch to the pans.
 let fenced = false
 // Whether the touch blurs the focused input when it ends: `1` unless a
 // scroll view around its target scrolls first, `2` regardless.
@@ -175,7 +175,7 @@ let blur: 0 | 1 | 2 = 0
 // The target of a touch whose element was removed, until it is cancelled.
 let dropped: NativeNode | undefined
 
-// A handler that takes a touch as it starts, as React Native's responders do.
+// Whether `n` takes a touch as it starts, as React Native's responders do.
 const claims = (n: NativeNode) => {
   const h = n.events?.handlers
   return h !== undefined && (h.press ?? h.pressIn) !== undefined
@@ -194,8 +194,8 @@ export const pressed = (n: NativeNode | undefined): NativeNode | undefined => {
 }
 
 /**
- * Called by a recognizer that takes the touch, such as a `Pan` once it
- * moves, so a `"handled"` scroll view keeps the keyboard up.
+ * Called by a recognizer that takes the touch, such as a `Pan`, so a
+ * `"handled"` scroll view keeps the keyboard up.
  *
  * @internal
  */
@@ -204,18 +204,16 @@ export const own = (): void => {
 }
 
 /**
- * Applies `keyboardShouldPersistTaps` of the scroll views around a touch
- * that starts on `n`, as React Native's `ScrollView` does while the
- * keyboard can be dismissed, setting `taken` when one takes the touch, and
- * `fenced` when one takes only its press.
+ * Applies the `keyboardShouldPersistTaps` of the scroll views around a
+ * touch that starts on `n`, as React Native's `ScrollView` does, setting
+ * `taken` when one takes the touch and `fenced` when it takes only the
+ * press.
  *
- * A `"never"` scroll view takes a touch that doesn't start on an input. A
- * `"handled"` one takes it when nothing inside it handles a press, but only
- * its press when a `Pan` inside can take a drag. Either way the focused
- * input is blurred when the touch ends, unless the scroll view scrolls or
- * the `Pan` takes the touch. A keyboard of height 0, which doesn't cover
- * the app, lets a `"never"` scroll view's touch through to the elements
- * and blurs when it ends, as React Native's `ScrollView` does.
+ * A `"handled"` scroll view with a `Pan` inside takes only the press, so
+ * the `Pan` can still take a drag. The focused input is blurred when the
+ * touch ends, unless the scroll view scrolls or the `Pan` takes the touch.
+ * A keyboard of height 0 doesn't cover the app, so `"never"` lets the
+ * touch through and still blurs.
  */
 const persist = (n: NativeNode): void => {
   const input = kinds.get("input")
@@ -253,7 +251,7 @@ const persist = (n: NativeNode): void => {
   fenced = !take && fence
 }
 
-// As React Native's `ScrollView`, which checks again when the touch ends.
+// Checked again when the touch ends, as React Native's `ScrollView` does.
 const keyboardUp = () => focus.keyboard !== undefined || focus.unreliable
 
 const reset = () => {

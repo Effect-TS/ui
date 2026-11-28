@@ -101,9 +101,8 @@ export interface Options {
   /** The surface the host renders into, as native passes it to `runApplication`. */
   readonly rootTag: number
   /**
-   * The device the surface is on, for its `os`, colours and native modules.
-   * Its keyboard events tell a `scroll` whether a tap can dismiss the
-   * keyboard.
+   * The device the surface is on, for its `os`, colours, native modules and
+   * keyboard events.
    */
   readonly device: Native.Device
   /** Called after every `commit`, whether or not it changed anything. */

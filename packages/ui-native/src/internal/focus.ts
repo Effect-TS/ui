@@ -5,9 +5,9 @@ import { observe } from "./observe.ts"
 
 /**
  * The view native last reported focused, until it reports it blurred, and
- * the soft keyboard: its height while native reports it shown. `unreliable`
- * is set on Android before API 30, whose keyboard events can be missing, so
- * React Native treats the keyboard as possibly shown there.
+ * the soft keyboard's height while it's shown. `unreliable` is set on
+ * Android before API 30, whose keyboard events can be missing, so the
+ * keyboard counts as possibly shown, as in React Native.
  *
  * @internal
  */
@@ -29,12 +29,7 @@ export const blurFocused = (): void => {
 
 const tracked = new WeakSet<Device>()
 
-/**
- * Follows the device's keyboard events, as React Native's `ScrollView`
- * does.
- *
- * @internal
- */
+/** Follows the device's keyboard events. @internal */
 export const trackKeyboard = (device: Device): void => {
   if (tracked.has(device)) return
   tracked.add(device)

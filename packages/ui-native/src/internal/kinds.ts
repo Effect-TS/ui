@@ -203,22 +203,12 @@ export const props = new Map<
 /** Called after every commit, by kit modules that follow nodes. @internal */
 export const commits = new Set<(host: ViewHost) => void>()
 
-/**
- * Called with every event native sends a node, by kit modules that follow
- * what native changes between commits.
- *
- * @internal
- */
+/** Called with every native event, by kit modules. @internal */
 export const listeners = new Set<
   (node: NativeNode, type: string, payload: any) => void
 >()
 
-/**
- * Called before every commit, to set props the commit carries: deferred
- * input text, and those of kit modules on nodes they follow.
- *
- * @internal
- */
+/** Called before every commit, to set props it should carry. @internal */
 export const precommits = new Set<(host: ViewHost) => void>([flushInputs])
 
 /** `LayoutAnimation` configs by view transition type. @internal */

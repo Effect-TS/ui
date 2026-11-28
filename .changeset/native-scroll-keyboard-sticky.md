@@ -2,4 +2,4 @@
 "@effect/ui-native": minor
 ---
 
-Add `keyboardShouldPersistTaps` to `h.scroll`, which dismisses the keyboard on a tap as React Native's `ScrollView` does, and `Animation.stickyHeaders`, which docks a scroll view's children on the native driver like `stickyHeaderIndices`.
+Add `h.scroll.keyboardShouldPersistTaps`, which controls whether a tap dismisses the keyboard, and `Animation.stickyHeaders`, which docks a scroll view's children on the native driver, as React Native's `stickyHeaderIndices` does.

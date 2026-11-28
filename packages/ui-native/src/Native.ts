@@ -1604,18 +1604,17 @@ export class ScrollElement<
   }
 
   /**
-   * What a tap does while an `input` inside the app has the soft keyboard
-   * up, as React Native's `keyboardShouldPersistTaps`:
+   * What a tap does while the soft keyboard is up, as React Native's
+   * `keyboardShouldPersistTaps`:
    *
-   * - `"never"`, the default: a tap that doesn't start on an `input` only
-   *   dismisses the keyboard. Elements inside get the next tap.
-   * - `"handled"`: a tap that nothing inside handles with `press` or a
-   *   `Pressable` dismisses the keyboard and presses nothing around the
-   *   scroll view. A `Pan` inside can still take it as a drag, which keeps
-   *   the keyboard up. Others go through.
-   * - `"always"`: taps go through and leave the keyboard up.
+   * - `"never"` (default): a tap that doesn't start on an `input` only
+   *   dismisses the keyboard.
+   * - `"handled"`: a tap nothing inside handles (`press` or a
+   *   `Pressable`) only dismisses the keyboard. A `Pan` inside can still
+   *   take it as a drag, which keeps the keyboard up.
+   * - `"always"`: every tap goes through and the keyboard stays up.
    *
-   * A tap that scrolls the view leaves the keyboard up.
+   * A tap that scrolls the view keeps the keyboard up.
    *
    * @since 0.1.0
    */
