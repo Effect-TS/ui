@@ -1,5 +1,6 @@
 // Every export of this module is a component, so an edit to it swaps in
 // place in the dev client and keeps the count, the name and the list.
+import { Pan, Pressable } from "@effect/ui-native/kit"
 import * as Native from "@effect/ui-native/Native"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
@@ -10,7 +11,11 @@ const Message = UiSchema.TaggedEnum({
   ClickedReset: {},
   ChangedName: { value: Schema.String },
   ChangedNotes: { value: Schema.String },
-  ClickedAdd: {}
+  ClickedAdd: {},
+  SelectedItem: { item: Schema.String },
+  Dragged: { dx: Schema.Number },
+  Dropped: {},
+  CancelledDrag: {}
 })
 
 const button = {
@@ -34,9 +39,13 @@ const pressable = (
   message: typeof Message.Type,
   text: string
 ) =>
-  h.view.style(button).on("press", message).children(
-    h.text.style(label).children(text)
-  )
+  Pressable(h, {
+    onPress: message,
+    props: {
+      pressedStyle: { backgroundColor: "#374151" },
+      android_ripple: { color: "#ffffff40" }
+    }
+  }).style(button).children(h.text.style(label).children(text))
 
 export const App = Native.component({
   name: "App",
@@ -44,11 +53,23 @@ export const App = Native.component({
     count: Schema.Number,
     name: Schema.String,
     notes: Schema.String,
-    items: Schema.Array(Schema.String)
+    items: Schema.Array(Schema.String),
+    selected: Schema.String,
+    // The handle's offset while dragged, and where it was last dropped.
+    dragged: Schema.Number,
+    dropped: Schema.Number
   }),
   message: Message
 }).make({
-  init: () => ({ count: 0, name: "", notes: "", items: [] }),
+  init: () => ({
+    count: 0,
+    name: "",
+    notes: "",
+    items: [],
+    selected: "",
+    dragged: 0,
+    dropped: 0
+  }),
   update: {
     ClickedDecrement: ($) => $.evolve({ count: (count) => count - 1 }),
     ClickedIncrement: ($) => $.evolve({ count: (count) => count + 1 }),
@@ -63,7 +84,11 @@ export const App = Native.component({
           ...items,
           `Item ${items.length + 1}: ${$.model.name || "stranger"}`
         ]
-      })
+      }),
+    SelectedItem: ($, { item }) => $.evolve({ selected: item }),
+    Dragged: ($, { dx }) => $.evolve({ dragged: $.model.dropped + dx }),
+    Dropped: ($) => $.evolve({ dropped: $.model.dragged }),
+    CancelledDrag: ($) => $.evolve({ dragged: $.model.dropped })
   },
   view: (h, model) =>
     h.view.style({
@@ -97,14 +122,30 @@ export const App = Native.component({
         "Hello, ",
         h.text.style({ fontWeight: "bold" }).children(model.name || "stranger")
       ),
+      Pan(h, {
+        onMove: ({ dx }) => Message.Dragged({ dx }),
+        onEnd: Message.Dropped(),
+        onCancel: Message.CancelledDrag(),
+        props: { axis: "x" }
+      }).style({
+        left: model.dragged,
+        alignSelf: "flex-start",
+        padding: 12,
+        borderRadius: 8,
+        backgroundColor: "#e5e7eb"
+      }).children(h.text.style({ fontSize: 16 }).children("Drag me")),
       pressable(h, Message.ClickedAdd(), "Add to list"),
+      h.text.style({ fontSize: 16, color: "#374151" }).children(
+        model.selected === "" ? "Tap an item" : `Selected ${model.selected}`
+      ),
       h.scroll.style({ flex: 1 }).children(
         ...model.items.map((item) =>
-          h.text.key(item).style({
-            fontSize: 16,
-            paddingVertical: 8,
-            color: "#111827"
-          }).children(item)
+          Pressable(h, {
+            onPress: Message.SelectedItem({ item }),
+            props: { pressedStyle: { backgroundColor: "#f3f4f6" } }
+          }).key(item).style({ paddingVertical: 8 }).children(
+            h.text.style({ fontSize: 16, color: "#111827" }).children(item)
+          )
         )
       )
     )

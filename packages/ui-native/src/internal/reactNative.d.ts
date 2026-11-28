@@ -48,3 +48,8 @@ declare module "react-native/Libraries/Utilities/DevSettings" {
   }
   export default DevSettings
 }
+
+declare module "react-native/Libraries/Components/Sound/NativeSoundManager" {
+  const NativeSoundManager: { readonly playTouchSound: () => void } | null
+  export default NativeSoundManager
+}

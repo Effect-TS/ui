@@ -10,7 +10,7 @@ React Native vocabulary and Fabric host for `@effect/ui`. Apps render native vie
 ## Modules
 
 - `Native`: `Native.component`, `Native.H`, the element vocabulary (`view`, `text`, `scroll`, `input`), style, prop and event types, `Native.Host`, `Native.clear`, `Native.setSelection`, and `Native.defineView` for custom native views
-- `@effect/ui-native/kit`: native controls and APIs beyond the vocabulary, bundled only when imported, such as `Css`, which parses CSS strings into the style forms native reads, `RefreshControl` for pull to refresh, and the screen containers `Modal`, `SafeArea`, `Drawer` and `InputAccessory`
+- `@effect/ui-native/kit`: native controls and APIs beyond the vocabulary, bundled only when imported. `Css` parses CSS strings into the style forms native reads, `RefreshControl` adds pull to refresh, and `Modal`, `SafeArea`, `Drawer` and `InputAccessory` are screen containers. `Pressable` adds press states, a pressed style and the Android ripple; `Pan` handles drags after a configurable movement threshold
 - `NativeHost`: `make`, the `Renderer.Host` that builds Fabric shadow trees and commits them to a surface
 - `NativeApp`: `mount`, `mountEffect`, and `register`, which runs an app on every surface native starts; the `Surface` service
 - `@effect/ui-native/networking`: opt-in side-effect entry that installs React Native's networking globals (`fetch`, `XMLHttpRequest`, `WebSocket`, `URL`, `AbortController`)
@@ -58,6 +58,10 @@ React Native doesn't load the `expo` package itself: an app that doesn't import 
 
 Networking globals are opt-in, so apps that don't make requests don't bundle React Native's XHR stack. If your app uses `fetch` or `FetchHttpClient`, add `import "@effect/ui-native/networking"` to the entry module.
 
+## Touches
+
+The core host recognizes one touch at a time, from the first finger down to the last one lifted. Without the kit it sends `press` to the nearest element with a `press` handler, when the touch ends on that element or within 20 points of it. A scroll view takes the touch when it starts dragging under it, or when the touch starts while the scroll view is still moving. Either way no `press` is sent. Importing `Pressable` or `Pan` from the kit replaces this recognizer with one that also handles press timing and pans. A plain `.on("press")` keeps working with it.
+
 ## Styles and props
 
 `.style()` takes React Native's style names and `.prop()` its other props, such as `testID`, `role`, `accessibilityLabel` or a `text`'s `numberOfLines`. Both are typed, and `.prop()` takes any value for a name without a type.
@@ -70,4 +74,4 @@ Use native prop names and plain style objects. React Native's `aria-*` and `id` 
 
 ## Example
 
-See `examples/native` and its README, which covers the development client, release builds and measuring the bundle. It is an Expo app with a counter, a controlled input, nested text, and a scrolling list. Its `babel.config.cjs` runs TypeScript's type stripper before Expo's, because Metro compiles the workspace's TypeScript sources there and Flow's stripper rejects `declare` class fields.
+See `examples/native` and its README, which covers the development client, release builds and measuring the bundle. It is an Expo app with a counter, a controlled input, nested text, a draggable handle, and a scrolling list of pressable rows. Its `babel.config.cjs` runs TypeScript's type stripper before Expo's, because Metro compiles the workspace's TypeScript sources there and Flow's stripper rejects `declare` class fields.

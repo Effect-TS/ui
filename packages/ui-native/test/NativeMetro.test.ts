@@ -94,7 +94,7 @@ export default [Platform, title, flavor, topping]
   )
 
   it(
-    "drops unused definitions and Css helpers, and keeps opt-in networking",
+    "drops unused definitions, kit modules and Css helpers, and keeps opt-in networking",
     async () => {
       const link = (name: string, target: string) => {
         Fs.mkdirSync(Path.join(root, "node_modules", Path.dirname(name)), {
@@ -132,7 +132,7 @@ NativeApp.register(NativeApp.mount(App, {}))
           [
             `import { clear, setSelection } from "@effect/ui-native/Native"`,
             `import "@effect/ui-native"`,
-            `import "@effect/ui-native/kit"`,
+            `import { Pan, Pressable } from "@effect/ui-native/kit"`,
             `import "./toggle"`
           ].join("\n"),
           ""

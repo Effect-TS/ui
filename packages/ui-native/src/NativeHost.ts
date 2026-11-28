@@ -17,9 +17,10 @@
  * @since 0.1.0
  */
 import type * as Renderer from "@effect/ui/Renderer"
-import type * as View from "@effect/ui/View"
 import type * as Context from "effect/Context"
 import { flushInputs, kinds } from "./internal/kinds.ts"
+import { isColor, markDirty, mounted, surface } from "./internal/node.ts"
+import { drop, fire, rectOf, route } from "./internal/touch.ts"
 import * as Native from "./Native.ts"
 
 /**
@@ -56,6 +57,16 @@ export interface UIManager {
     node: unknown,
     includeTransform: boolean
   ): ReadonlyArray<number> | null | undefined
+  /**
+   * Marks the node as the JS responder, which stops native views inside it
+   * from handling the touch and, with `blockNativeResponder` on Android, a
+   * scroll view around it from taking it.
+   */
+  setIsJSResponder(
+    node: unknown,
+    isJSResponder: boolean,
+    blockNativeResponder: boolean
+  ): void
 }
 
 /**
@@ -75,11 +86,6 @@ export interface Options {
   readonly processColor: (color: unknown) => unknown
   /** Called after every `commit`, whether or not it changed anything. */
   readonly onCommit?: (() => void) | undefined
-}
-
-interface EventEntry {
-  readonly handlers: Readonly<Record<string, View.Handler<unknown, any>>>
-  readonly dispatch: Renderer.Dispatch
 }
 
 /**
@@ -113,7 +119,7 @@ export class NativeNode {
   lead: NativeNode | undefined = undefined
   /** The node rendered around this node, which is its `lead`. */
   outer: NativeNode | undefined = undefined
-  events: EventEntry | undefined = undefined
+  events: Renderer.Events | undefined = undefined
   /** A text input's count of edits, which native needs back with its text. */
   eventCount = 0
   /** The `value` the renderer set last, put back when native's edit isn't taken. */
@@ -140,13 +146,10 @@ const defaultsOf = ({ host, kind: { defaults } }: NativeNode) =>
   typeof defaults === "function" ? defaults(host) : defaults
 
 const rawText: Native.ViewKind = { viewName: "RCTRawText" }
-// Distinct references so restore can tell mounted roots from kept containers.
-const surface: Native.ViewKind = { viewName: "" }
 const container: Native.ViewKind = { viewName: "" }
 
 let lastTag = 0
 
-const isColor = /(^c|C)olor(Android)?$/
 const none = {}
 
 /**
@@ -211,7 +214,30 @@ export const make = (options: Options): {
   ) => {
     if (n.shadow !== undefined) ui.dispatchCommand(n.shadow, name, args)
   }
-  const view: Native.ViewHost = { os, set: setNative, color, command, fire }
+  const commit = () => {
+    flushInputs(view)
+    if (root.dirty) {
+      root.dirty = false
+      root.kidsChanged = false
+      const set = ui.createChildSet(rootTag)
+      for (let k = root.first; k !== undefined; k = k.next) {
+        if (k.kind !== rawText && k.kind.attach === undefined) {
+          ui.appendChildToSet(set, build(place(k), rootTag))
+        }
+      }
+      ui.completeRoot(rootTag, set)
+    }
+    onCommit?.()
+  }
+  const view: Native.ViewHost = {
+    os,
+    ui,
+    set: setNative,
+    color,
+    command,
+    fire,
+    commit
+  }
   const root = new NativeNode(surface, view)
 
   const move = (from: NativeNode, to: NativeNode, outer: RegExp) => {
@@ -309,6 +335,18 @@ export const make = (options: Options): {
 
   const contentOf = (n: NativeNode): NativeNode => n.inner ?? n
 
+  const unlink = (n: NativeNode) => {
+    const parent = n.parent
+    if (parent === undefined) return
+    if (n.kind.attach !== undefined) detach(host.parentOf(n)!, n)
+    if (n.prev === undefined) parent.first = n.next
+    else n.prev.next = n.next
+    if (n.next === undefined) parent.last = n.prev
+    else n.next.prev = n.prev
+    n.parent = n.prev = n.next = undefined
+    parent.kidsChanged = true
+    markDirty(parent)
+  }
   const host: Renderer.Host<NativeNode> = {
     elements: [Native.name],
     controlled: new Set(["value"]),
@@ -342,7 +380,7 @@ export const make = (options: Options): {
       setProp(n, name, value)
     },
     insertBefore(parent, n, ref) {
-      if (n.parent !== undefined) host.remove(n)
+      if (n.parent !== undefined) unlink(n)
       if (n.kind.attach !== undefined) attach(parent, n)
       parent = contentOf(parent)
       const prev = ref === undefined ? parent.last : ref.prev
@@ -357,16 +395,8 @@ export const make = (options: Options): {
       markDirty(parent)
     },
     remove(n) {
-      const parent = n.parent
-      if (parent === undefined) return
-      if (n.kind.attach !== undefined) detach(host.parentOf(n)!, n)
-      if (n.prev === undefined) parent.first = n.next
-      else n.prev.next = n.next
-      if (n.next === undefined) parent.last = n.prev
-      else n.next.prev = n.prev
-      n.parent = n.prev = n.next = undefined
-      parent.kidsChanged = true
-      markDirty(parent)
+      drop(n)
+      unlink(n)
     },
     parentOf(n) {
       const parent = n.parent
@@ -375,9 +405,9 @@ export const make = (options: Options): {
         : parent
     },
     nextOf: (n) => n.next,
-    setEvents(n, handlers, dispatch) {
+    setEvents(n, handlers, dispatch, options) {
       const was: object = n.events?.handlers ?? none
-      n.events = { handlers, dispatch }
+      n.events = { handlers, dispatch, options }
       for (const name in was) {
         if (!(name in handlers) && name !== "press") {
           setProp(n, propOf(name), undefined)
@@ -391,21 +421,7 @@ export const make = (options: Options): {
         else setProp(n, propOf(name), true)
       }
     },
-    commit() {
-      flushInputs(view)
-      if (root.dirty) {
-        root.dirty = false
-        root.kidsChanged = false
-        const set = ui.createChildSet(rootTag)
-        for (let k = root.first; k !== undefined; k = k.next) {
-          if (k.kind !== rawText && k.kind.attach === undefined) {
-            ui.appendChildToSet(set, build(place(k), rootTag))
-          }
-        }
-        ui.completeRoot(rootTag, set)
-      }
-      onCommit?.()
-    }
+    commit
   }
   const operations: Context.Service.Shape<typeof Native.Host> = {
     command,
@@ -415,9 +431,7 @@ export const make = (options: Options): {
       command(n, "scrollTo", [x, y, animated]),
     scrollToEnd: (n, animated = true) => command(n, "scrollToEnd", [animated]),
     measure(n) {
-      const rect = n.shadow === undefined
-        ? undefined
-        : ui.getBoundingClientRect(n.shadow, false)
+      const rect = rectOf(n, false)
       if (rect == null) return undefined
       const [x, y, width, height] = rect as [number, number, number, number]
       return { x, y, width, height }
@@ -442,23 +456,10 @@ const same = (a: any, b: any): boolean => {
   return !extra
 }
 
-const markDirty = (n: NativeNode | undefined) => {
-  while (n !== undefined && !n.dirty) {
-    n.dirty = true
-    n = n.parent
-    if (n !== undefined) n.kidsChanged = true
-  }
-}
-
 const setProp = (n: NativeNode, name: string, value: unknown) => {
   const set = n.kind.props?.[name]
   if (set === undefined) n.host.set(n, name, value)
   else set(n, value, n.host)
-}
-
-const fire = (n: NativeNode, name: string, payload: unknown) => {
-  const handler = n.events?.handlers[name]
-  if (handler !== undefined) n.events!.dispatch(name, handler, payload)
 }
 
 const propOf = (name: string): string =>
@@ -468,53 +469,12 @@ const propOf = (name: string): string =>
 // instance handle the host gave `createNode`.
 const listening = new WeakSet<UIManager>()
 
-// How far, in points, a touch may end outside the pressed view and still
-// press it, as React Native's `Pressable` allows by default.
-const slop = 20
-
 const listen = (ui: UIManager) => {
   if (listening.has(ui)) return
   listening.add(ui)
-  let pressed: NativeNode | undefined
-  const within = (n: NativeNode, x: number, y: number) => {
-    const rect = n.shadow === undefined
-      ? undefined
-      : ui.getBoundingClientRect(n.shadow, true)
-    if (rect == null) return true
-    const [left, top, width, height] = rect as [number, number, number, number]
-    return x >= left - slop && x <= left + width + slop &&
-      y >= top - slop && y <= top + height + slop
-  }
   ui.registerEventHandler((handle, type, payload) => {
     if (!(handle instanceof NativeNode)) return
-    switch (type) {
-      case "topTouchStart": {
-        let n: NativeNode | undefined = handle
-        while (n !== undefined && n.events?.handlers.press === undefined) {
-          n = n.parent
-        }
-        pressed = n
-        return
-      }
-      case "topTouchCancel": {
-        pressed = undefined
-        return
-      }
-      case "topTouchEnd": {
-        const target = pressed
-        pressed = undefined
-        if (target === undefined) return
-        const touch = (payload as any)?.changedTouches?.[0]
-        const x = touch?.pageX ?? 0
-        const y = touch?.pageY ?? 0
-        let n: NativeNode | undefined = handle
-        while (n !== undefined && n !== target) n = n.parent
-        if (n !== undefined && within(target, x, y)) {
-          fire(target, "press", { x, y })
-        }
-        return
-      }
-    }
+    route(handle, type, payload)
     const hook = handle.kind.events?.[type]
     // Strip Fabric's "top" prefix: topLayout -> layout.
     if (hook === undefined) {
@@ -524,9 +484,7 @@ const listen = (ui: UIManager) => {
     // After the microtask render, restore rejected controlled edits if still mounted.
     if (handle.value !== undefined) {
       setTimeout(() => {
-        let n = handle
-        while (n.parent !== undefined) n = n.parent
-        if (n.kind === surface) setProp(handle, "value", handle.value)
+        if (mounted(handle)) setProp(handle, "value", handle.value)
       }, 0)
     }
   })

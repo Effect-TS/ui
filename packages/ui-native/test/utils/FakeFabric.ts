@@ -24,6 +24,7 @@ export interface ShadowNode {
 export const make = () => {
   const calls: Record<string, number> = {}
   const commands: Array<readonly [number, string, ReadonlyArray<unknown>]> = []
+  const responders: Array<readonly [number, boolean, boolean]> = []
   const rects = new Map<number, readonly [number, number, number, number]>()
   const count = (name: string) => (calls[name] = (calls[name] ?? 0) + 1)
   // Fabric asserts this in ShadowNodeFamily::setParent.
@@ -117,12 +118,16 @@ export const make = () => {
     },
     getBoundingClientRect(node: any) {
       return rects.get(node.tag)
+    },
+    setIsJSResponder(node: any, isResponder, block) {
+      responders.push([node.tag, isResponder, block])
     }
   }
   return {
     ui,
     calls,
     commands,
+    responders,
     /** Places the view with `tag` on screen, for hit tests and `measure`. */
     place: (n: ShadowNode, rect: readonly [number, number, number, number]) =>
       rects.set(n.tag, rect),
