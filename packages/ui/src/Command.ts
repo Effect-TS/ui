@@ -81,6 +81,7 @@ import * as Predicate from "effect/Predicate"
 import * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
+import * as Tracer from "effect/Tracer"
 import type * as Types from "effect/Types"
 import type * as Component from "./Component.ts"
 import * as commandRun from "./internal/commandRun.ts"
@@ -350,6 +351,37 @@ export interface Declared {
 }
 
 /**
+ * The coordinates of a Command run's trace span: enough to continue the same
+ * trace in a later Command with `Command.withParentSpan`, without holding
+ * any span or fiber open in between.
+ *
+ * **Details**
+ *
+ * Plain data backed by a `Schema`, so a component can store it in its Model
+ * or pass it in a message. `sampled` travels with the ids so a child of an
+ * unsampled root stays unsampled. `Tracer.Span` and `Tracer.ExternalSpan`
+ * match this shape as well.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export const SpanContext = /*#__PURE__*/ Schema.Struct({
+  traceId: Schema.String,
+  spanId: Schema.String,
+  sampled: Schema.Boolean
+})
+
+/**
+ * A Command run's span coordinates.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type SpanContext = typeof SpanContext.Type
+
+/**
  * The data every issued Command carries, matched or not.
  *
  * @stability experimental
@@ -364,6 +396,11 @@ export interface Data extends Declared {
   readonly mode: Mode
   /** The group key: canonical JSON of the encoded `group` fields, or `undefined` without `group`. */
   readonly groupKey: string | undefined
+  /**
+   * The span context given to `Command.withParentSpan`, or `undefined` when
+   * the run starts its own trace.
+   */
+  readonly parentSpan: SpanContext | undefined
   /**
    * The args Schema, for the log.
    *
@@ -399,14 +436,14 @@ export interface Proto<out Msg, in Source = Msg, in SourceE = never>
    *
    * @internal
    */
-  readonly resolve: (result: Source) => Msg
+  readonly resolve: (result: Source, span: SpanContext) => Msg
   /**
    * Maps a typed failure of the underlying definition to the message this
    * Command produces. `undefined` when the definition can't fail.
    *
    * @internal
    */
-  readonly reject: ((error: SourceE) => Msg) | undefined
+  readonly reject: ((error: SourceE, span: SpanContext) => Msg) | undefined
 }
 
 /**
@@ -922,9 +959,30 @@ interface Fields extends Data {
   readonly _tag: Kind
   readonly "~group": GroupSource | undefined
   readonly work: Effect.Effect<any, any, any> | Stream.Stream<any, any, any>
-  readonly resolve: (result: any) => any
-  readonly reject: ((error: any) => any) | undefined
+  readonly resolve: (result: any, span: SpanContext) => any
+  readonly reject: ((error: any, span: SpanContext) => any) | undefined
 }
+
+const noSpan: SpanContext = {
+  traceId: "00000000000000000000000000000000",
+  spanId: "0000000000000000",
+  sampled: false
+}
+
+/** Calls a mapping with the span the work ran in, or an unsampled placeholder outside any trace. */
+const withSpan = <A>(
+  value: A,
+  f: (value: A, span: SpanContext) => unknown
+): Effect.Effect<unknown> =>
+  Effect.map(Effect.context<never>(), (context) => {
+    const span = Context.getOrUndefined(context, Tracer.ParentSpan)
+    return f(
+      value,
+      span === undefined
+        ? noSpan
+        : { traceId: span.traceId, spanId: span.spanId, sampled: span.sampled }
+    )
+  })
 
 /** `effect` and `stream` are the work with `resolve` and `reject` applied. An unmatched Command keeps its failure. */
 const makeIssued = (fields: Fields, unmatched = false): any => {
@@ -934,17 +992,26 @@ const makeIssued = (fields: Fields, unmatched = false): any => {
   if (fields._tag === "Effect") {
     const mapped = resolve === identity
       ? work as Effect.Effect<any, any, any>
-      : Effect.map(work as Effect.Effect<any, any, any>, resolve)
+      : Effect.flatMap(
+        work as Effect.Effect<any, any, any>,
+        (value) => withSpan(value, resolve)
+      )
     effect = reject === undefined
       ? mapped
-      : Effect.catch(mapped, (error) => Effect.sync(() => reject(error)))
+      : Effect.catch(mapped, (error) => withSpan(error, reject))
   } else {
     const mapped = resolve === identity
       ? work as Stream.Stream<any, any, any>
-      : Stream.map(work as Stream.Stream<any, any, any>, resolve)
+      : Stream.mapEffect(
+        work as Stream.Stream<any, any, any>,
+        (value) => withSpan(value, resolve)
+      )
     stream = reject === undefined
       ? mapped
-      : Stream.catch(mapped, (error) => Stream.sync(() => reject(error)))
+      : Stream.catch(
+        mapped,
+        (error) => Stream.fromEffect(withSpan(error, reject))
+      )
   }
   return Object.assign(
     Object.create(unmatched ? UnmatchedProto : Proto),
@@ -1049,6 +1116,7 @@ const define = (
         groupKey: source?.key,
         "~group": source,
         argsSchema,
+        parentSpan: undefined,
         afterRefetch: undefined,
         resolve: identity,
         reject: undefined,
@@ -1416,6 +1484,9 @@ export const Service: <Self>() => {
  * returns an `Interrupt` unchanged; the pipeable form only takes issued
  * Commands.
  *
+ * The mapping's second argument is the run's `SpanContext`, for a later
+ * Command that continues its trace through `withParentSpan`.
+ *
  * **Gotchas**
  *
  * The pipeable form infers one `Source` and one `R` for its input, so it maps
@@ -1445,23 +1516,31 @@ export const Service: <Self>() => {
  */
 export const map: {
   <A, B>(
-    f: (a: A) => B
+    f: (a: A, span: SpanContext) => B
   ): <R, Source, K extends Kind, SourceE>(
     self: Issued<A, R, Source, K, SourceE>
   ) => Mapped<Issued<A, R, Source, K, SourceE>, B>
   <C extends Command<any, any>, B>(
     self: C,
-    f: (a: Message<C>) => B
+    f: (a: Message<C>, span: SpanContext) => B
   ): Mapped<C, B>
-} = dual(2, <A, R, B>(self: Command<A, R>, f: (a: A) => B): Command<B, R> => {
-  if (self._tag === "Interrupt") return self
-  const { reject, resolve } = self as unknown as Fields
-  return makeIssued({
-    ...(self as unknown as Fields),
-    resolve: (result) => f(resolve(result)),
-    reject: reject === undefined ? undefined : (error) => f(reject(error))
-  })
-})
+} = dual(
+  2,
+  <A, R, B>(
+    self: Command<A, R>,
+    f: (a: A, span: SpanContext) => B
+  ): Command<B, R> => {
+    if (self._tag === "Interrupt") return self
+    const { reject, resolve } = self as unknown as Fields
+    return makeIssued({
+      ...(self as unknown as Fields),
+      resolve: (result, span) => f(resolve(result, span), span),
+      reject: reject === undefined
+        ? undefined
+        : (error, span) => f(reject(error, span), span)
+    })
+  }
+)
 
 /**
  * Replaces each message a Command produces with the supplied value.
@@ -1560,7 +1639,8 @@ export const asNoop = <C extends Command<any, any>>(
  * `onSuccess` maps the body's success, or each element of a Stream Command,
  * and `onFailure` the typed failure, which ends a Stream Command. A defect or
  * an interrupt isn't mapped. A Command whose body can't fail takes `map`, and
- * `match` on it doesn't compile.
+ * `match` on it doesn't compile. Both mappings get the run's `SpanContext`
+ * as their second argument, as with `map`.
  *
  * In a `Story` or `Scene` the mapping runs in the test: `resolve` takes the
  * body's success and `fail` its typed error. A Stream Command takes `next`
@@ -1599,18 +1679,18 @@ export const asNoop = <C extends Command<any, any>>(
  */
 export const match: {
   <A, E, B, C>(options: {
-    readonly onSuccess: (a: A) => B
-    readonly onFailure: (e: E) => C
+    readonly onSuccess: (a: A, span: SpanContext) => B
+    readonly onFailure: (e: E, span: SpanContext) => C
   }): <R, K extends Kind>(
     self: Unmatched<A, E, R, K>
   ) => Issued<B | C, R, A, K, E>
   <A, E, R, K extends Kind, B, C>(self: Unmatched<A, E, R, K>, options: {
-    readonly onSuccess: (a: A) => B
-    readonly onFailure: (e: E) => C
+    readonly onSuccess: (a: A, span: SpanContext) => B
+    readonly onFailure: (e: E, span: SpanContext) => C
   }): Issued<B | C, R, A, K, E>
 } = dual(2, (self: Unmatched<any, any, any, Kind>, options: {
-  readonly onSuccess: (a: any) => any
-  readonly onFailure: (e: any) => any
+  readonly onSuccess: (a: any, span: SpanContext) => any
+  readonly onFailure: (e: any, span: SpanContext) => any
 }): any =>
   makeIssued({
     ...(self as unknown as Fields),
@@ -1722,6 +1802,72 @@ export const afterRefetch: {
     },
     UnmatchedTypeId in self
   ))
+
+/**
+ * Runs a Command as a child of an earlier span context, continuing its trace
+ * without keeping any span or fiber open across the gap.
+ *
+ * **When to use**
+ *
+ * Use when one user workflow spans several Commands separated by user
+ * interaction, such as a preflight check followed by a confirmation click.
+ * Store the first run's `SpanContext` (from the second argument of `map` or
+ * `match`) in the Model, then pass it to the follow-up Command.
+ *
+ * **Details**
+ *
+ * Works on issued and unmatched Commands of both `"Effect"` and `"Stream"`
+ * kinds, on either side of `match` and `map`. Passing `null` or `undefined`
+ * is a no-op. Sets `parentSpan` on the issued Command data so a Story test
+ * can assert it without running anything.
+ *
+ * **Example** (Continuing a preflight trace after confirmation)
+ *
+ * ```ts import.meta.vitest
+ * import { Command } from "@effect/ui"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Release = Command.make("Release", { args: { id: Schema.String } }, () => Effect.void)
+ *
+ * const parent: Command.SpanContext = {
+ *   traceId: "00000000000000000000000000000001",
+ *   spanId: "0000000000000001",
+ *   sampled: true
+ * }
+ *
+ * const command = Release.make({ id: "1" }).pipe(Command.withParentSpan(parent))
+ * command.parentSpan // => parent
+ * ```
+ *
+ * @stability experimental
+ * @category mapping
+ * @since 0.1.0
+ */
+export const withParentSpan: {
+  (
+    span: SpanContext | null | undefined
+  ): <C extends Awaitable>(self: C) => C
+  <C extends Awaitable>(
+    self: C,
+    span: SpanContext | null | undefined
+  ): C
+} = dual(
+  2,
+  (self: Awaitable, span: SpanContext | null | undefined): any => {
+    if (span == null) return self
+    return makeIssued(
+      {
+        ...(self as unknown as Fields),
+        parentSpan: {
+          traceId: span.traceId,
+          spanId: span.spanId,
+          sampled: span.sampled
+        }
+      },
+      UnmatchedTypeId in self
+    )
+  }
+)
 
 /**
  * Issues a Command that interrupts the running and queued runs of another one.

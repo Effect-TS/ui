@@ -552,7 +552,8 @@ const queryClass = (def: QueryDef) => {
           def,
           args,
           fetcherOf(context, Base),
-          Context.get(context, CurrentRun)
+          Context.get(context, CurrentRun),
+          Context.getOrUndefined(context, Tracer.ParentSpan)
         )
       )
     }
@@ -562,12 +563,15 @@ const queryClass = (def: QueryDef) => {
       )
     }
     static invalidate(args?: unknown) {
-      return withCache((cache) =>
+      return withCache((cache, context) =>
         Effect.sync(() =>
           cache.invalidate([
             args === undefined ? QueryService : entryTarget(QueryService, args)
           ], {
-            byHand: true
+            byHand: true,
+            parent: toSpanRef(
+              Context.getOrUndefined(context, Tracer.ParentSpan)
+            )
           })
         )
       )
@@ -2844,6 +2848,25 @@ const closeBuild = (build: Build): Effect.Effect<void> =>
 // Cache: the internal API
 // -----------------------------------------------------------------------------
 
+/** A span's ids, without the span: what a fetch keeps of the invalidation that parents it. */
+interface SpanRef {
+  readonly traceId: string
+  readonly spanId: string
+  readonly sampled: boolean
+}
+
+const toSpanRef = (span: Tracer.AnySpan | undefined): SpanRef | undefined =>
+  span === undefined
+    ? undefined
+    : { traceId: span.traceId, spanId: span.spanId, sampled: span.sampled }
+
+const spanFields = (
+  parent: SpanRef | undefined
+): { readonly traceId?: string; readonly parentSpanId?: string } =>
+  parent === undefined
+    ? {}
+    : { traceId: parent.traceId, parentSpanId: parent.spanId }
+
 interface FetchEvent {
   readonly query: string
   readonly logKey: string
@@ -2861,6 +2884,10 @@ interface FetchEvent {
   readonly page?: number
   /** On an infinite query: the encoded cursor of the page, absent for the first. */
   readonly cursor?: Schema.Json
+  /** The parent span's trace id, when a Command's invalidation or span parented this fetch. */
+  readonly traceId?: string
+  /** The parent span id, when a Command's invalidation or span parented this fetch. */
+  readonly parentSpanId?: string
 }
 
 interface WatchHandle {
@@ -2921,8 +2948,8 @@ export interface RunHandle {
   readonly command: string
   /** The predicate of `Query.invalidatesEntry` over the run's declarations. */
   readonly invalidates: (def: QueryDef, argsKey: string) => boolean
-  /** The work begins. A queued run is issued before it starts. */
-  readonly start: () => void
+  /** The work begins, under the run's span. A queued run is issued before it starts. */
+  readonly start: (span?: SpanRef | undefined) => void
   readonly isStarted: () => boolean
   /** Called once, at fiber exit. Later calls do nothing. */
   readonly finish: (exit: RunExit) => void
@@ -2934,7 +2961,8 @@ export interface RunHandle {
    */
   readonly run: <A, E, R>(
     body: Effect.Effect<A, E, R>,
-    writes?: ((success: A) => ReadonlyArray<Write>) | undefined
+    writes?: ((success: A) => ReadonlyArray<Write>) | undefined,
+    span?: SpanRef | undefined
   ) => Effect.Effect<A, E, R>
   /**
    * For a run begun with `afterRefetch`, once a success has applied its
@@ -3044,7 +3072,8 @@ interface CacheInternals {
     def: QueryDef,
     args: unknown,
     fetcher: Fetcher,
-    run: RunHandle | undefined
+    run: RunHandle | undefined,
+    parent?: SpanRef | undefined
   ) => Effect.Effect<any, any>
   readonly prefetch: (def: QueryDef, args: unknown, fetcher: Fetcher) => void
   /**
@@ -3065,7 +3094,10 @@ interface CacheInternals {
    */
   readonly invalidate: (
     targets: ReadonlyArray<Target>,
-    options?: { readonly byHand?: boolean | undefined } | undefined
+    options?: {
+      readonly byHand?: boolean | undefined
+      readonly parent?: SpanRef | undefined
+    } | undefined
   ) => void
   /**
    * Begins a run at issue: registers its patches, which are live from now on.
@@ -3882,6 +3914,7 @@ interface FetchRec {
   fiber: Fiber.Fiber<any, any> | undefined
   /** On an infinite query: an append of one page, instead of a walk from the first. */
   readonly append: boolean
+  readonly parent: SpanRef | undefined
 }
 
 /** A `loadMore` caller, waiting for the walk or append that reaches its page. */
@@ -3924,6 +3957,7 @@ interface Run {
   startSeq: number
   started: boolean
   done: boolean
+  span: SpanRef | undefined
   /** The entries its patches registered on. */
   readonly entries: Set<Entry>
 }
@@ -3979,6 +4013,8 @@ interface Entry {
   patches: Array<PatchRec>
   /** The first trigger deferred under a live patch. */
   deferred: Trigger | undefined
+  /** The parent span of the latest invalidation (or dropped fetch) deferred under a live patch. */
+  deferredParent: SpanRef | undefined
   /** The caller-only fetch `get` callers join, while a patch is live. */
   shared: Shared | undefined
   /** Sequence numbers: when the entry was made, and the last write or invalidation that hit it. */
@@ -4003,10 +4039,11 @@ interface Entry {
 const runBody = <A, E, R>(
   handle: RunHandle,
   body: Effect.Effect<A, E, R>,
-  writes: ((success: A) => ReadonlyArray<Write>) | undefined
+  writes: ((success: A) => ReadonlyArray<Write>) | undefined,
+  span: SpanRef | undefined
 ): Effect.Effect<A, E, R> =>
   Effect.uninterruptibleMask((restore) => {
-    handle.start()
+    handle.start(span)
     return Effect.flatMap(
       Effect.exit(restore(Effect.provideService(body, CurrentRun, handle))),
       (exit): Effect.Effect<A, E> => {
@@ -4377,16 +4414,23 @@ interface CacheEnv {
     trigger: Trigger,
     restart: boolean,
     stored: boolean,
-    page?: PageRef | undefined
+    page?: PageRef | undefined,
+    parent?: SpanRef | undefined
   ) => void
   readonly startFetch: (
     entry: Entry,
     trigger: Trigger,
     build: Build,
     restart: boolean,
-    append?: boolean
+    append?: boolean,
+    parent?: SpanRef | undefined
   ) => void
-  readonly ensureFetch: (entry: Entry, trigger: Trigger, build: Build) => void
+  readonly ensureFetch: (
+    entry: Entry,
+    trigger: Trigger,
+    build: Build,
+    parent?: SpanRef | undefined
+  ) => void
   readonly store: (entry: Entry, result: Settled) => void
   /** Saves a Success that isn't stored through `store`, keeping its timestamp. */
   readonly save: (entry: Entry, result: Settled) => void
@@ -4405,7 +4449,11 @@ interface CacheEnv {
     waiters: Set<{ readonly resume: (exit: Exit.Exit<A, any>) => void }>,
     exit: Exit.Exit<A, any>
   ) => void
-  readonly invalidateEntry: (entry: Entry, cause?: Trigger) => void
+  readonly invalidateEntry: (
+    entry: Entry,
+    cause?: Trigger,
+    parent?: SpanRef | undefined
+  ) => void
   readonly fetchEnded: () => void
 }
 
@@ -4450,7 +4498,8 @@ interface ListOps {
   readonly heldLoadMore: (
     env: CacheEnv,
     entry: Entry,
-    trigger: Trigger
+    trigger: Trigger,
+    parent?: SpanRef | undefined
   ) => void
 }
 
@@ -4613,7 +4662,8 @@ const listStart = (
   env: CacheEnv,
   entry: Entry,
   trigger: Trigger,
-  build: Build
+  build: Build,
+  parent?: SpanRef | undefined
 ): void => {
   const held = listHeldPages(entry).length
   const append = entry.result?._tag === "Success" && entry.target === held + 1
@@ -4624,9 +4674,9 @@ const listStart = (
       env.emit(entry)
       return env.afterQuiet(entry)
     }
-    return env.startFetch(entry, trigger, build, false)
+    return env.startFetch(entry, trigger, build, false, false, parent)
   }
-  env.startFetch(entry, trigger, build, false, append)
+  env.startFetch(entry, trigger, build, false, append, parent)
 }
 
 const listOps: ListOps = {
@@ -4639,7 +4689,14 @@ const listOps: ListOps = {
     const logKey = () => env.logKeyOf(entry)
     const onPage = (index: number, cursor: Schema.Json | undefined): void => {
       if (entry.fetch === fetch) {
-        env.emitFetch(entry, trigger, false, true, { page: index, cursor })
+        env.emitFetch(
+          entry,
+          trigger,
+          false,
+          true,
+          { page: index, cursor },
+          fetch.parent
+        )
       }
     }
     if (append) {
@@ -4839,7 +4896,7 @@ const listOps: ListOps = {
     env.invalidateEntry(entry, "reset")
     env.emit(entry)
   },
-  heldLoadMore: (env, entry, trigger) => {
+  heldLoadMore: (env, entry, trigger, parent) => {
     if (
       entry.target === undefined || entry.target <= listHeldPages(entry).length
     ) {
@@ -4847,7 +4904,9 @@ const listOps: ListOps = {
       return
     }
     const build = env.survivingBuild(entry)
-    if (build !== undefined) return listStart(env, entry, trigger, build)
+    if (build !== undefined) {
+      return listStart(env, entry, trigger, build, parent)
+    }
     entry.target = undefined
     env.resumeAll(entry.moreWaiters, Exit.interrupt())
   }
@@ -4982,11 +5041,14 @@ const buildCache = (
   const traced = <A, E>(
     def: QueryDef,
     trigger: Trigger,
-    body: () => Effect.Effect<A, E>
+    body: () => Effect.Effect<A, E>,
+    parent?: SpanRef | undefined
   ): Effect.Effect<A, E> =>
     Effect.useSpan(
       def.name,
-      { attributes: { trigger } },
+      parent === undefined
+        ? { attributes: { trigger } }
+        : { attributes: { trigger }, parent: Tracer.externalSpan(parent) },
       (span) => Effect.provideService(body(), Tracer.ParentSpan, span)
     )
   /** Runs `f` one scheduler step later. */
@@ -5120,6 +5182,7 @@ const buildCache = (
       offReactivity: undefined,
       patches: [],
       deferred: undefined,
+      deferredParent: undefined,
       shared: undefined,
       born: ++seq,
       touched: 0,
@@ -5308,7 +5371,8 @@ const buildCache = (
     trigger: Trigger,
     restart: boolean,
     stored: boolean,
-    page?: PageRef | undefined
+    page?: PageRef | undefined,
+    parent?: SpanRef | undefined
   ): void => {
     if (fetchListeners.size === 0) return
     notify(fetchListeners, {
@@ -5318,7 +5382,8 @@ const buildCache = (
       restart,
       inWindow: inWindow(entry),
       stored,
-      ...pageFields(page)
+      ...pageFields(page),
+      ...spanFields(parent)
     })
   }
 
@@ -5537,7 +5602,8 @@ const buildCache = (
     trigger: Trigger,
     build: Build,
     restart: boolean,
-    append = false
+    append = false,
+    parent?: SpanRef | undefined
   ): void => {
     if (entry.heldRestart && !append) {
       entry.heldRestart = false
@@ -5545,7 +5611,16 @@ const buildCache = (
     }
     // A stream still open closes: its successor waits for its cleanup.
     if (entry.live !== undefined) dropFetch(entry)
-    const fetch: FetchRec = { trigger, build, fiber: undefined, append }
+    // Reopened stream queries stay independent roots so long-lived streams
+    // don't stretch a Command's trace waterfall.
+    const effectiveParent = entry.def.live === undefined ? parent : undefined
+    const fetch: FetchRec = {
+      trigger,
+      build,
+      fiber: undefined,
+      append,
+      parent: effectiveParent
+    }
     entry.fetch = fetch
     if (!idleEligible(entry)) cancelIdle(entry)
     const live = entry.def.live
@@ -5564,7 +5639,7 @@ const buildCache = (
       ))
     }
     // Reported before the entry turns ordinary, so the event says whether it fetched inside the window.
-    emitFetch(entry, trigger, restart, true, page)
+    emitFetch(entry, trigger, restart, true, page, effectiveParent)
     // A fetch after hydration makes the entry ordinary: a `get` joins it.
     entry.hydrated = false
     // The fetcher never starts inside the call that asked for it, nor before the fetch it replaces has finished
@@ -5575,7 +5650,7 @@ const buildCache = (
       previous === undefined
         ? Effect.yieldNow
         : Effect.uninterruptible(Fiber.await(previous)),
-      traced(entry.def, trigger, body)
+      traced(entry.def, trigger, body, effectiveParent)
     ))
     fetch.fiber = fiber
     fetchFibers.add(fiber)
@@ -5605,14 +5680,20 @@ const buildCache = (
    * live patch nothing fetches, and the first trigger is kept for the check
    * made when the last live owner exits.
    */
-  const ensureFetch = (entry: Entry, trigger: Trigger, build: Build): void => {
+  const ensureFetch = (
+    entry: Entry,
+    trigger: Trigger,
+    build: Build,
+    parent?: SpanRef | undefined
+  ): void => {
     if (entry.fetch !== undefined || disposed || !fetches) return
     if (settleOnce && entry.result !== undefined) return
     if (hasLive(entry)) {
       entry.deferred ??= trigger
+      if (parent !== undefined) entry.deferredParent = parent
       return
     }
-    startFetch(entry, trigger, build, false)
+    startFetch(entry, trigger, build, false, false, parent)
   }
   /** Ten restarts in a row with no settle between are reported, once. */
   const countRestart = (entry: Entry): void => {
@@ -5735,13 +5816,17 @@ const buildCache = (
    * Interrupts the fetch and restarts it with its trigger, under a surviving build or else its own, which is all
    * a prefetch has. With no open build the entry reverts.
    */
-  const replaceFetch = (entry: Entry, fetch: FetchRec): void => {
+  const replaceFetch = (
+    entry: Entry,
+    fetch: FetchRec,
+    parent: SpanRef | undefined
+  ): void => {
     dropFetch(entry, fetch)
     const build = survivingBuild(entry) ??
       (fetch.build.closed ? undefined : fetch.build)
     if (build === undefined) return revert(entry)
     countRestart(entry)
-    startFetch(entry, fetch.trigger, build, true)
+    startFetch(entry, fetch.trigger, build, true, false, parent)
   }
   function buildClosed(build: Build): void {
     attached.delete(build)
@@ -5749,7 +5834,7 @@ const buildCache = (
     for (const entry of allEntries()) {
       const fetch = entry.fetch ?? entry.live
       if (fetch !== undefined && fetch.build === build) {
-        replaceFetch(entry, fetch)
+        replaceFetch(entry, fetch, fetch.parent)
       }
     }
     for (const shared of Array.from(sharedFetches)) {
@@ -6092,7 +6177,7 @@ const buildCache = (
     })
 
   // The order of checks: own target, hydration window, live patch, staleness.
-  const get: CacheInternals["get"] = (def, args, fetcher, run) =>
+  const get: CacheInternals["get"] = (def, args, fetcher, run, parent) =>
     Effect.suspend((): Effect.Effect<any, any> => {
       if (disposed) return Effect.interrupt
       const registered = register(def)
@@ -6107,7 +6192,7 @@ const buildCache = (
         const logKey = () => registered.logKey(args, argsKey)
         const event = (page: PageRef | undefined): void => {
           if (existing !== undefined) {
-            return emitFetch(existing, "get", false, false, page)
+            return emitFetch(existing, "get", false, false, page, parent)
           }
           if (fetchListeners.size === 0) return
           notify<FetchEvent>(fetchListeners, {
@@ -6117,7 +6202,8 @@ const buildCache = (
             restart: false,
             inWindow: false,
             stored: false,
-            ...pageFields(page)
+            ...pageFields(page),
+            ...spanFields(parent)
           })
         }
         if (existing !== undefined) resetIdle(existing)
@@ -6213,7 +6299,8 @@ const buildCache = (
   }
   const invalidateEntry = (
     entry: Entry,
-    cause: Trigger = "invalidation"
+    cause: Trigger = "invalidation",
+    parent?: SpanRef | undefined
   ): void => {
     entry.touched = ++seq
     // A never-fetched entry is a no-op.
@@ -6222,18 +6309,22 @@ const buildCache = (
     // Under a live patch the refetch waits for the last live owner.
     if (hasLive(entry)) {
       entry.deferred ??= cause
+      entry.deferredParent = parent
       return
     }
     // A refetch held back by a patch keeps the trigger it was held with.
     const trigger = entry.deferred ?? cause
     entry.deferred = undefined
+    entry.deferredParent = undefined
     // A live stream closes, and a watched entry opens another.
     if (entry.live !== undefined) dropFetch(entry)
     // In flight: interrupted and restarted, watched or not.
-    if (entry.fetch !== undefined) return replaceFetch(entry, entry.fetch)
+    if (entry.fetch !== undefined) {
+      return replaceFetch(entry, entry.fetch, parent)
+    }
     if (entry.watchers.size > 0) {
       const build = survivingBuild(entry)
-      if (build !== undefined) ensureFetch(entry, trigger, build)
+      if (build !== undefined) ensureFetch(entry, trigger, build, parent)
     }
   }
   const invalidate: CacheInternals["invalidate"] = (
@@ -6263,7 +6354,10 @@ const buildCache = (
       }
       return
     }
-    for (const entry of resolve(compileTargets(targets))) invalidateEntry(entry)
+    const parent = invalidateOptions?.parent
+    for (const entry of resolve(compileTargets(targets))) {
+      invalidateEntry(entry, "invalidation", parent)
+    }
   }
 
   // -- runs, patches and writes -----------------------------------------------
@@ -6274,12 +6368,19 @@ const buildCache = (
       // A caller-only fetch in flight finishes for its callers. Later `get`s don't join it.
       entry.shared = undefined
       const deferred = entry.deferred
+      const deferredParent = entry.deferredParent
       entry.deferred = undefined
+      entry.deferredParent = undefined
       if (entry.fetch === undefined && entry.watchers.size > 0) {
         if (isStale(entry) || (intervalElapsed(entry) && !paused())) {
           const build = survivingBuild(entry)
           if (build !== undefined) {
-            ensureFetch(entry, deferred ?? "invalidation", build)
+            ensureFetch(
+              entry,
+              deferred ?? "invalidation",
+              build,
+              deferredParent
+            )
           }
         } else if (
           entry.intervalDue !== undefined &&
@@ -6292,7 +6393,8 @@ const buildCache = (
         entry.def.list.ops.heldLoadMore(
           cacheEnv(),
           entry,
-          deferred ?? "loadMore"
+          deferred ?? "loadMore",
+          deferredParent
         )
       }
       // A dropped walk nothing restarted isn't owed a restart by a later fetch, and a prefetch's claim is spent.
@@ -6319,12 +6421,17 @@ const buildCache = (
       return true
     }
   }
-  const storeWrite = (entry: Entry, value: unknown, fresh: boolean): void => {
+  const storeWrite = (
+    entry: Entry,
+    value: unknown,
+    fresh: boolean,
+    parent?: SpanRef | undefined
+  ): void => {
     const fetch = entry.fetch
     store(entry, AsyncResult.success(value, { timestamp: now() }))
     if (!fresh) entry.invalidated = true
     // A fetch that began before the write would overwrite it with older data.
-    if (fetch !== undefined) replaceFetch(entry, fetch)
+    if (fetch !== undefined) replaceFetch(entry, fetch, parent)
     if (entry.idle !== undefined) startIdle(entry)
     emit(entry)
     afterQuiet(entry)
@@ -6369,11 +6476,12 @@ const buildCache = (
         entry.touched = ++seq
         if (entry.result !== undefined) entry.invalidated = true
         entry.deferred ??= "invalidation"
+        entry.deferredParent = run.span
         continue
       }
       const isFresh = entry.touched <= run.startSeq
       entry.touched = ++seq
-      storeWrite(entry, set.value, isFresh)
+      storeWrite(entry, set.value, isFresh, run.span)
       if (isFresh) fresh.add(entry)
     }
     return fresh
@@ -6434,6 +6542,7 @@ const buildCache = (
       startSeq: seq,
       started: false,
       done: false,
+      span: undefined,
       entries: new Set()
     }
     for (const { entry, patch } of planned) {
@@ -6481,6 +6590,7 @@ const buildCache = (
       if (fetch !== undefined) {
         dropFetch(entry, fetch)
         entry.deferred ??= fetch.trigger
+        entry.deferredParent ??= fetch.parent
         // A patch restarts a list's walk from the first page, once nothing holds it. A dropped append is a held
         // load more, not a restart.
         if (entry.def.list !== undefined && !fetch.append) {
@@ -6510,7 +6620,7 @@ const buildCache = (
     })
     const handle: RunHandle = {
       command: run.command,
-      run: (body, writes) => runBody(handle, body, writes),
+      run: (body, writes, span) => runBody(handle, body, writes, span),
       awaited: () => awaitedEntries,
       outstanding: () =>
         awaited === undefined ? [] : Array.from(awaited.entries, entryRef),
@@ -6525,10 +6635,11 @@ const buildCache = (
       sinceApplied: () => appliedAt === undefined ? 0 : now() - appliedAt,
       invalidates: (def, argsKey) =>
         targetsHit(targets, def.name, def.tags, argsKey),
-      start: () => {
+      start: (span) => {
         if (run.started || run.done) return
         run.started = true
         run.startSeq = seq
+        run.span = span
       },
       isStarted: () => run.started && !run.done,
       finish: (exit) => {
@@ -6552,7 +6663,7 @@ const buildCache = (
               // Only a write stored fresh is left out of its run's own invalidation.
               if (fresh.has(entry)) continue
               if (run.issue > entry.reached) entry.reached = run.issue
-              invalidateEntry(entry)
+              invalidateEntry(entry, "invalidation", run.span)
               invalidated.push(entry)
             }
           }
@@ -6579,7 +6690,7 @@ const buildCache = (
             // A failed run may still have landed its server write, so an older answer is no longer the latest.
             for (const entry of resolve(targets)) {
               if (run.issue > entry.reached) entry.reached = run.issue
-              invalidateEntry(entry)
+              invalidateEntry(entry, "invalidation", run.span)
             }
           }
         }

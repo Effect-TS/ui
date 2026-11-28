@@ -217,10 +217,14 @@ export const explore = (
           : values(listed.success, command.args)
         const error = values(listed?.error, command.args)
         // Pending Commands are stored with their result types erased.
-        const resolve = command.resolve as (value: unknown) => unknown
+        const resolve = command.resolve as (
+          value: unknown,
+          span: Command.SpanContext
+        ) => unknown
         const reject = command.reject as
-          | ((value: unknown) => unknown)
+          | ((value: unknown, span: Command.SpanContext) => unknown)
           | undefined
+        const span = engine.spanOf(command)
         // A run that reads more than its result, an `afterRefetch` wait or an optimistic patch,
         // never merges with another, nor does one whose mapping throws: its settling step fails.
         let key: unknown = runs++
@@ -229,8 +233,8 @@ export const explore = (
         ) {
           try {
             key = [
-              ...success.map(resolve),
-              ...error.map((value) => reject?.(value))
+              ...success.map((value) => resolve(value, span)),
+              ...error.map((value) => reject?.(value, span))
             ]
           } catch {
             // Report the mapper failure at settlement, not while building the key.

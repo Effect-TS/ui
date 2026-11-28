@@ -633,6 +633,8 @@ export interface CommandStarted extends InstanceBase {
   readonly issued: Issued
   readonly spanId: string
   readonly traceId: string
+  /** The parent span id, when the run continues an earlier trace through `Command.withParentSpan`. */
+  readonly parentSpanId?: string
 }
 
 /**
@@ -890,6 +892,10 @@ export interface FetchStarted extends Base {
   readonly stored: boolean
   readonly page?: number
   readonly cursor?: Schema.Json
+  /** The parent span's trace id, when a Command's invalidation or span parented this fetch. */
+  readonly traceId?: string
+  /** The parent span id, when a Command's invalidation or span parented this fetch. */
+  readonly parentSpanId?: string
 }
 
 /**
@@ -1193,7 +1199,9 @@ export const Wire = Schema.Union([
     inWindow: Schema.Boolean,
     stored: Schema.Boolean,
     page: Schema.optionalKey(Schema.Number),
-    cursor: Schema.optionalKey(Schema.Json)
+    cursor: Schema.optionalKey(Schema.Json),
+    traceId: Schema.optionalKey(Schema.String),
+    parentSpanId: Schema.optionalKey(Schema.String)
   }),
   Schema.TaggedStruct("Waiting", {
     ...InstanceWire,
@@ -1284,7 +1292,8 @@ export const Wire = Schema.Union([
     name: Schema.String,
     issued: IssuedWire,
     spanId: Schema.String,
-    traceId: Schema.String
+    traceId: Schema.String,
+    parentSpanId: Schema.optionalKey(Schema.String)
   }),
   Schema.TaggedStruct("CommandAwaiting", {
     ...InstanceWire,
@@ -1549,7 +1558,13 @@ export const makeEncoder = (options?: {
             ...(entry.page === undefined ? undefined : { page: entry.page }),
             ...(entry.cursor === undefined
               ? undefined
-              : { cursor: entry.cursor })
+              : { cursor: entry.cursor }),
+            ...(entry.traceId === undefined
+              ? undefined
+              : { traceId: entry.traceId }),
+            ...(entry.parentSpanId === undefined
+              ? undefined
+              : { parentSpanId: entry.parentSpanId })
           }
         case "Waiting":
           return {
@@ -1684,7 +1699,10 @@ export const makeEncoder = (options?: {
             name: entry.name,
             issued: entry.issued,
             spanId: entry.spanId,
-            traceId: entry.traceId
+            traceId: entry.traceId,
+            ...(entry.parentSpanId === undefined
+              ? undefined
+              : { parentSpanId: entry.parentSpanId })
           }
         case "CommandAwaiting":
           return {

@@ -265,6 +265,43 @@ describe("Stream queries", () => {
     }).pipe(provide)
   })
 
+  it.effect("a stream a run's invalidation reopens starts its own trace", () => {
+    const { GetNote, provide, streams } = makeNotes()
+    return Effect.gen(function*() {
+      const cache = Query.internals(yield* Query.Cache)
+      const parents: Array<string | undefined> = []
+      const off = cache.onFetch((event) => parents.push(event.parentSpanId))
+      const handle = cache.watch(
+        Query.defOf(GetNote),
+        { id: "1" },
+        (yield* GetNote) as unknown as (args: unknown) => Effect.Effect<any>,
+        () => {},
+        undefined
+      )
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          handle.unregister()
+          off()
+        })
+      )
+      yield* flush
+      streams[0].emit("v1")
+      yield* flush
+      yield* cache.beginRun({ command: "Edit", invalidates: [GetNote] }).run(
+        Effect.void,
+        undefined,
+        {
+          traceId: "0af7651916cd43dd8448eb211c80319c",
+          spanId: "b7ad6b7169203331",
+          sampled: true
+        }
+      )
+      yield* flush
+      assert.isTrue(streams[0].closed)
+      assert.deepStrictEqual(parents, [undefined, undefined])
+    }).pipe(provide)
+  })
+
   it.effect("an empty stream dies instead of hanging get and watchers, and a typed failure exposes the error without retrying", () => {
     const { GetNote, provide, streams } = makeNotes()
     return Effect.gen(function*() {

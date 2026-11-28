@@ -337,6 +337,46 @@ message: `s.resolve(SaveNote, NoteEditorMessage.SucceededSaveNote({ note }))`.
 A mapped Command takes its own value in `s.resolve`, or its typed error in
 `s.fail`, and the mapping runs in the test.
 
+#### Tracing a workflow
+
+Each Command run has its own span, and its work and RPCs are children of it.
+A workflow that spans several runs, such as a preflight check, a
+confirmation dialog and the change itself, can continue one trace. The
+mapping in `Command.map` or `Command.match` gets the run's span context as
+its second argument. Keep it in the Model, then pass it to the next Command
+with `Command.withParentSpan`:
+
+```ts
+// The preflight's result carries its span
+$.run(
+  PreflightRelease.make({ cartId }).pipe(Command.match({
+    onSuccess: (preflight, span) =>
+      Message.SucceededPreflight({ preflight, span }),
+    onFailure: (failure, span) => Message.FailedPreflight({ failure, span })
+  }))
+)
+
+// Confirming continues that trace
+$.run(
+  ReleaseCart.make({ cartId }).pipe(
+    Command.withParentSpan($.model.confirm.span),
+    Command.as(Message.CompletedRelease())
+  )
+)
+```
+
+`Command.SpanContext` is the Schema for the Model field. No span or fiber
+stays open while the user decides, so the trace shows the wait as a gap
+between the two runs. A Command without `withParentSpan` starts its own
+trace, even when it is issued while handling another Command's result.
+
+Refetches caused by a run's `invalidates`, or by `Query.invalidate` inside
+its work, are children of the run's span. When several runs invalidate one
+entry before it refetches, the refetch is a child of the latest one. A fetch
+nothing invalidated, such as a stream query reopened by an invalidation,
+starts its own trace. In the message log, `CommandStarted` and
+`FetchStarted` carry the parent span id.
+
 ### Changing the Model
 
 `$.evolve` changes some fields of the Model and keeps the rest, so a

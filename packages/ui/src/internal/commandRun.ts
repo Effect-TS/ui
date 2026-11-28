@@ -37,8 +37,7 @@ interface Run {
     | { readonly message: unknown; readonly source: MessageLog.Source }
     | undefined
   silent: boolean | undefined
-  spanId: string | undefined
-  traceId: string | undefined
+  span: Command.SpanContext | undefined
   cut: (<A>(f: () => A) => A) | undefined
   reason: MessageLog.InterruptReason | undefined
   gated: boolean
@@ -205,17 +204,25 @@ class Runs implements Kernel.Runs {
       run.silent = silent && run.silent !== false
       if (!silent) follow(tree)(() => Kernel.send(inst, message, source))
     }
+    const attributes = run.message === undefined
+      ? { path: inst.path, mode: command.mode }
+      : { path: inst.path, mode: command.mode, message: run.message }
     const program = Effect.useSpan(
       command.name,
-      {
-        attributes: run.message === undefined
-          ? { path: inst.path, mode: command.mode }
-          : { path: inst.path, mode: command.mode, message: run.message }
-      },
+      command.parentSpan === undefined
+        ? { attributes }
+        : { attributes, parent: Tracer.externalSpan(command.parentSpan) },
       (span): Effect.Effect<unknown, unknown, any> => {
         if (run.done || inst.closed) return Effect.interrupt
-        run.spanId = span.spanId
-        run.traceId = span.traceId
+        const spanContext: Command.SpanContext = {
+          traceId: span.traceId,
+          spanId: span.spanId,
+          sampled: span.sampled
+        }
+        run.span = spanContext
+        const parentSpanId = Option.isSome(span.parent)
+          ? span.parent.value.spanId
+          : undefined
         const log = tree.log
         if (log !== undefined) {
           begun(() =>
@@ -224,7 +231,8 @@ class Runs implements Kernel.Runs {
               name: command.name,
               issued: run.issued,
               spanId: span.spanId,
-              traceId: span.traceId
+              traceId: span.traceId,
+              ...(parentSpanId === undefined ? undefined : { parentSpanId })
             })
           )
         }
@@ -241,13 +249,17 @@ class Runs implements Kernel.Runs {
             : Stream.runForEach(
               command.work,
               (element) =>
-                Effect.sync(() => send(command.resolve(element as never)))
+                Effect.sync(() =>
+                  send(command.resolve(element as never, spanContext))
+                )
             )
         const work = Effect.provideService(body, Tracer.ParentSpan, span)
         const writes = command.writes as
           | ((success: unknown) => ReadonlyArray<Query.Write>)
           | undefined
-        if (run.handle !== undefined) return run.handle.run(work, writes)
+        if (run.handle !== undefined) {
+          return run.handle.run(work, writes, spanContext)
+        }
         if (writes === undefined) return work
         return Effect.uninterruptibleMask((restore) =>
           Effect.flatMap(Effect.exit(restore(work)), (exit) => {
@@ -269,7 +281,8 @@ class Runs implements Kernel.Runs {
             if (handle !== undefined) {
               return handle.run(
                 exit,
-                made === undefined ? writes : () => made
+                made === undefined ? writes : () => made,
+                spanContext
               )
             }
             early.get(tree)?.delete(run)
@@ -335,7 +348,7 @@ class Runs implements Kernel.Runs {
     if (inst.closed || stopped) {
       this.remove(run)
       if (stopped) {
-        if (!inst.closed || run.spanId !== undefined) {
+        if (!inst.closed || run.span !== undefined) {
           interrupted(inst, run, "self")
         } else (this.left ?? now)(() => interrupted(inst, run, "unmount"))
       } else {
@@ -387,11 +400,13 @@ class Runs implements Kernel.Runs {
     }
     let message: unknown
     try {
+      const span = run.span!
       message = Exit.isFailure(exit)
         ? reject!(
-          Option.getOrUndefined(Cause.findErrorOption(exit.cause)) as never
+          Option.getOrUndefined(Cause.findErrorOption(exit.cause)) as never,
+          span
         )
-        : command.resolve(exit.value as never)
+        : command.resolve(exit.value as never, span)
     } catch (error) {
       this.remove(run)
       Kernel.fail(
@@ -528,7 +543,7 @@ const beginEarly = (tree: Kernel.Tree): void => {
   tree.cached = undefined
   for (const [run, at] of runs) {
     run.handle = begin(at, run.command)
-    if (run.spanId !== undefined) run.handle.start()
+    if (run.span !== undefined) run.handle.start(run.span)
   }
 }
 
@@ -578,8 +593,7 @@ export const issue = (
     done: false,
     held: undefined,
     silent: undefined,
-    spanId: undefined,
-    traceId: undefined,
+    span: undefined,
     cut: undefined,
     reason: undefined,
     gated: false,
@@ -611,8 +625,8 @@ const ended = (inst: Kernel.Instance, run: Run): void => {
     _tag: "CommandEnded",
     name: run.command.name,
     issued: run.issued,
-    spanId: run.spanId,
-    traceId: run.traceId,
+    spanId: run.span?.spanId,
+    traceId: run.span?.traceId,
     silent: run.silent === true,
     ...run.waited
   })
@@ -627,8 +641,8 @@ const interrupted = (
     _tag: "CommandInterrupted",
     name: run.command.name,
     issued: run.issued,
-    spanId: run.spanId,
-    traceId: run.traceId,
+    spanId: run.span?.spanId,
+    traceId: run.span?.traceId,
     reason
   })
 }
