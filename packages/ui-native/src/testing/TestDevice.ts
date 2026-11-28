@@ -12,8 +12,9 @@
  * events only while the kit listens.
  *
  * A control sends its event at once. Run `TestHost.settle`, or a Play step,
- * to see the app's update. An alert, prompt or share sheet the app shows
- * stays open, and in `log`, until the test answers it, as a real one does.
+ * to see the app's update. An alert, prompt or iOS share sheet the app
+ * shows stays open, and in `log`, until the test answers it, as a real one
+ * does. Android reports a share as soon as the sheet opens.
  *
  * Nothing in the app imports this module, so it adds nothing to its bundle.
  * Scenes and Stories need no device: Commands and Subscriptions stay data

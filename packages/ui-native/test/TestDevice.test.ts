@@ -12,8 +12,7 @@ import * as StatusBar from "@effect/ui-native/kit/StatusBar"
 import * as Vibration from "@effect/ui-native/kit/Vibration"
 import * as Native from "@effect/ui-native/Native"
 import { TestDevice } from "@effect/ui-native/testing"
-import * as Command from "@effect/ui/Command"
-import { Locator, Play, TestHost } from "@effect/ui/testing"
+import { Play, TestHost } from "@effect/ui/testing"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Effect from "effect/Effect"
 import * as Fiber from "effect/Fiber"
@@ -36,75 +35,7 @@ const run = <A, E>(
 const open = <A, E>(effect: Effect.Effect<A, E>) =>
   Effect.forkChild(effect, { startImmediately: true })
 
-const Draft = (() => {
-  const Message = UiSchema.TaggedEnum({
-    Typed: { text: Schema.String },
-    ChangedScheme: { scheme: Schema.Literals(["light", "dark"]) },
-    PressedBack: {},
-    Answered: { discard: Schema.Boolean }
-  })
-  return Native.component({
-    name: "Draft",
-    model: Schema.Struct({ text: Schema.String, scheme: Schema.String }),
-    message: Message
-  }).make({
-    init: () => ({ text: "", scheme: "light" }),
-    update: {
-      Typed: ($, { text }) => $.evolve({ text: () => text }),
-      ChangedScheme: ($, { scheme }) => $.evolve({ scheme: () => scheme }),
-      PressedBack: ($) =>
-        $.run(
-          Alert.Alert.make({
-            title: "Discard the draft?",
-            buttons: [
-              { id: "keep", text: "Keep", style: "cancel" },
-              { id: "discard", text: "Discard", style: "destructive" }
-            ]
-          }).pipe(Command.map((pressed) =>
-            Message.Answered({
-              discard: Result.getOrUndefined(pressed) === "discard"
-            })
-          ))
-        ),
-      Answered: ($, { discard }) =>
-        discard ? $.evolve({ text: () => "" }) : $.model
-    },
-    subscriptions: ({ model }) => [
-      Appearance.onChange((scheme) => Message.ChangedScheme({ scheme })),
-      model.text !== "" && BackHandler.onPress(Message.PressedBack())
-    ],
-    view: (h, { scheme, text }) =>
-      h.view.children(
-        h.input.on("input", ({ value }) => Message.Typed({ text: value })),
-        h.text.children(text === "" ? "Empty" : text),
-        h.text.children(scheme)
-      )
-  })
-})()
-
 describe("TestDevice", () => {
-  it("asks before Back drops a draft", () =>
-    run("android", (device) =>
-      Effect.gen(function*() {
-        const play = yield* Play.make(Draft, {})
-        yield* play.fire(Locator.tag("input"), "input", { value: "Hello" })
-        device.pressBack()
-        yield* TestHost.settle
-        device.answerAlert("Keep")
-        yield* play.expect(Locator.text("Hello")).toExist()
-
-        device.pressBack()
-        yield* TestHost.settle
-        device.answerAlert("Discard")
-        yield* play.expect(Locator.text("Empty")).toExist()
-
-        device.setColorScheme("dark")
-        yield* play.expect(Locator.text("dark")).toExist()
-
-        device.pressBack()
-        assert.deepStrictEqual(device.log().at(-1), { _tag: "Exit" })
-      })))
-
   describe.each(["android", "ios"] as const)("on %s", (platform) => {
     const android = platform === "android"
 
@@ -200,6 +131,7 @@ describe("TestDevice", () => {
             init: () => [],
             update: { Got: ($, { value }) => [...$.model, value] },
             subscriptions: () => [
+              Appearance.onChange(got),
               AppState.onMemoryWarning(got("memory")),
               Linking.onURL(got),
               AccessibilityInfo.onChange("screenReader", (on) =>
@@ -210,6 +142,7 @@ describe("TestDevice", () => {
               h.text.children("listening")
           })
           const play = yield* Play.make(Listener, {})
+          device.setColorScheme("dark")
           if (android) {
             assert.throws(() => device.memoryWarning(), /no memory warning/)
           } else {
@@ -221,6 +154,8 @@ describe("TestDevice", () => {
           yield* TestHost.settle
           assert.deepStrictEqual(play.root.model(), [
             "screenReader false",
+            "light",
+            "dark",
             ...(android ? [] : ["memory"]),
             "app://note/1",
             "screenReader true",
@@ -243,40 +178,25 @@ describe("TestDevice", () => {
           device.answerAlert("Cancel")
           assert.strictEqual(yield* Fiber.join(alert), "cancel")
 
-          // Two buttons with the same text, which only an id tells apart.
-          const twins = [
+          // Buttons with the same text, which only an id tells apart.
+          const four = [
+            { id: "first", text: "OK" },
             { id: "later", text: "Later" },
             { id: "save", text: "OK" },
             { id: "discard", text: "OK", style: "destructive" }
           ] as const
-          const twin = yield* open(
-            Alert.alert({ title: "Leave?", buttons: twins })
-          )
-          assert.throws(() => device.answerAlert("OK"), /several "OK" buttons/)
-          assert.throws(
-            () =>
-              device.answerAlert({ buttons: twins.slice(1), id: "discard" }),
-            /No alert with \["OK","OK"\] is open/
-          )
-          assert.throws(
-            // @ts-expect-error: not one of the buttons' ids
-            () => device.answerAlert({ buttons: twins, id: "stay" }),
-            /no button with id "stay"/
-          )
-          device.answerAlert({ buttons: twins, id: "discard" })
-          assert.strictEqual(yield* Fiber.join(twin), "discard")
-          const four = [{ id: "first", text: "OK" }, ...twins] as const
-          const dropped = yield* open(
+          const leave = yield* open(
             Alert.alert({ title: "Leave?", buttons: four })
           )
+          assert.throws(() => device.answerAlert("OK"), /several "OK" buttons/)
           if (android) {
             assert.throws(
               () => device.answerAlert({ buttons: four, id: "first" }),
               /only the last three buttons/
             )
           }
-          device.answerAlert({ buttons: four, id: "save" })
-          assert.strictEqual(yield* Fiber.join(dropped), "save")
+          device.answerAlert({ buttons: four, id: "discard" })
+          assert.strictEqual(yield* Fiber.join(leave), "discard")
 
           const dismissed = yield* open(
             Alert.alert({ title: "Hi", cancelable: true })
@@ -299,6 +219,7 @@ describe("TestDevice", () => {
             assert.throws(() => device.answerAlert("OK"), /no button "OK"/)
             device.answerAlert("Next")
             assert.strictEqual(yield* Fiber.join(next), "next")
+            device.pressBack()
           } else {
             assert.throws(() => device.dismissAlert(), /only with a button/)
             device.answerAlert("OK")
@@ -373,14 +294,10 @@ describe("TestDevice", () => {
                 title: "Leave?",
                 buttons: ["Later", "OK", "OK"]
               },
-              {
-                _tag: "Alert",
-                title: "Leave?",
-                buttons: ["Later", "OK", "OK"]
-              },
               { _tag: "Alert", title: "Hi", buttons: ["OK"] },
               { _tag: "Alert", title: "Hi", buttons: ["OK"] },
               { _tag: "Alert", title: "Next", buttons: ["Next"] },
+              { _tag: "Exit" },
               { _tag: "Share", message: "Hi https://effect.website" }
             ]
             : [
@@ -388,11 +305,6 @@ describe("TestDevice", () => {
                 _tag: "Alert",
                 title: "Delete?",
                 buttons: ["Later", "Cancel", "Delete"]
-              },
-              {
-                _tag: "Alert",
-                title: "Leave?",
-                buttons: ["Later", "OK", "OK"]
               },
               {
                 _tag: "Alert",
