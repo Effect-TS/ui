@@ -165,18 +165,21 @@ describe("VirtualList", () => {
     await list.close()
   })
 
-  it("keeps measured sizes, and scrolls to a request again as sizes move it, until a drag", async () => {
+  it("scrolls to a waiting key once it arrives, re-aims as sizes move it, and stops on a drag", async () => {
     const keys = Array.from({ length: 1000 }, (_, i) => "k" + i)
-    const list = await setup({ keys, itemSize: 40 })
+    const scrollTo = {
+      target: Virtualizer.ScrollTarget.Key({ key: "target" })
+    }
+    const list = await setup({ keys, itemSize: 40, scrollTo })
     assert.deepStrictEqual(list.scroll().props.maintainVisibleContentPosition, {
       minIndexForVisible: 0
     })
     await list.layOut()
-    await list.setProps({
-      keys,
-      itemSize: 40,
-      scrollTo: { target: Virtualizer.ScrollTarget.Key({ key: "k500" }) }
-    })
+    await list.scrollTo(0)
+    assert.deepStrictEqual(list.scrolls(), [])
+
+    const withTarget = keys.map((key, i) => i === 500 ? "target" : key)
+    await list.setProps({ keys: withTarget, itemSize: 40, scrollTo })
     assert.deepStrictEqual(list.scrolls(), [20 + 500 * 40])
     assert.include(list.children(), " 500 ")
 
@@ -192,79 +195,45 @@ describe("VirtualList", () => {
     await list.close()
   })
 
-  it("keeps its rows when items grow above them, until the scroll reports where native kept them", async () => {
+  it("keeps the active sticky row with spacers, holds rows when content grows, and anchors scroll on the window's first row", async () => {
     const keys = Array.from({ length: 1000 }, (_, i) => "k" + i)
-    const list = await setup({ keys, itemSize: 40 })
+    const list = await setup({ keys, itemSize: 40, sticky: [0, 100, 400] })
     await list.layOut()
-    await list.scrollTo(20 + 50 * 40)
-    // Rows taller than estimated move row 50 down, and the content grows,
-    // before native's scroll keeps row 50 in place.
-    await list.measure(50, 20 + 50 * 40, 80)
-    await list.emit(list.content(), "topLayout", {
-      layout: { x: 0, y: 0, width: 300, height: 20 + 1000 * 80 }
-    })
-    assert.include(list.children(), " 50 ")
-    assert.strictEqual(list.events[list.events.length - 1]!.first, 50)
-    await list.close()
-  })
-
-  it("measures the viewport's start from where native placed the first row, not the estimates before it", async () => {
-    const keys = Array.from({ length: 1000 }, (_, i) => "k" + i)
-    const list = await setup({ keys, itemSize: 40 })
-    await list.layOut()
-    await list.scrollTo(20 + 50 * 40)
-    assert.include(list.children(), "s1880 47 ")
-    // The rendered rows grow to 80 below the spacer native still has, and
-    // native keeps row 50 in place by scrolling as far as rows 47 to 49 grew.
-    const rows = Array.from({ length: 16 }, (_, i) => list.row(47 + i))
-    rows.forEach((row, i) =>
-      list.fabric.emit(row, "topLayout", {
-        layout: { x: 0, y: 20 + 47 * 40 + i * 80, width: 300, height: 80 }
-      })
+    await list.scrollTo(20 + 300 * 40)
+    assert.strictEqual(
+      list.children(),
+      "header s4000 100 s7840 " + span(297, 312) + " s27480"
     )
-    await list.settle()
-    await list.scrollTo(20 + 50 * 40 + 3 * 40, 20 + 1000 * 40 + 16 * 40)
-    assert.strictEqual(list.events[list.events.length - 1]!.first, 50)
-    await list.close()
-  })
 
-  it("measures from the first row of the range around the viewport, not a sticky row before it", async () => {
-    const keys = Array.from({ length: 1000 }, (_, i) => "k" + i)
-    const list = await setup({ keys, itemSize: 40, sticky: [0] })
-    await list.layOut()
-    await list.scrollTo(20 + 50 * 40)
-    assert.include(list.children(), "header s0 0 s1840 47 ")
-    // Rows 0 and 47 to 62 grow to 80 around the spacer native still has.
-    const rows = [0, ...Array.from({ length: 16 }, (_, i) => 47 + i)]
+    // Rows 100 and 297 to 312 grow to 80 around the spacers native still has.
+    const rows = [100, ...Array.from({ length: 16 }, (_, i) => 297 + i)]
     rows.map(list.row).forEach((row, i) =>
       list.fabric.emit(row, "topLayout", {
         layout: {
           x: 0,
-          y: i === 0 ? 20 : 20 + 80 + 1840 + (i - 1) * 80,
+          y: i === 0 ? 4020 : 11940 + (i - 1) * 80,
           width: 300,
           height: 80
         }
       })
     )
     await list.settle()
-    await list.scrollTo(20 + 80 + 1840 + 3 * 80, 20 + 1000 * 40 + 17 * 40)
-    assert.strictEqual(list.events[list.events.length - 1]!.first, 50)
+    const grown = 40020 + 17 * 40
+    await list.emit(list.content(), "topLayout", {
+      layout: { x: 0, y: 0, width: 300, height: grown }
+    })
+    assert.include(list.children(), " 300 ")
+    assert.strictEqual(list.events[list.events.length - 1]!.first, 300)
+
+    // Native keeps row 300 in place, then a scroll moves to row 301.
+    await list.scrollTo(11940 + 3 * 80, grown)
+    assert.strictEqual(list.events[list.events.length - 1]!.first, 300)
+    await list.scrollTo(11940 + 4 * 80, grown)
+    assert.strictEqual(list.events[list.events.length - 1]!.first, 301)
     await list.close()
   })
 
-  it("falls back to the scroll offset when the placed row is gone", async () => {
-    const list = await setup({ count: 1000, itemSize: 40 })
-    await list.layOut()
-    await list.scrollTo(20 + 50 * 40)
-    await list.measure(47, 20 + 47 * 40, 40)
-    await list.setProps({ count: 10, itemSize: 40 })
-    await list.scrollTo(20, 420)
-    const last = list.events[list.events.length - 1]!
-    assert.deepStrictEqual([last.first, last.offset], [0, 0])
-    await list.close()
-  })
-
-  it("sends a scroll that changes the first row once corrected by where native placed it", async () => {
+  it("corrects scroll filtering by where native placed the first row, and falls back when that row is gone", async () => {
     const list = await setup({ count: 1000, itemSize: 40 })
     await list.layOut()
     await list.scrollTo(2035)
@@ -272,6 +241,11 @@ describe("VirtualList", () => {
     await list.measure(47, 1910, 40)
     await list.scrollTo(2025)
     assert.strictEqual(list.events[list.events.length - 1]!.first, 49)
+
+    await list.setProps({ count: 10, itemSize: 40 })
+    await list.scrollTo(20, 420)
+    const last = list.events[list.events.length - 1]!
+    assert.deepStrictEqual([last.first, last.offset], [0, 0])
     await list.close()
   })
 
@@ -293,20 +267,6 @@ describe("VirtualList", () => {
     await list.setProps({ count: 1000, itemSize: 40, sizes: swapped })
     await list.scrollTo(2060, 40100)
     assert.strictEqual(list.events[list.events.length - 1]!.first, 49)
-    await list.close()
-  })
-
-  it("scrolls to a waiting key once the keys bring it", async () => {
-    const keys = Array.from({ length: 100 }, (_, i) => "k" + i)
-    const scrollTo = {
-      target: Virtualizer.ScrollTarget.Key({ key: "arrives" })
-    }
-    const list = await setup({ keys, itemSize: 40, measure: false, scrollTo })
-    await list.layOut()
-    await list.scrollTo(0, 4020)
-    const next = keys.map((key, i) => i === 50 ? "arrives" : key)
-    await list.setProps({ keys: next, itemSize: 40, measure: false, scrollTo })
-    assert.deepStrictEqual(list.scrolls(), [20 + 50 * 40])
     await list.close()
   })
 
@@ -334,21 +294,6 @@ describe("VirtualList", () => {
     assert.isTrue(scrolling())
     await wait()
     assert.isFalse(scrolling())
-    await list.close()
-  })
-
-  it("keeps the active sticky row rendered, with a spacer on each side", async () => {
-    const list = await setup({
-      count: 1000,
-      itemSize: 40,
-      sticky: [0, 100, 400]
-    })
-    await list.layOut()
-    await list.scrollTo(20 + 300 * 40)
-    assert.strictEqual(
-      list.children(),
-      "header s4000 100 s7840 " + span(297, 312) + " s27480"
-    )
     await list.close()
   })
 
