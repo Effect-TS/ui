@@ -10,6 +10,9 @@
  *   offset, and `interpolate`, `add`, `multiply` and `diffClamp` derive
  *   from it.
  *
+ * `set` shows values on a `named` element at once, with no render, so a
+ * `Pan` can move a view with each touch.
+ *
  * Nothing about an animation is kept in the Model. The `animationEnd` event
  * fires when every target of the element has been reached, so `update` can
  * pick the next one.
@@ -380,6 +383,77 @@ export const source: {
   return self.prop("animationSource", name)
 })
 
+/**
+ * Names the element, so `set` can move it without a render. Make the name
+ * with `h.id`.
+ *
+ * @stability experimental
+ * @category combinators
+ * @since 0.1.0
+ */
+export const named: {
+  (
+    name: string
+  ): <B extends Native.Element<any, any, any, any, any>>(self: B) => B
+  <B extends Native.Element<any, any, any, any, any>>(self: B, name: string): B
+} = dual(2, (self: Native.Element<unknown>, name: string) => {
+  install()
+  return self.prop("animationName", name)
+})
+
+/**
+ * Shows `style` on the element `named` `name`, on the UI thread and with
+ * no render, so a `Pan` can move a view with each touch.
+ *
+ * **Details**
+ *
+ * The element's targets stay as its last render set them. A render that
+ * changes a target animates from what `set` shows, and one that doesn't
+ * leaves it there. With `transition`, the values animate to `style` and
+ * become the targets, and `animationEnd` fires when they arrive. Only keys
+ * the element animates are set.
+ *
+ * @stability experimental
+ * @category combinators
+ * @since 0.1.0
+ */
+export const set = (
+  name: string,
+  style: Style<number>,
+  transition?: Transition
+): void => {
+  const n = names.get(name)
+  if (n === undefined) return
+  const e = drivers.get(n.host)?.entries.get(n)
+  if (e === undefined) {
+    if (!plain.has(n)) return
+    for (const key in style) {
+      n.host.set(n, key, style[key as keyof Style])
+    }
+    n.host.commit()
+    if (transition !== undefined) n.host.fire(n, "animationEnd", {})
+    return
+  }
+  const spec: Record<string, Layer> = {}
+  for (const key in style) {
+    spec[key] = {
+      value: style[key as keyof Style]!,
+      transition: undefined,
+      from: undefined
+    }
+  }
+  const m = native()
+  leaves(spec, (path, value) => {
+    const t = e.targets.get(path)
+    if (t === undefined) return
+    if (transition !== undefined) return go(e, t, value as number, transition)
+    if (t.anim !== 0) m.stopAnimation(t.anim)
+    t.anim = 0
+    m.setAnimatedNodeValue(t.tag, value as number)
+  })
+  finish(n.host)
+}
+
 type Transforms = NonNullable<Style["transform"]>
 
 interface Layer {
@@ -470,6 +544,8 @@ interface AnimatedModule {
 const drivers = new WeakMap<Native.ViewHost, Driver>()
 // The specs shown without a native driver.
 const plain = new WeakMap<NativeNode, Spec>()
+// The elements `named` names.
+const names = new Map<string, NativeNode>()
 let animated: AnimatedModule | null | undefined
 let installed = false
 let batching = false
@@ -483,6 +559,7 @@ const install = () => {
   installed = true
   props.set("animation", setSpec)
   props.set("animationSource", setSource)
+  props.set("animationName", setName)
   commits.add(flush)
 }
 
@@ -505,13 +582,27 @@ const setSpec = (n: NativeNode, value: unknown, host: Native.ViewHost) => {
   const spec = value as Spec | undefined
   const d = driverOf(host)
   if (d === undefined) {
-    // Without a native driver, the view shows its targets.
-    for (const key in plain.get(n)) {
+    // Without a native driver, the view shows its targets, and reaches
+    // them at the commit.
+    const last = plain.get(n)
+    for (const key in last) {
       if (spec?.[key] === undefined) host.set(n, key, undefined)
     }
-    for (const key in spec) host.set(n, key, resolve(spec[key]!.value, true))
+    let moved = false
+    for (const key in spec) {
+      const layer = spec[key]!
+      const shown = resolve(layer.value, true)
+      const was = last?.[key]?.value ?? layer.from ?? layer.value
+      if (JSON.stringify(shown) !== JSON.stringify(resolve(was, true))) {
+        moved = true
+      }
+      host.set(n, key, shown)
+    }
     if (spec === undefined) plain.delete(n)
     else plain.set(n, spec)
+    if (moved) {
+      Promise.resolve().then(() => host.fire(n, "animationEnd", {}))
+    }
     return
   }
   const entry = d.entries.get(n)
@@ -547,6 +638,11 @@ const setSpec = (n: NativeNode, value: unknown, host: Native.ViewHost) => {
     const layer = spec[key]!
     host.set(n, key, resolve(layer.from ?? layer.value, true))
   }
+}
+
+const setName = (n: NativeNode, name: unknown) => {
+  for (const [key, at] of names) if (at === n) names.delete(key)
+  if (typeof name === "string") names.set(name, n)
 }
 
 const setSource = (n: NativeNode, name: unknown, host: Native.ViewHost) => {
@@ -651,6 +747,10 @@ const native = (): AnimatedModule => {
 }
 
 const flush = (host: Native.ViewHost) => {
+  for (const [name, n] of names) {
+    const top = rootOf(n).kind
+    if (top !== surface && top !== container) names.delete(name)
+  }
   const d = drivers.get(host)
   if (d === undefined) return
   for (const [n, e] of d.entries) {
@@ -690,6 +790,10 @@ const flush = (host: Native.ViewHost) => {
       if (s.node === undefined) d.sources.delete(name)
     }
   }
+  finish(host)
+}
+
+const finish = (host: Native.ViewHost) => {
   if (!batching) return
   batching = false
   // iOS runs graph operations at the next mount, which a commit that only

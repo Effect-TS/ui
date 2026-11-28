@@ -9,6 +9,8 @@ import {
   Pan,
   Pressable,
   Stack,
+  StackSlide,
+  StackSwipe,
   VirtualView
 } from "@effect/ui-native/kit"
 import * as Native from "@effect/ui-native/Native"
@@ -395,6 +397,7 @@ export const App = Native.component({
         AppRoute.match(route, {
           Home: () => Home(s, { key: "home" }),
           About: () => About(s, { key: "about" })
-        })
+        }),
+      transition: StackSlide.slide({ swipeBack: StackSwipe.swipeBack() })
     })
 })

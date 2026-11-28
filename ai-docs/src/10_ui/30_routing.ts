@@ -37,7 +37,8 @@ import { AppRoute } from "./fixtures/routes.ts"
 //
 // On React Native, `NativeRouter.layer` from `@effect/ui-native` provides
 // the same Router on a history in memory, with Android Back and deep links.
-// Its root holds a stack of screens and draws it with the kit's `Stack`.
+// Its root holds a stack of screens and draws it with the kit's `Stack`,
+// which `StackSlide` and `StackSwipe` can animate.
 //
 // The Router and the HTTP client are the only Layers here. The pages provide
 // their own domain Layers.

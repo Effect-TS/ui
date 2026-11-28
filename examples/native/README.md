@@ -26,7 +26,7 @@ Metro serves the TypeScript sources of this app and of the workspace packages. E
 
 ## Screens and deep links
 
-The About button is a `Link` that pushes the About screen over the first, which stays mounted with its count. Android Back returns to the first screen, and from there closes the app. The app's scheme is `effect-ui`, so `effect-ui://about` opens the About screen:
+The About button is a `Link` that pushes the About screen over the first, which stays mounted with its count. The screens slide in and out with `StackSlide`. Android Back returns to the first screen, and from there closes the app. On iOS, a swipe from the left edge does the same. The app's scheme is `effect-ui`, so `effect-ui://about` opens the About screen:
 
 ```sh
 adb shell am start -a android.intent.action.VIEW -d "effect-ui://about" dev.effect.ui.example

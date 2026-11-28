@@ -186,6 +186,18 @@ export * from "./Stack.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as StackSlide from "./StackSlide.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as StackSwipe from "./StackSwipe.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as StatusBar from "./StatusBar.ts"
 
 /**

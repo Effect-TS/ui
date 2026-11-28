@@ -21,7 +21,10 @@
  * When a screen comes to the top after the first, the stack moves the
  * screen reader's focus to it.
  *
- * Screens switch without a transition.
+ * Screens switch at once. A `transition` moves them instead:
+ * `StackSlide.slide` slides them in and out on the native driver, and can
+ * add iOS swipe-back. A stack without one bundles neither `Animation` nor
+ * `Pan`.
  *
  * **Example** (The screens of a NativeRouter)
  *
@@ -41,17 +44,8 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Component from "@effect/ui/Component"
-import * as Head from "@effect/ui/Head"
-import * as Mount from "@effect/ui/Mount"
-import * as Effect from "effect/Effect"
-import * as Layer from "effect/Layer"
-import * as Option from "effect/Option"
-import * as Schema from "effect/Schema"
-import * as Stream from "effect/Stream"
-import * as Native from "../Native.ts"
-import type { NativeNode } from "../NativeHost.ts"
-import { ScreenState } from "./internal/screen.ts"
+import type * as Native from "../Native.ts"
+import { type Draw, Screen } from "./internal/stack.ts"
 
 /**
  * An entry of a stack: an `id` that stays the same while the entry is in
@@ -73,7 +67,7 @@ export interface StackEntry<A> {
  * @category models
  * @since 0.1.0
  */
-export interface StackOptions<A, R> {
+export interface StackOptions<A, R, T = never> {
   /** The entries, the top one last. */
   readonly entries: ReadonlyArray<StackEntry<A>>
   /** Draws an entry's screen. */
@@ -81,92 +75,27 @@ export interface StackOptions<A, R> {
     s: Native.H<never>,
     entry: StackEntry<A>
   ) => Native.NoTextInput<never, R>
+  /** Moves screens on and off the top, such as `StackSlide.slide()`. */
+  readonly transition?: StackTransition<T> | undefined
 }
 
-const Track = Mount.makeStream(
-  "Screen",
-  { args: { covered: Schema.Boolean, index: Schema.Number } },
-  (node: NativeNode, args, changes) =>
-    Stream.callback<never, never, ScreenState | Native.Host>(() =>
-      Effect.gen(function*() {
-        const screen = yield* ScreenState
-        const host = yield* Native.Host
-        // Focus moves to a screen that comes to the top: one that was
-        // covered, or one pushed over the first.
-        const show = (covered: boolean) => {
-          if (screen.covered && !covered) host.accessibilityEvent(node, "focus")
-          screen.covered = covered
-        }
-        screen.covered = args.index > 0
-        show(args.covered)
-        yield* Effect.forkScoped(
-          Stream.runForEach(
-            changes,
-            ({ covered }) => Effect.sync(() => show(covered))
-          )
-        )
-      })
-    )
-)
-
-const hidden = [Head.reduce(() => ({ title: undefined }))]
-const none: ReadonlyArray<Head.Entry> = []
-
-const Draw = Schema.declare(
-  (u): u is (s: Native.H<never>, entry: StackEntry<unknown>) => any =>
-    typeof u === "function"
-)
-
-const Screen = Component.provide(
-  Native.component({
-    name: "Screen",
-    props: Schema.Struct({
-      entry: Schema.Struct({ id: Schema.Number, route: Schema.Unknown }),
-      index: Schema.Number,
-      covered: Schema.Boolean,
-      draw: Draw
-    }),
-    model: Schema.Null,
-    message: Schema.Never,
-    restore: false
-  }).make({
-    init: () => null,
-    update: ($) => $.model,
-    // Only the top screen's title reaches the head.
-    head: ($) => $.props.covered ? hidden : none,
-    view: (s) => {
-      const { covered, draw, entry, index } = s.props
-      return s.view
-        .style({
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          opacity: covered ? 0 : 1,
-          pointerEvents: covered ? "none" : "auto"
-        })
-        .prop("collapsable", false)
-        .prop(
-          "importantForAccessibility",
-          covered ? "no-hide-descendants" : "auto"
-        )
-        .prop("accessibilityElementsHidden", covered)
-        .onMount(
-          Track({ covered, index }).pipe(Mount.map(() => Component.noop))
-        )
-        .children(draw(s as Native.H<never>, entry))
-    }
-  }),
-  () =>
-    Layer.effect(
-      ScreenState,
-      Effect.map(Effect.serviceOption(ScreenState), (parent) => ({
-        covered: true,
-        parent: Option.getOrUndefined(parent)
-      }))
-    )
-)
+/**
+ * How a stack moves screens on and off the top. Make one with
+ * `StackSlide.slide`. `R` is what it needs from the context.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface StackTransition<R = never> {
+  /** Draws the stack. */
+  readonly draw: (
+    h: Native.H<any>,
+    entries: ReadonlyArray<StackEntry<unknown>>,
+    screen: (s: Native.H<never>, entry: StackEntry<unknown>) => any
+  ) => Native.ViewElement<any, any, Native.ViewEvents, "view">
+  readonly "~requirements"?: ((_: never) => R) | undefined
+}
 
 /**
  * Draws `entries` as a stack of screens, the last on top.
@@ -175,25 +104,21 @@ const Screen = Component.provide(
  * @category components
  * @since 0.1.0
  */
-export const Stack = <Msg, A, R = never>(
+export const Stack = <Msg, A, R = never, T = never>(
   h: Native.H<Msg>,
-  options: StackOptions<A, R>
-): Native.ViewElement<Msg, R, Native.ViewEvents, "view"> => {
-  const { entries, screen } = options
+  options: StackOptions<A, R, T>
+): Native.ViewElement<Msg, R | T, Native.ViewEvents, "view"> => {
+  const { entries, transition } = options
+  const screen = options.screen as Draw
+  if (transition !== undefined) {
+    return transition.draw(h, entries, screen) as any
+  }
   const top = entries.length - 1
   return h.view.style({ flex: 1 }).children(
     entries.map((entry, index) =>
       Screen(h, {
         key: String(entry.id),
-        props: {
-          entry,
-          index,
-          covered: index < top,
-          draw: screen as (
-            s: Native.H<never>,
-            entry: StackEntry<unknown>
-          ) => any
-        }
+        props: { entry, index, covered: index < top, fade: true, draw: screen }
       })
     )
   ) as any
