@@ -365,24 +365,53 @@ describe("NativeRouter", { concurrent: false }, () => {
     await app.close()
   })
 
+  const launchedAt = (
+    routes: Router.Routes,
+    url: string | null,
+    prefixes: NativeRouter.Options["prefixes"]
+  ) => {
+    const linking = FakeDevice.module({
+      getInitialURL: () => Promise.resolve(url)
+    })
+    const { device } = FakeDevice.make("android", {
+      IntentAndroid: linking.module
+    })
+    return Effect.runPromise(
+      Effect.map(Router.Router, (router) => router.location().url).pipe(
+        Effect.provide(NativeRouter.layer({ routes, prefixes })),
+        Effect.provideService(Native.Device, device)
+      )
+    )
+  }
+
   it("starts a deep link the routes don't parse at their catch-all", async () => {
     const routes = Route.union({
       Home: Route.make("/"),
       NotFound: Route.make("/*")
     })
-    const linking = FakeDevice.module({
-      getInitialURL: () => Promise.resolve("myapp://missing")
-    })
-    const { device } = FakeDevice.make("android", {
-      IntentAndroid: linking.module
-    })
-    const route = await Effect.runPromise(
-      Router.currentRoute(routes).pipe(
-        Effect.provide(NativeRouter.layer({ routes, prefixes: ["myapp://"] })),
-        Effect.provideService(Native.Device, device)
-      )
+    assert.strictEqual(
+      await launchedAt(routes, "myapp://missing", ["myapp://"]),
+      "/missing"
     )
-    assert.strictEqual(route._tag, "NotFound")
+  })
+
+  it("resolves deep links and the fallback under the routes' base", async () => {
+    const routes = Route.union({
+      Home: Route.make("/"),
+      About: Route.make("/about")
+    })
+    routes.setBase("#")
+    const prefixes = (url: string) =>
+      url.startsWith("myapp://") ? "#/" + url.slice(8) : undefined
+    assert.strictEqual(
+      await launchedAt(routes, "myapp://about", prefixes),
+      "#/about"
+    )
+    assert.strictEqual(
+      await launchedAt(routes, "myapp://missing", prefixes),
+      "#/"
+    )
+    assert.strictEqual(await launchedAt(routes, null, prefixes), "#/")
   })
 
   it("starts at / when the launching URL isn't a deep link", async () => {

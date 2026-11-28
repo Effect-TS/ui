@@ -23,7 +23,7 @@
  * `https://example.com/people/1` opens `/people/1`. The app starts at the
  * URL that launched it, or at `/`, and a URL that opens it while it runs
  * is pushed. A path the routes don't parse, with no catch-all route, is
- * ignored. Without `prefixes` it always starts at `/`. An href the
+ * ignored. The app starts at the routes' base root without a deep link. Without `prefixes` it always starts at `/`. An href the
  * routes don't parse, as from `Router.load` or a `Link`, opens with
  * `Linking.openURL`.
  *
@@ -230,11 +230,12 @@ export const layer = (options: Options): Layer.Layer<Router.Services> =>
     // A deep link the routes don't parse, with no catch-all, isn't one.
     const routed = (url: string) => {
       const path = pathOf(prefixes!, url)
-      return path !== undefined &&
-          Option.isSome(options.routes.resolve(path.split("#")[0]!))
+      return path !== undefined && Option.isSome(options.routes.resolve(path))
         ? path
         : undefined
     }
+    const base = options.routes.base()
+    const root = base === "#" ? "#/" : base || "/"
     const start = launched === undefined ? undefined : routed(launched)
     const follow = Layer.effectDiscard(Effect.gen(function*() {
       const router = yield* Router.Router
@@ -264,7 +265,7 @@ export const layer = (options: Options): Layer.Layer<Router.Services> =>
       follow,
       Router.make({
         routes: options.routes,
-        history: memoryHistory(start ?? "/", device),
+        history: memoryHistory(start ?? root, device),
         restore: false,
         onSettled: options.onSettled
       })
