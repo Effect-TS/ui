@@ -11,6 +11,10 @@ vi.mock(
   "react-native/Libraries/TurboModule/TurboModuleRegistry",
   () => ({ get: () => null })
 )
+vi.mock(
+  "react-native/Libraries/EventEmitter/RCTDeviceEventEmitter",
+  () => ({ default: {} })
+)
 
 const Panel = Native.component({
   name: "Panel",

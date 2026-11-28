@@ -1,3 +1,4 @@
+import { Pan } from "@effect/ui-native/kit/Pan"
 import * as Native from "@effect/ui-native/Native"
 import * as Renderer from "@effect/ui/Renderer"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -10,17 +11,26 @@ const Mode = Schema.Literals(["default", "never", "handled", "always"])
 
 const Message = UiSchema.TaggedEnum({
   Pressed: {},
+  Panned: {},
+  Removed: {},
   Switched: { mode: Mode }
 })
 
 const Form = Native.component({
   name: "Form",
-  model: Schema.Struct({ mode: Mode, presses: Schema.Number }),
+  model: Schema.Struct({
+    mode: Mode,
+    presses: Schema.Number,
+    pans: Schema.Number,
+    row: Schema.Boolean
+  }),
   message: Message
 }).make({
-  init: () => ({ mode: "default" as const, presses: 0 }),
+  init: () => ({ mode: "default" as const, presses: 0, pans: 0, row: true }),
   update: {
     Pressed: ($) => $.evolve({ presses: (n) => n + 1 }),
+    Panned: ($) => $.evolve({ pans: (n) => n + 1 }),
+    Removed: ($) => $.evolve({ row: () => false }),
     Switched: ($, { mode }) => $.evolve({ mode: () => mode })
   },
   view: (h, model) =>
@@ -28,10 +38,14 @@ const Form = Native.component({
       ? h.scroll
       : h.scroll.keyboardShouldPersistTaps(model.mode)).children(
         h.input.placeholder("Name"),
-        h.view.style({ padding: 8 }).on("press", Message.Pressed()).children(
-          h.text("Row")
-        ),
-        h.text("Plain")
+        model.row &&
+          h.view.style({ padding: 8 }).on("press", Message.Pressed()).children(
+            h.text("Row")
+          ),
+        h.text("Plain"),
+        Pan(h, { onStart: Message.Panned(), props: { axis: "y" } }).children(
+          h.text("Pan")
+        )
       )
 })
 
@@ -58,6 +72,7 @@ const setup = async (os: string, version = 34) => {
   )
   const row = find(FakeFabric.byText("Row"))
   const plain = find(FakeFabric.byText("Plain"))
+  const pan = find(FakeFabric.byText("Pan"))
   const blurs = () =>
     fabric.commands.filter(([tag, name]) =>
       tag === input.tag && name === "blur"
@@ -80,6 +95,7 @@ const setup = async (os: string, version = 34) => {
     input,
     row,
     plain,
+    pan,
     blurs,
     tap,
     focus,
@@ -145,6 +161,42 @@ describe("scroll keyboardShouldPersistTaps", { concurrent: false }, () => {
       await t.tap(t.row)
       assert.deepStrictEqual([t.presses(), t.blurs()], [2, 1])
       t.emit(os === "ios" ? "keyboardWillHide" : "keyboardDidHide", {})
+      await t.close()
+    })
+
+    it(`dismisses on a tap a Pan doesn't take, and not on a drag it takes, with "handled", on ${os}`, async () => {
+      const t = await setup(os)
+      t.focus()
+      t.emit("keyboardDidShow", shown)
+      await t.mode("handled")
+      await t.tap(t.pan)
+      assert.deepStrictEqual([t.root.model()!.pans, t.blurs()], [0, 1])
+      t.blurred()
+      t.focus()
+      const at = (y: number, down = true) => {
+        const touch = { pageX: 10, pageY: y, timestamp: y }
+        return { touches: down ? [touch] : [], changedTouches: [touch] }
+      }
+      t.fabric.emit(t.pan, "topTouchStart", at(10))
+      t.fabric.emit(t.pan, "topTouchMove", at(40))
+      t.fabric.emit(t.pan, "topTouchEnd", at(40, false))
+      await t.settle()
+      assert.deepStrictEqual([t.root.model()!.pans, t.blurs()], [1, 1])
+      t.emit("keyboardDidHide", {})
+      await t.close()
+    })
+
+    it(`forgets the dismiss of a tap whose element is removed, on ${os}`, async () => {
+      const t = await setup(os)
+      t.focus()
+      t.emit("keyboardDidShow", shown)
+      t.fabric.emit(t.row, "topTouchStart", {})
+      t.root.send(Message.Removed())
+      await t.settle()
+      await t.mode("always")
+      await t.tap(t.plain)
+      assert.strictEqual(t.blurs(), 0)
+      t.emit("keyboardDidHide", {})
       await t.close()
     })
 

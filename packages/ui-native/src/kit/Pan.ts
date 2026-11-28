@@ -55,6 +55,7 @@
 import type * as View from "@effect/ui/View"
 import {
   fire,
+  own,
   pointOf,
   type Recognizer,
   touch,
@@ -244,6 +245,7 @@ const take = (
     if (owner !== undefined) end("panCancel")
     else touch.press(3, n, payload)
     owner = n
+    own()
     responder(n, true)
   }
   if (n.events.handlers.panStart === undefined) claim()

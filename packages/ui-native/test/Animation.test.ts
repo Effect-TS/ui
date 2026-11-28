@@ -10,7 +10,26 @@ import { assert, describe, it, vi } from "vitest"
 import * as FakeAnimated from "./utils/FakeAnimated.ts"
 import * as FakeFabric from "./utils/FakeFabric.ts"
 
-const native = vi.hoisted(() => ({ animated: undefined as any }))
+const native = vi.hoisted(() => {
+  const listeners = new Set<(event: string, data: unknown) => void>()
+  return {
+    animated: undefined as any,
+    emit: (event: string, data: unknown) => {
+      for (const f of listeners) f(event, data)
+    },
+    emitter: {
+      addListener(event: string, f: (data: unknown) => void) {
+        const own = (e: string, data: unknown) => e === event && f(data)
+        listeners.add(own)
+        return { remove: () => listeners.delete(own) }
+      }
+    }
+  }
+})
+vi.mock(
+  "react-native/Libraries/EventEmitter/RCTDeviceEventEmitter",
+  () => ({ default: native.emitter })
+)
 vi.mock(
   "react-native/Libraries/TurboModule/TurboModuleRegistry",
   () => ({
@@ -18,7 +37,7 @@ vi.mock(
       name === "NativeAnimatedModule" ? native.animated.module : null
   })
 )
-native.animated = FakeAnimated.make()
+native.animated = FakeAnimated.make(native.emit)
 const animated: ReturnType<typeof FakeAnimated.make> = native.animated
 
 const Sticky = Native.component({
@@ -173,6 +192,7 @@ const Headers = Native.component({
     sticky: Schema.Boolean,
     hiddenOnScroll: Schema.Boolean,
     inverted: Schema.Boolean,
+    inset: Schema.Number,
     presses: Schema.Number
   }),
   message: UiSchema.TaggedEnum({
@@ -181,6 +201,7 @@ const Headers = Native.component({
       hiddenOnScroll: Schema.Boolean,
       inverted: Schema.Boolean
     },
+    Inset: { top: Schema.Number },
     Pressed: {}
   })
 }).make({
@@ -188,15 +209,17 @@ const Headers = Native.component({
     sticky: true,
     hiddenOnScroll: false,
     inverted: false,
+    inset: 0,
     presses: 0
   }),
   update: {
     Set: ($, options) => $.evolve({ ...options }),
+    Inset: ($, { top }) => $.evolve({ inset: () => top }),
     Pressed: ($) => $.evolve({ presses: (n) => n + 1 })
   },
   view: (h, model) =>
     pipe(
-      h.scroll,
+      h.scroll.prop("contentInset", { top: model.inset }),
       model.sticky
         ? Animation.stickyHeaders([0, 2], {
           hiddenOnScroll: model.hiddenOnScroll,
@@ -393,6 +416,9 @@ describe("Animation", { concurrent: false }, () => {
         assert.strictEqual(top(80), -30)
         assert.strictEqual(top(20), 0)
         assert.strictEqual(top(60), -40)
+        // An offset JS doesn't get, as Fabric coalesces scroll events.
+        animated.scroll(t.scroller().tag, { y: 100 })
+        assert.strictEqual(top(80), -30)
         await sleep(100)
         assert.deepStrictEqual(t.a().props.transform, [{
           translateY: t.shown(t.a())
@@ -416,6 +442,24 @@ describe("Animation", { concurrent: false }, () => {
         // B, 300 below, pushes it at 350.
         t.scroll(400)
         assert.strictEqual(t.shown(t.a()), 200)
+
+        // Below a top inset, which iOS reports as a negative offset at
+        // rest, a header docks where the inset ends.
+        t.place(0, 350)
+        t.root.send({
+          _tag: "Set",
+          sticky: true,
+          hiddenOnScroll: false,
+          inverted: false
+        })
+        t.root.send({ _tag: "Inset", top: 20 })
+        await t.settle()
+        t.scroll(-20)
+        assert.strictEqual(t.shown(t.a()), 0)
+        t.scroll(100)
+        assert.strictEqual(t.shown(t.a()), 120)
+        await sleep(100)
+        assert.deepStrictEqual(t.a().props.transform, [{ translateY: 120 }])
         await t.close()
         assert.deepStrictEqual(
           { nodes: animated.nodes(), events: animated.events() },

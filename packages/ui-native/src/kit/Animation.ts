@@ -62,8 +62,9 @@
  */
 import * as View from "@effect/ui/View"
 import { dual } from "effect/Function"
+import RCTDeviceEventEmitter from "react-native/Libraries/EventEmitter/RCTDeviceEventEmitter"
 import { get } from "react-native/Libraries/TurboModule/TurboModuleRegistry"
-import { commits, precommits, props, scrolls } from "../internal/kinds.ts"
+import { commits, precommits, props } from "../internal/kinds.ts"
 import { container, mounted, rootOf, surface } from "../internal/node.ts"
 import { rectOf } from "../internal/touch.ts"
 import type * as Native from "../Native.ts"
@@ -397,9 +398,10 @@ export const source: {
  *   for a list that starts at its end.
  *
  * The native driver moves each header, so docking follows the scroll on the
- * UI thread. Shortly after the scroll stops, the shown position is
+ * UI thread. Shortly after the scroll stops, the position native reports is
  * committed, so a press on a docked header lands on it. A header shows
  * above the rows (`zIndex` 10), and its `transform` is the driver's.
+ * Headers dock below a `contentInset` top.
  *
  * **Gotchas**
  *
@@ -428,7 +430,7 @@ export const stickyHeaders: {
     indices: ReadonlyArray<number>,
     options?: StickyOptions
   ) => {
-    install()
+    installSticky()
     return self.prop(
       "stickyHeaders",
       indices.length === 0 ? undefined : {
@@ -477,6 +479,8 @@ interface Graph {
   /** Parent and child tags, in pairs. */
   readonly edges: Array<number>
   readonly sources: Array<Source>
+  /** The node native reports the value of, or `0`. */
+  readonly listened: number
 }
 
 interface Connection {
@@ -503,6 +507,9 @@ interface Source {
   /** The view tag the scroll events are bound to, or `0`. */
   bound: number
   users: number
+  /** The offset the value nodes start at, and the inset added to them. */
+  start: number
+  inset: number
   x?: number | undefined
   y?: number | undefined
 }
@@ -518,23 +525,14 @@ interface Sticky {
   /** The children at `indices`, as of the last commit. */
   kids: ReadonlyArray<NativeNode | undefined>
   readonly headers: Map<NativeNode, Header>
-  /** The offset of the last scroll event. */
-  y: number
   timer: ReturnType<typeof setTimeout> | undefined
 }
 
 interface Header {
-  translation: Expression
+  /** The translation's shape, to rebuild only when the layout changes it. */
   key: string
-  /** The state of `translation`'s `diffClamp`, as the native node has it. */
-  clamps: Map<Expression, Clamp>
-  /** `translation` at the last scroll event. */
-  value: number
-}
-
-interface Clamp {
-  input: number
-  value: number
+  /** The translation native last reported. */
+  value: number | undefined
 }
 
 /** What the driver follows on one surface. */
@@ -561,6 +559,10 @@ interface AnimatedModule {
   ): void
   stopAnimation(id: number): void
   setAnimatedNodeValue(tag: number, value: number): void
+  setAnimatedNodeOffset(tag: number, offset: number): void
+  startListeningToAnimatedNodeValue(tag: number): void
+  stopListeningToAnimatedNodeValue(tag: number): void
+  addListener?(event: string): void
   addAnimatedEventToView(viewTag: number, event: string, mapping: object): void
   removeAnimatedEventFromView(
     viewTag: number,
@@ -578,6 +580,13 @@ const plain = new WeakMap<NativeNode, Spec>()
 // header, which replaces the spec's.
 const own = new WeakMap<NativeNode, Spec>()
 const stuck = new WeakMap<NativeNode, Layer>()
+// What a header does with its translation when native reports it, and the
+// header of each translation node native reports.
+const hearing = new WeakMap<NativeNode, (value: number) => void>()
+const heard = new Map<number, NativeNode>()
+let listening = false
+// Lays the sticky headers out before the driver updates.
+let measuring: ((d: Driver) => void) | undefined
 let animated: AnimatedModule | null | undefined
 let installed = false
 let batching = false
@@ -591,10 +600,18 @@ const install = () => {
   installed = true
   props.set("animation", setSpec)
   props.set("animationSource", setSource)
+  commits.add(flush)
+}
+
+// Apps that dock no headers bundle none of this.
+const installSticky = () => {
+  if (measuring !== undefined) return
+  install()
   props.set("stickyHeaders", setSticky)
   precommits.add(assign)
-  commits.add(flush)
-  scrolls.add(scrolled)
+  measuring = (d) => {
+    for (const [n, st] of d.sticky) if (mounted(n)) measure(d, n, st)
+  }
 }
 
 const driverOf = (host: Native.ViewHost): Driver | undefined => {
@@ -692,7 +709,6 @@ const setSticky = (n: NativeNode, value: unknown, host: Native.ViewHost) => {
       source: "sticky " + (lastTag += 1),
       kids: [],
       headers: new Map(),
-      y: 0,
       timer: undefined
     })
   }
@@ -728,17 +744,33 @@ const assign = (host: Native.ViewHost) => {
       if (kids.includes(h)) continue
       st.headers.delete(h)
       stuck.delete(h)
+      hearing.delete(h)
       host.set(h, "zIndex", undefined)
       show(d, h, host)
     }
     for (const h of kids) {
       if (h === undefined || st.headers.has(h)) continue
+      hearing.set(h, (value) => {
+        st.headers.get(h)!.value = value
+        commitLater(st, host)
+      })
       translate(d, st, h, undefined, undefined, undefined)
       // As React Native's `ScrollViewStickyHeader`, above the rows.
       host.set(h, "zIndex", 10)
     }
-    if (live) sourceOf(d, st.source).node = n
-    else {
+    if (live) {
+      // As React Native's `ScrollView`: the offset starts at `contentOffset`,
+      // and a top inset, which iOS reports as a negative offset at rest, is
+      // added to it.
+      const s = sourceOf(d, st.source)
+      s.node = n
+      s.start = (n.props.contentOffset as any)?.y ?? 0
+      const inset = (n.props.contentInset as any)?.top ?? 0
+      if (inset !== s.inset) {
+        s.inset = inset
+        if (s.y !== undefined) native().setAnimatedNodeOffset(s.y, inset)
+      }
+    } else {
       clearTimeout(st.timer)
       d.sticky.delete(n)
       sourceOf(d, st.source).node = undefined
@@ -757,24 +789,15 @@ const measure = (d: Driver, n: NativeNode, st: Sticky) => {
       : [rect[1]! - content[1]!, rect[3]!] as const
   })
   const height = st.options.inverted ? rectOf(n, false)?.[3] : undefined
-  let changed = false
   for (let i = 0; i < st.kids.length; i++) {
     const h = st.kids[i]
-    if (h === undefined) continue
-    changed = translate(
-      d,
-      st,
-      h,
-      layouts[i],
-      layouts[i + 1]?.[0],
-      height
-    ) || changed
+    if (h !== undefined) {
+      translate(d, st, h, layouts[i], layouts[i + 1]?.[0], height)
+    }
   }
-  if (changed) commitLater(st, n.host)
 }
 
-// Gives the header the translation for its layout, returning whether it
-// changed.
+// Gives the header the translation for its layout.
 const translate = (
   d: Driver,
   st: Sticky,
@@ -782,7 +805,7 @@ const translate = (
   layout: readonly [number, number] | undefined,
   next: number | undefined,
   height: number | undefined
-): boolean => {
+) => {
   const [y, size] = layout ?? unmeasured
   const offset = scroll(st.source, "y")
   const input = [-1, 0]
@@ -823,43 +846,27 @@ const translate = (
     )
   }
   const key = JSON.stringify(translation)
-  if (key === st.headers.get(h)?.key) return false
-  const clamps = new Map<Expression, Clamp>()
-  st.headers.set(h, {
-    translation,
-    key,
-    clamps,
-    value: evaluate(translation, st.y, clamps)
-  })
+  const header = st.headers.get(h)
+  if (key === header?.key) return
+  st.headers.set(h, { key, value: header?.value })
   stuck.set(h, {
     value: [{ translateY: translation }],
     transition: undefined,
     from: undefined
   })
   show(d, h, h.host)
-  return true
 }
 
-const scrolled = (n: NativeNode, event: any) => {
-  const st = drivers.get(n.host)?.sticky.get(n)
-  if (st === undefined) return
-  st.y = event?.contentOffset?.y ?? 0
-  for (const header of st.headers.values()) {
-    header.value = evaluate(header.translation, st.y, header.clamps)
-  }
-  commitLater(st, n.host)
-}
-
-// Commits where the headers are shown, so Fabric's shadow tree agrees for
-// hit tests, once the scroll pauses, as React Native's
+// Commits where native shows the headers, so Fabric's shadow tree agrees
+// for hit tests, once the scroll pauses, as React Native's
 // `ScrollViewStickyHeader` does on Fabric.
 const commitLater = (st: Sticky, host: Native.ViewHost) => {
   clearTimeout(st.timer)
   st.timer = setTimeout(() => {
     st.timer = undefined
-    for (const [h, header] of st.headers) {
-      if (mounted(h)) {
-        host.set(h, "transform", [{ translateY: header.value }])
+    for (const [h, { value }] of st.headers) {
+      if (value !== undefined && mounted(h)) {
+        host.set(h, "transform", [{ translateY: value }])
       }
     }
     host.commit()
@@ -869,7 +876,10 @@ const commitLater = (st: Sticky, host: Native.ViewHost) => {
 const sourceOf = (d: Driver, name: string): Source => {
   let s = d.sources.get(name)
   if (s === undefined) {
-    d.sources.set(name, s = { node: undefined, bound: 0, users: 0 })
+    d.sources.set(
+      name,
+      s = { node: undefined, bound: 0, users: 0, start: 0, inset: 0 }
+    )
   }
   return s
 }
@@ -892,33 +902,19 @@ const resolve = (value: Layer["value"], at0: boolean): unknown => {
   return out
 }
 
-// The value at scroll offset `y`. With `clamps`, a `diffClamp` follows
-// the change since the last evaluation, as its native node does.
-const evaluate = (
-  v: Value,
-  y = 0,
-  clamps?: Map<Expression, Clamp>
-): number => {
+const evaluate = (v: Value): number => {
   if (typeof v === "number") return v
   switch (v._tag) {
     case "Scroll":
-      return y
+      return 0
     case "Add":
-      return evaluate(v.left, y, clamps) + evaluate(v.right, y, clamps)
+      return evaluate(v.left) + evaluate(v.right)
     case "Multiply":
-      return evaluate(v.left, y, clamps) * evaluate(v.right, y, clamps)
-    case "DiffClamp": {
-      const x = evaluate(v.input, y, clamps)
-      const clamp = (value: number) => Math.min(Math.max(value, v.min), v.max)
-      if (clamps === undefined) return clamp(x)
-      let c = clamps.get(v)
-      if (c === undefined) clamps.set(v, c = { input: 0, value: 0 })
-      c.value = clamp(c.value + x - c.input)
-      c.input = x
-      return c.value
-    }
+      return evaluate(v.left) * evaluate(v.right)
+    case "DiffClamp":
+      return Math.min(Math.max(evaluate(v.input), v.min), v.max)
     case "Interpolate": {
-      const x = evaluate(v.input, y, clamps)
+      const x = evaluate(v.input)
       const at = v.inputRange
       const to = v.outputRange
       const last = at.length - 1
@@ -977,7 +973,7 @@ const native = (): AnimatedModule => {
 const flush = (host: Native.ViewHost) => {
   const d = drivers.get(host)
   if (d === undefined) return
-  for (const [n, st] of d.sticky) if (mounted(n)) measure(d, n, st)
+  measuring?.(d)
   for (const [n, e] of d.entries) {
     const top = rootOf(n).kind
     // A node outside a surface or a kept child's container has been dropped.
@@ -1125,7 +1121,11 @@ const rebuild = (
         let tag = s[v.axis]
         if (tag === undefined) {
           tag = s[v.axis] = lastTag += 1
-          m.createAnimatedNode(tag, { type: "value", value: 0, offset: 0 })
+          m.createAnimatedNode(tag, {
+            type: "value",
+            value: s.start,
+            offset: s.inset
+          })
           if (s.bound !== 0) {
             m.addAnimatedEventToView(s.bound, "onScroll", mapping(v.axis, tag))
           }
@@ -1161,8 +1161,12 @@ const rebuild = (
   const styles: [Record<string, number>, Record<string, number>] = [{}, {}]
   const transforms: Array<object> = []
   const moved: Array<number> = []
+  let listened = 0
   leaves(spec, (path, value, _, from) => {
     const tag = lower(value, path, from)
+    if (path === "transform.0.translateY" && hearing.has(e.node)) {
+      listened = tag
+    }
     const dot = path.lastIndexOf(".")
     if (dot === -1) return styles[outer?.test(path) ? 1 : 0][path] = tag
     transforms.push({
@@ -1190,12 +1194,31 @@ const rebuild = (
       view: 0
     })
   }
-  e.graph = { props, nodes, edges, sources }
+  if (listened !== 0) listen(listened, e.node)
+  e.graph = { props, nodes, edges, sources, listened }
   for (const [path, t] of e.targets) {
     if (kept.has(path)) continue
     drop(t)
     e.targets.delete(path)
   }
+}
+
+// Has native report the value of node `tag` to `n`'s header, as React
+// Native's `Animated` does for a listener on a native node.
+const listen = (tag: number, n: NativeNode) => {
+  const m = native()
+  if (!listening) {
+    listening = true
+    // iOS sends the events only while the module counts a listener.
+    if (n.host.os === "ios") m.addListener?.("onAnimatedValueUpdate")
+    RCTDeviceEventEmitter.addListener("onAnimatedValueUpdate", (data: any) => {
+      const h = heard.get(data?.tag)
+      // Only Android reports a value node's offset apart.
+      if (h !== undefined) hearing.get(h)?.(data.value + (data.offset ?? 0))
+    })
+  }
+  m.startListeningToAnimatedNodeValue(tag)
+  heard.set(tag, n)
 }
 
 const go = (e: Entry, t: Target, to: number, transition: Transition) => {
@@ -1239,6 +1262,10 @@ const release = (e: Entry) => {
   e.graph = undefined
   for (const c of g.props) {
     if (c.view !== 0) m.disconnectAnimatedNodeFromView(c.tag, c.view)
+  }
+  if (g.listened !== 0) {
+    m.stopListeningToAnimatedNodeValue(g.listened)
+    heard.delete(g.listened)
   }
   for (let i = 0; i < g.edges.length; i += 2) {
     m.disconnectAnimatedNodes(g.edges[i]!, g.edges[i + 1]!)

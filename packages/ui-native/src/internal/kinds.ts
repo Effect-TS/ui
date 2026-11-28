@@ -47,8 +47,6 @@ const momentum =
     )
   }
 
-const relayScroll = relay("scroll")
-
 const scroll: ViewKind = {
   viewName: (n, host) =>
     horizontal(n, host) ? "AndroidHorizontalScrollView" : "RCTScrollView",
@@ -92,10 +90,7 @@ const scroll: ViewKind = {
       host.set(n.inner!, "onLayout", value)
   },
   events: {
-    topScroll(n, event, host) {
-      for (const f of scrolls) f(n, event)
-      relayScroll(n, event, host)
-    },
+    topScroll: relay("scroll"),
     topScrollBeginDrag: relay("scrollBeginDrag"),
     topScrollEndDrag: relay("scrollEndDrag"),
     topMomentumScrollBegin: relay("momentumScrollBegin"),
@@ -218,9 +213,6 @@ export const commits = new Set<(host: ViewHost) => void>()
  * @internal
  */
 export const precommits = new Set<(host: ViewHost) => void>()
-
-/** Called with every scroll view's `topScroll` event. @internal */
-export const scrolls = new Set<(n: NativeNode, event: any) => void>()
 
 /** `LayoutAnimation` configs by view transition type. @internal */
 export const layouts = new Map<string, object>()

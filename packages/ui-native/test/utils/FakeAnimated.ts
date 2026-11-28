@@ -8,16 +8,20 @@
  *
  * Like native, a view keeps the values the driver last showed for its keys
  * after the driver disconnects. A `diffclamp` node follows the change of
- * its input at each scroll event and read. With `ios` on, it holds graph operations
+ * its input at each scroll event and read. A listened node reports its value
+ * as `onAnimatedValueUpdate` through `emit` at each scroll event. With `ios` on, it holds graph operations
  * until an operation iOS flushes: starting, stopping or setting a value.
  */
 type Config = Record<string, any>
 
-export const make = () => {
+export const make = (
+  emit: (event: string, data: unknown) => void = () => {}
+) => {
   const nodes = new Map<number, Config & { value?: number }>()
   const parents = new Map<number, Array<number>>()
   const views = new Map<number, number>()
   const events = new Map<string, number>()
+  const listened = new Set<number>()
   const running = new Map<
     number,
     {
@@ -46,7 +50,7 @@ export const make = () => {
     const node = need(tag)
     switch (node.type) {
       case "value":
-        return node.value!
+        return node.value! + (node.offset ?? 0)
       case "addition":
         return value(node.input[0]) + value(node.input[1])
       case "multiplication":
@@ -123,6 +127,7 @@ export const make = () => {
     },
     dropAnimatedNode(tag: number) {
       need(tag)
+      if (listened.has(tag)) throw new Error("dropped listened node " + tag)
       for (const at of [...views.values(), ...events.values()]) {
         if (at === tag) throw new Error("dropped connected node " + tag)
       }
@@ -149,6 +154,16 @@ export const make = () => {
       })
     },
     stopAnimation: stop,
+    setAnimatedNodeOffset(tag: number, offset: number) {
+      need(tag).offset = offset
+    },
+    startListeningToAnimatedNodeValue(tag: number) {
+      need(tag)
+      listened.add(tag)
+    },
+    stopListeningToAnimatedNodeValue(tag: number) {
+      listened.delete(tag)
+    },
     setAnimatedNodeValue(tag: number, to: number) {
       for (const [id, a] of running) if (a.node === tag) stop(id)
       need(tag).value = to
@@ -217,6 +232,9 @@ export const make = () => {
       }
       // Native updates every node an event changes.
       for (const [tag, node] of nodes) if (node.type === "diffclamp") value(tag)
+      for (const tag of listened) {
+        emit("onAnimatedValueUpdate", { tag, value: value(tag) })
+      }
     },
     /** Moves every animation `t` of the way from its start to its end. */
     progress: (t: number) => {

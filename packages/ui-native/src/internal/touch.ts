@@ -165,7 +165,17 @@ let dropped: NativeNode | undefined
 // A handler that takes a touch as it starts, as React Native's responders do.
 const claims = (n: NativeNode) => {
   const h = n.events?.handlers
-  return h !== undefined && (h.press ?? h.pressIn ?? h.pan) !== undefined
+  return h !== undefined && (h.press ?? h.pressIn) !== undefined
+}
+
+/**
+ * Called by a recognizer that takes the touch, such as a `Pan` once it
+ * moves, so a `"handled"` scroll view keeps the keyboard up.
+ *
+ * @internal
+ */
+export const own = (): void => {
+  if (blur === 1) blur = 0
 }
 
 /**
@@ -174,9 +184,10 @@ const claims = (n: NativeNode) => {
  * Native's `ScrollView` does while the keyboard can be dismissed.
  *
  * A `"never"` scroll view takes a touch that doesn't start on an input. A
- * `"handled"` one takes it when nothing inside it handles it. Either way
- * the focused input is blurred when the touch ends, unless the scroll view
- * scrolls. A keyboard of height 0, which doesn't cover the app, lets a
+ * `"handled"` one takes it when nothing inside it handles a press, and
+ * leaves it to a `Pan` inside. Either way the focused input is blurred
+ * when the touch ends, unless the scroll view scrolls or the `Pan` takes
+ * the touch. A keyboard of height 0, which doesn't cover the app, lets a
  * `"never"` scroll view's touch through to the elements and blurs when it
  * ends, as React Native's `ScrollView` does.
  */
@@ -190,6 +201,7 @@ const persist = (n: NativeNode): boolean => {
   const scroll = kinds.get("scroll")
   const detached = focus.keyboard === 0
   let handled = n.kind === input
+  let pan = false
   let take = false
   for (let p: NativeNode | undefined = n; p !== undefined; p = p.parent) {
     if (p.kind === scroll) {
@@ -202,10 +214,12 @@ const persist = (n: NativeNode): boolean => {
         }
       } else if (mode === "handled" && !handled) {
         blur ||= 1
-        take = handled = true
+        take ||= !pan
+        handled = true
       }
     }
     handled ||= claims(p)
+    pan ||= p.events?.handlers.pan !== undefined
   }
   return take
 }
@@ -287,6 +301,7 @@ export const drop = (n: NativeNode) => {
   }
   target = undefined
   taken = false
+  blur = 0
 }
 
 const recognize: Recognizer = (phase, n, payload) =>
