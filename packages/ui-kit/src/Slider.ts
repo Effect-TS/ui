@@ -188,7 +188,7 @@ import {
   rightToLeft,
   watchDirectionWhile
 } from "./internal/direction.ts"
-import { focusVisible } from "./internal/dom.ts"
+import { focusVisible, followPointer } from "./internal/dom.ts"
 import { clamp, cssPercent } from "./internal/range.ts"
 
 // One number, or one per thumb.
@@ -699,7 +699,7 @@ const TrackPointer = Mount.makeStream(
       Effect.gen(function*() {
         const document = node.ownerDocument
         let { disabled, vertical } = args
-        let pointer: number | null = null
+        let stopDrag: (() => void) | null = null
         // Where the pointer grabbed the thumb, from its middle.
         let offset = 0
         const along = (event: PointerEvent): number =>
@@ -724,8 +724,6 @@ const TrackPointer = Mount.makeStream(
             : (vertical ? rect.bottom - at - end : at - rect.left - start) /
               length
         }
-        // The document's listeners for the press under way.
-        let listening: AbortController | undefined
         const readDirection = yield* watchDirectionWhile(
           node,
           args,
@@ -734,16 +732,13 @@ const TrackPointer = Mount.makeStream(
             Queue.offerUnsafe(queue, SliderMessage.FoundDirection({ rtl }))
         )
         const release = () => {
-          if (pointer === null) return
-          if (node.hasPointerCapture?.(pointer)) {
-            node.releasePointerCapture(pointer)
-          }
-          pointer = null
-          listening?.abort()
+          const stop = stopDrag
+          if (stop === null) return
+          stopDrag = null
+          stop()
           Queue.offerUnsafe(queue, SliderMessage.ReleasedPointer())
         }
         const onMove = (event: PointerEvent) => {
-          if (event.pointerId !== pointer) return
           // Another element took the pointer's release.
           if (event.buttons === 0) return release()
           Queue.offerUnsafe(
@@ -751,12 +746,9 @@ const TrackPointer = Mount.makeStream(
             SliderMessage.MovedPointer({ fraction: fractionAt(event) })
           )
         }
-        const onUp = (event: PointerEvent) => {
-          if (event.pointerId === pointer) release()
-        }
         const onDown = (event: PointerEvent) => {
           if (
-            disabled || pointer !== null || event.button !== 0 ||
+            disabled || stopDrag !== null || event.button !== 0 ||
             event.defaultPrevented
           ) return
           const thumbs = thumbsIn(node)
@@ -788,15 +780,9 @@ const TrackPointer = Mount.makeStream(
           // Keeps focus where it is and the text unselected. The thumb is
           // focused once the Model drags it.
           event.preventDefault()
-          pointer = event.pointerId
-          node.setPointerCapture?.(event.pointerId)
-          listening = new AbortController()
-          const { signal } = listening
           // The press may come before focus, so the direction is read first.
           readDirection()
-          document.addEventListener("pointermove", onMove, { signal })
-          document.addEventListener("pointerup", onUp, { signal })
-          document.addEventListener("pointercancel", onUp, { signal })
+          stopDrag = followPointer(node, event.pointerId, onMove, release)
           Queue.offerUnsafe(
             queue,
             SliderMessage.PressedPointer({
@@ -845,7 +831,8 @@ const TrackPointer = Mount.makeStream(
             Effect.sync(() => {
               node.removeEventListener("pointerdown", onDown)
               node.removeEventListener("keydown", onKey)
-              listening?.abort()
+              stopDrag?.()
+              stopDrag = null
             })
         )
         yield* Stream.runForEach(changes, (next) =>

@@ -850,16 +850,26 @@ const TrackStepper = Mount.makeStream(
             queue,
             NumberFieldMessage.HeldStepper({ direction, ...modifiers })
           )
-        const finish = (event: PointerEvent) => {
-          if (event.pointerId !== pointerId) return
+        const end = () => {
           release?.abort()
           release = undefined
           pressed = false
+          touching = false
           stop()
           Queue.offerUnsafe(
             queue,
             NumberFieldMessage.ReleasedStepper({ direction })
           )
+        }
+        const finish = (event: PointerEvent) => {
+          if (event.pointerId === pointerId) end()
+        }
+        const interrupt = () => {
+          if (release !== undefined) return end()
+          if (!pressed && !touching) return
+          pressed = false
+          touching = false
+          stop()
         }
         const start = (first: boolean, focus: boolean) => {
           stop()
@@ -919,14 +929,7 @@ const TrackStepper = Mount.makeStream(
           }
         }
         const onPointerCancel = (event: PointerEvent) => {
-          if (event.pointerId !== pointerId) {
-            return
-          }
-          if (release !== undefined) {
-            return finish(event)
-          }
-          pressed = false
-          stop()
+          if (event.pointerId === pointerId) interrupt()
         }
         const onPointerMove = (event: PointerEvent) => {
           if (disabled || !touchLike(event.pointerType) || !pressed) {
@@ -990,6 +993,7 @@ const TrackStepper = Mount.makeStream(
               signal
             })
             view.addEventListener("pointercancel", onPointerCancel, { signal })
+            view.addEventListener("blur", interrupt, { signal })
             node.addEventListener("pointerdown", onPointerDown, { signal })
             node.addEventListener("pointerup", onPointerUp, { signal })
             node.addEventListener("pointermove", onPointerMove, { signal })
@@ -1141,10 +1145,13 @@ const TrackScrub = Mount.makeStream(
         if (gecko) exit = setTimeout(release, 20)
         else release()
       }
-      const onCancel = (event: PointerEvent) => {
-        if (!scrubbing || event.pointerId !== pointerId) return
+      const interrupt = () => {
+        if (!scrubbing) return
         stop(true)
         unlock()
+      }
+      const onCancel = (event: PointerEvent) => {
+        if (event.pointerId === pointerId) interrupt()
       }
       const onMove = (event: PointerEvent) => {
         if (!scrubbing || event.pointerId !== pointerId) return
@@ -1204,6 +1211,7 @@ const TrackScrub = Mount.makeStream(
         view.addEventListener("pointerup", onUp, options)
         view.addEventListener("pointercancel", onCancel, options)
         view.addEventListener("pointermove", onMove, options)
+        view.addEventListener("blur", interrupt, { signal: dragging.signal })
         Queue.offerUnsafe(
           queue,
           NumberFieldMessage.StartedScrub({ focus: mouse })

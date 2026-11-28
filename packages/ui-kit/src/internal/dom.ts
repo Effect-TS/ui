@@ -285,3 +285,39 @@ export const override = (
     }
   }
 }
+
+export const followPointer = (
+  node: HTMLElement,
+  pointer: number,
+  onMove: (event: PointerEvent) => void,
+  onEnd: (event: Event) => void
+): () => void => {
+  try {
+    node.setPointerCapture?.(pointer)
+  } catch {
+    // The pointer is already gone, as after a synthetic event.
+  }
+  const listening = new AbortController()
+  const options = { signal: listening.signal }
+  const own = (f: (event: PointerEvent) => void) => (event: PointerEvent) => {
+    if (event.pointerId === pointer) f(event)
+  }
+  const stop = () => {
+    listening.abort()
+    if (node.hasPointerCapture?.(pointer) === true) {
+      node.releasePointerCapture(pointer)
+    }
+  }
+  const end = (event: Event) => {
+    if (listening.signal.aborted) return
+    stop()
+    onEnd(event)
+  }
+  const document = node.ownerDocument
+  document.addEventListener("pointermove", own(onMove), options)
+  document.addEventListener("pointerup", own(end), options)
+  document.addEventListener("pointercancel", own(end), options)
+  node.addEventListener("lostpointercapture", own(end), options)
+  document.defaultView?.addEventListener("blur", end, options)
+  return stop
+}

@@ -389,10 +389,14 @@ const endedAt = (
     : -1
 }
 
-const releasedPointer = HtmlSubscription.onDocument(
-  "mouseup",
-  SortableListMessage.ReleasedPointer()
-)
+const releasedPointer = [
+  HtmlSubscription.onDocument("mouseup", SortableListMessage.ReleasedPointer()),
+  HtmlSubscription.onDocument(
+    "pointercancel",
+    SortableListMessage.ReleasedPointer()
+  ),
+  HtmlSubscription.onWindow("blur", SortableListMessage.ReleasedPointer())
+]
 
 const outdated = (
   { ended, moving }: SortableListModel,
@@ -525,7 +529,7 @@ export const SortableList = Html.component({
     FoundDirection: ($, { rtl }) => $.evolve({ rtl })
   },
   subscriptions: ({ model, props }) => [
-    model.pressed && releasedPointer,
+    ...(model.pressed ? releasedPointer : []),
     outdated(model, props) && changedProps
   ],
   parts: (p, model) => {

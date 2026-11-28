@@ -199,6 +199,7 @@ import { flag, idOf, withStyle } from "./internal/attributes.ts"
 import {
   byAttribute,
   elementOf,
+  followPointer,
   isHTMLElement,
   onRange,
   saved
@@ -975,41 +976,6 @@ const freeze = (element: HTMLElement): () => void => {
   return thaw
 }
 
-const followPointer = (
-  node: HTMLElement,
-  pointer: number,
-  onMove: (event: PointerEvent) => void,
-  onEnd: (event: PointerEvent) => void
-): () => void => {
-  try {
-    node.setPointerCapture?.(pointer)
-  } catch {
-    // The pointer is already gone, as after a synthetic event.
-  }
-  const listening = new AbortController()
-  const options = { signal: listening.signal }
-  const own = (f: (event: PointerEvent) => void) => (event: PointerEvent) => {
-    if (event.pointerId === pointer) f(event)
-  }
-  const document = node.ownerDocument
-  document.addEventListener(
-    "pointermove",
-    own((event) => {
-      onMove(event)
-      if (event.buttons === 0) onEnd(event)
-    }),
-    options
-  )
-  document.addEventListener("pointerup", own(onEnd), options)
-  document.addEventListener("pointercancel", own(onEnd), options)
-  return () => {
-    listening.abort()
-    if (node.hasPointerCapture?.(pointer) === true) {
-      node.releasePointerCapture(pointer)
-    }
-  }
-}
-
 const TrackSwipeArgs = {
   ...ProgressArgs,
   direction: DrawerSwipeDirection,
@@ -1331,6 +1297,7 @@ const TrackSwipe = Mount.makeStream(
               moved.timeStamp,
               false
             )
+            if (moved.buttons === 0) release(moved.timeStamp)
           }, (ended) => release(ended.timeStamp))
         }
         const onTouchStart = (event: TouchEvent) => {
@@ -1462,7 +1429,7 @@ const TrackSwipe = Mount.makeStream(
           state.lastX = point.clientX
           state.lastY = point.clientY
         }
-        const onTouchEnd = (event: TouchEvent) => {
+        const onTouchEnd = (event: Event) => {
           if (gesture !== null && gesture.pointer === null) {
             release(
               event.timeStamp
@@ -1485,6 +1452,7 @@ const TrackSwipe = Mount.makeStream(
             })
             node.addEventListener("touchend", onTouchEnd, { signal })
             node.addEventListener("touchcancel", onTouchEnd, { signal })
+            view?.addEventListener("blur", onTouchEnd, { signal })
             measure()
             if (typeof ResizeObserver === "function") {
               observer = new ResizeObserver(measure)
@@ -1646,6 +1614,7 @@ const TrackSwipeArea = Mount.makeStream(
           apply(g)
         }
         const release = (g: AreaGesture, time: number) => {
+          if (gesture !== g) return
           finish(g)
           if (!g.started) return
           send(DrawerMessage.ReleasedAreaSwipe({
@@ -1666,8 +1635,10 @@ const TrackSwipeArea = Mount.makeStream(
           g.stop = followPointer(
             node,
             event.pointerId,
-            (moved) =>
-              move(g, { x: moved.clientX, y: moved.clientY }, moved.timeStamp),
+            (moved) => {
+              move(g, { x: moved.clientX, y: moved.clientY }, moved.timeStamp)
+              if (moved.buttons === 0) release(g, moved.timeStamp)
+            },
             (ended) => release(g, ended.timeStamp)
           )
         }
@@ -1683,7 +1654,7 @@ const TrackSwipeArea = Mount.makeStream(
           move(g, { x: point.clientX, y: point.clientY }, event.timeStamp)
           if (g.started && event.cancelable) event.preventDefault()
         }
-        const onTouchEnd = (event: TouchEvent) => {
+        const onTouchEnd = (event: Event) => {
           const g = gesture
           if (g !== null && g.pointer === null) release(g, event.timeStamp)
         }
@@ -1702,6 +1673,9 @@ const TrackSwipeArea = Mount.makeStream(
             })
             node.addEventListener("touchend", onTouchEnd, { signal })
             node.addEventListener("touchcancel", onTouchEnd, { signal })
+            document.defaultView?.addEventListener("blur", onTouchEnd, {
+              signal
+            })
           }),
           () =>
             Effect.sync(() => {
