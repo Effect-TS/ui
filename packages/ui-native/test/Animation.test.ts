@@ -408,35 +408,36 @@ describe("Animation", { concurrent: false }, () => {
         assert.deepStrictEqual(t.a().props.transform, [{ translateY: 120 }])
 
         // Without sticky headers, they get new views that the driver doesn't move.
+        const sticky = async (sticky: boolean) => {
+          t.root.send({
+            _tag: "Set",
+            sticky,
+            hiddenOnScroll: false,
+            inverted: false
+          })
+          await t.settle()
+        }
         const tag = t.a().tag
-        t.root.send({
-          _tag: "Set",
-          sticky: false,
-          hiddenOnScroll: false,
-          inverted: false
-        })
-        await t.settle()
+        await sticky(false)
         assert.notStrictEqual(t.a().tag, tag)
         // Its own style shows again, as it changed while it was a header.
         assert.strictEqual(t.a().props.zIndex, 3)
         assert.deepStrictEqual(t.a().props.transform, [{ scale: 3 }])
         assert.isUndefined(t.a().props.onLayout)
         assert.isUndefined(animated.view(t.a().tag))
-        assert.deepStrictEqual(
-          { nodes: animated.nodes(), events: animated.events() },
-          before
-        )
+        // Only the list's scroll value is left, still following native.
+        assert.strictEqual(animated.nodes(), before.nodes + 1)
         // The new view is laid out where the old one was.
         t.place(0, 350)
-        t.root.send({
-          _tag: "Set",
-          sticky: true,
-          hiddenOnScroll: false,
-          inverted: false
-        })
-        await t.settle()
-        // From where the list rests.
+        await sticky(true)
+        // From where the list rests, which JS never saw.
         assert.strictEqual(t.shown(t.a()), 120)
+        // Or from where native scrolled it while it had no headers.
+        await sticky(false)
+        animated.scroll(t.scroller().tag, { y: 140 })
+        t.place(0, 350)
+        await sticky(true)
+        assert.strictEqual(t.shown(t.a()), 140)
         t.scroll(60)
         assert.strictEqual(t.shown(t.a()), 60)
         await t.close()

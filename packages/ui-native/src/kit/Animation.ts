@@ -516,6 +516,8 @@ interface Source {
   inset: number
   x?: number | undefined
   y?: number | undefined
+  /** A scroll view's sticky headers' own, kept while it is in the tree. */
+  pinned?: boolean | undefined
 }
 
 interface Sticky {
@@ -572,7 +574,6 @@ interface AnimatedModule {
   stopAnimation(id: number): void
   setAnimatedNodeValue(tag: number, value: number): void
   setAnimatedNodeOffset(tag: number, offset: number): void
-  getValue(tag: number, callback: (value: number) => void): void
   startListeningToAnimatedNodeValue(tag: number): void
   stopListeningToAnimatedNodeValue(tag: number): void
   addListener?(event: string): void
@@ -598,8 +599,8 @@ const heard = new Map<number, NativeNode>()
 // The own values of the props a header, or a scroll view with headers,
 // shows in their place, to show again after.
 const kept = new WeakMap<NativeNode, Record<string, unknown>>()
-// Where native last had each scroll view scrolled, as its headers went.
-const offsets = new WeakMap<NativeNode, number>()
+// Each scroll view's sticky source, kept when its headers go.
+const named = new WeakMap<NativeNode, string>()
 // The devices whose value reports are followed.
 const listening = new WeakSet<Native.Device>()
 // The sticky headers' part of the driver, set by the first `stickyHeaders`
@@ -767,8 +768,7 @@ const setSource = (n: NativeNode, name: unknown, host: Native.ViewHost) => {
   const d = driverOf(host)
   if (d === null) return
   for (const s of d.sources.values()) {
-    // `assign` gives a sticky source its node back before `flush`.
-    if (s.node === n) s.node = undefined
+    if (s.node === n && !s.pinned) s.node = undefined
   }
   if (typeof name === "string") sourceOf(d, name).node = n
 }
@@ -781,9 +781,11 @@ const setSticky = (n: NativeNode, value: unknown, host: Native.ViewHost) => {
   if (st !== undefined) st.options = options
   else if (options !== undefined) {
     replace(n, { onLayout: true })
+    let source = named.get(n)
+    if (source === undefined) named.set(n, source = "sticky " + (lastTag += 1))
     d.sticky.set(n, {
       options,
-      source: "sticky " + (lastTag += 1),
+      source,
       kids: [],
       headers: new Set(),
       timer: undefined
@@ -831,13 +833,14 @@ const assign = (host: Native.ViewHost) => {
       translate(d, h)
     }
     if (live) {
-      // As React Native's `ScrollView`: the offset starts where native had
-      // the view scrolled when it last had headers, or at `contentOffset`,
+      // As React Native's `ScrollView`: the offset starts at `contentOffset`,
       // and a top inset, which iOS reports as a negative offset at rest, is
-      // added to it.
+      // added to it. The value follows the view until it leaves the tree,
+      // so headers that come back start where native has it scrolled.
       const s = sourceOf(d, st.source)
       s.node = n
-      s.start = offsets.get(n) ?? (n.props.contentOffset as any)?.y ?? 0
+      s.pinned = true
+      s.start = (n.props.contentOffset as any)?.y ?? 0
       const inset = (n.props.contentInset as any)?.top ?? 0
       if (inset !== s.inset) {
         s.inset = inset
@@ -847,14 +850,6 @@ const assign = (host: Native.ViewHost) => {
       clearTimeout(st.timer)
       d.sticky.delete(n)
       restore(n, headers.has(n) ? [] : ["onLayout"])
-      const s = sourceOf(d, st.source)
-      s.node = undefined
-      // As React Native's `AnimatedValue` when detached, keeps where native
-      // has the view scrolled, which JS may not have seen, for when it has
-      // headers again.
-      if (s.y !== undefined) {
-        native(d).getValue(s.y, (y) => offsets.set(n, y - s.inset))
-      }
     }
   }
 }
@@ -1087,9 +1082,11 @@ const flush = (host: Native.ViewHost) => {
     const top = s.node === undefined ? undefined : rootOf(s.node).kind
     if (top !== undefined && top !== surface && top !== container) {
       s.node = undefined
+      s.pinned = false
     }
-    bind(d, s, top === surface && s.users > 0 ? s.node!.tag : 0, host.os)
-    if (s.users === 0) {
+    const used = s.users > 0 || s.pinned === true
+    bind(d, s, top === surface && used ? s.node!.tag : 0, host.os)
+    if (!used) {
       if (s.x !== undefined) native(d).dropAnimatedNode(s.x)
       if (s.y !== undefined) native(d).dropAnimatedNode(s.y)
       s.x = s.y = undefined
