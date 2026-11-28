@@ -31,64 +31,81 @@ const Message = UiSchema.TaggedEnum({
 
 const CardMessage = UiSchema.TaggedEnum({ ClickedLike: {} })
 
-const Card = Html.component({
-  name: "Card",
-  props: Schema.Struct({ layout: Layout }),
-  model: Schema.Struct({ likes: Schema.Number }),
-  message: CardMessage
-}).make({
-  init: () => ({ likes: 0 }),
-  update: { ClickedLike: ($) => $.evolve({ likes: $.model.likes + 1 }) },
-  view: (h, model) =>
-    h.button.on("click", CardMessage.ClickedLike()).children(
-      `Like ${model.likes}`
-    )
-})
+const makeCard = (animate = false) =>
+  Html.component({
+    name: "Card",
+    props: Schema.Struct({ layout: Layout }),
+    model: Schema.Struct({ likes: Schema.Number }),
+    message: CardMessage
+  }).make({
+    init: () => ({ likes: 0 }),
+    update: {
+      ClickedLike: ($) => {
+        const next = $.evolve({ likes: $.model.likes + 1 })
+        return animate ? next.viewTransition(["child-pop"]) : next
+      }
+    },
+    view: (h, model) =>
+      h.button.on("click", CardMessage.ClickedLike()).children(
+        `Like ${model.likes}`
+      )
+  })
 
-const Gallery = Html.component({
-  name: "Gallery",
-  props: Schema.Struct({ route: GalleryRoute }),
-  model: Schema.Struct({
-    route: GalleryRoute,
-    layout: Layout,
-    filter: Schema.String
-  }),
-  message: Message
-}).make({
-  init: ($) => ({ route: $.props.route, layout: "grid" as const, filter: "" }),
-  update: {
-    ClickedLayout: ($, { layout }) =>
-      $.evolve({ layout }).viewTransition(["layout-change"]),
-    TypedFilter: ($, { value }) => $.evolve({ filter: value }),
-    ClickedOpen: ($) =>
-      $.run(
-        Router.push(GalleryRoute, GalleryRoute.Detail()).pipe(Command.asNoop)
-      ),
-    ChangedRoute: ($, { route }) =>
-      $.evolve({ route }).viewTransition(["to-detail"])
-  },
-  subscriptions: ({ model }) => [
-    Router.subscription(
-      GalleryRoute,
-      model.route,
-      (route) => Message.ChangedRoute({ route })
-    )
-  ],
-  view: (h, model) =>
-    h.main(
-      h.p(`${model.route._tag} ${model.layout} ${model.filter}`),
-      h.button.on("click", Message.ClickedLayout({ layout: "grid" })).children(
-        "Grid"
-      ),
-      h.button.on("click", Message.ClickedLayout({ layout: "list" })).children(
-        "List"
-      ),
-      h.button.on("click", Message.ClickedOpen()).children("Open"),
-      h.input.attr("aria-label", "Filter").on("input", ({ value }) =>
-        Message.TypedFilter({ value })),
-      Card(h, { props: { layout: model.layout } })
-    )
-})
+const Card = makeCard()
+
+const makeGallery = (options?: {
+  readonly animateCard?: boolean
+  readonly onRoute?: (route: typeof GalleryRoute.Type) => void
+}) => {
+  const Child = options?.animateCard ? makeCard(true) : Card
+  return Html.component({
+    name: "Gallery",
+    props: Schema.Struct({ route: GalleryRoute }),
+    model: Schema.Struct({
+      route: GalleryRoute,
+      layout: Layout,
+      filter: Schema.String
+    }),
+    message: Message
+  }).make({
+    init: ($) => ({
+      route: $.props.route,
+      layout: "grid" as const,
+      filter: ""
+    }),
+    update: {
+      ClickedLayout: ($, { layout }) =>
+        $.evolve({ layout }).viewTransition(["layout-change"]),
+      TypedFilter: ($, { value }) => $.evolve({ filter: value }),
+      ClickedOpen: ($) =>
+        $.run(
+          Router.push(GalleryRoute, GalleryRoute.Detail()).pipe(Command.asNoop)
+        ),
+      ChangedRoute: ($, { route }) =>
+        $.evolve({ route }).viewTransition(["to-detail"])
+    },
+    subscriptions: ({ model }) => [
+      Router.subscription(GalleryRoute, model.route, (route) => {
+        options?.onRoute?.(route)
+        return Message.ChangedRoute({ route })
+      })
+    ],
+    view: (h, model) =>
+      h.main(
+        h.p(`${model.route._tag} ${model.layout} ${model.filter}`),
+        h.button.on("click", Message.ClickedLayout({ layout: "grid" }))
+          .children("Grid"),
+        h.button.on("click", Message.ClickedLayout({ layout: "list" }))
+          .children("List"),
+        h.button.on("click", Message.ClickedOpen()).children("Open"),
+        h.input.attr("aria-label", "Filter").on("input", ({ value }) =>
+          Message.TypedFilter({ value })),
+        Child(h, { props: { layout: model.layout } })
+      )
+  })
+}
+
+const Gallery = makeGallery()
 
 const tick = Effect.promise(() =>
   new Promise<void>((resolve) => setTimeout(resolve, 30))
@@ -139,7 +156,10 @@ const fakeTransitions = (options?: { readonly reducedMotion?: boolean }) =>
       })
   )
 
-const mount = Effect.fnUntraced(function*(executor: Executor.Executor) {
+const mount = Effect.fnUntraced(function*(
+  executor: Executor.Executor,
+  component: typeof Gallery = Gallery
+) {
   window.history.replaceState(null, "", "/")
   const log = MessageLog.makeMemory()
   const app = yield* Effect.acquireRelease(
@@ -172,7 +192,7 @@ const mount = Effect.fnUntraced(function*(executor: Executor.Executor) {
   )
   const root = yield* Effect.flatMap(
     Router.currentRoute(GalleryRoute),
-    (route) => Renderer.mount(Gallery, { route }, app)
+    (route) => Renderer.mount(component, { route }, app)
   ).pipe(Effect.provideContext(context))
   const click = (name: string) =>
     HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name }))
@@ -194,17 +214,38 @@ const mount = Effect.fnUntraced(function*(executor: Executor.Executor) {
 
 const start = mount(Executor.microtask)
 
-const held = Effect.gen(function*() {
+const heldWith = Effect.fnUntraced(function*(
+  component: typeof Gallery = Gallery
+) {
   const tasks: Array<() => void> = []
   const app = yield* mount({
     scheduler: undefined,
     schedule: (task) => tasks.push(task)
-  })
+  }, component)
   const runTasks = () => {
     while (tasks.length > 0) tasks.shift()!()
   }
   return { ...app, tasks, runTasks }
 })
+
+const held = heldWith()
+
+const flaggedBack = Effect.acquireUseRelease(
+  Effect.sync(() => {
+    const Original = window.PopStateEvent
+    win.PopStateEvent = class extends Original {
+      constructor(type: string, init?: PopStateEventInit) {
+        super(type, { ...init, hasUAVisualTransition: true })
+      }
+    }
+    return Original
+  }),
+  () => Effect.sync(() => window.history.back()),
+  (Original) =>
+    Effect.sync(() => {
+      win.PopStateEvent = Original
+    })
+)
 
 describe("view transitions", { concurrent: false }, () => {
   it.effect("an update that asks for one commits in the browser's callback, with what arrives meanwhile", () =>
@@ -318,6 +359,86 @@ describe("view transitions", { concurrent: false }, () => {
         })
       }
       expect(card()).toBe("Like 2")
+    }).pipe(Effect.scoped))
+
+  it.effect("a pop the browser already animated skips its transition, keeps queued child work still, and leaves ordinary pops animated", () =>
+    Effect.gen(function*() {
+      const transitions = yield* fakeTransitions()
+      let clickOnGrid = false
+      let triggerCard = () => {}
+      const { card, click, runTasks, shown, tasks } = yield* heldWith(
+        makeGallery({
+          animateCard: true,
+          onRoute: (route) => {
+            if (clickOnGrid && route._tag === "Grid") triggerCard()
+          }
+        })
+      )
+      triggerCard = () => click(card())
+      click("Open")
+      while (transitions.started.length === 0) {
+        if (tasks.length > 0) tasks.shift()!()
+        else yield* tick
+      }
+      transitions.started[0]!.update()
+      runTasks()
+      expect(shown()).toBe("Detail grid ")
+      // Pending parent transition + pre-queued animated child click stay still on flagged Back.
+      click("List")
+      click(card())
+      yield* flaggedBack
+      runTasks()
+      expect({
+        shown: shown(),
+        card: card(),
+        started: transitions.started.map((started) => started.types)
+      }).toEqual({
+        shown: "Grid list ",
+        card: "Like 1",
+        started: [["to-detail"]]
+      })
+      // Ordinary Forward after flush still animates.
+      window.history.forward()
+      runTasks()
+      expect(transitions.started.map((started) => started.types)).toEqual([
+        ["to-detail"],
+        ["to-detail"]
+      ])
+      transitions.started[1]!.update()
+      runTasks()
+      // Ordinary Forward before flush still animates after a flagged Back.
+      yield* flaggedBack
+      window.history.forward()
+      runTasks()
+      expect(transitions.started.map((started) => started.types)).toEqual([
+        ["to-detail"],
+        ["to-detail"],
+        ["to-detail"]
+      ])
+      transitions.started[2]!.update()
+      runTasks()
+      // Holding parent transition + animated child click triggered during flagged Back stay still on resume.
+      click("Grid")
+      runTasks()
+      clickOnGrid = true
+      yield* flaggedBack
+      clickOnGrid = false
+      transitions.started[3]!.update()
+      runTasks()
+      expect({
+        shown: shown(),
+        card: card(),
+        started: transitions.started.map((started) => started.types)
+      }).toEqual({
+        shown: "Grid grid ",
+        card: "Like 2",
+        started: [
+          ["to-detail"],
+          ["to-detail"],
+          ["to-detail"],
+          ["layout-change"]
+        ]
+      })
     }).pipe(Effect.scoped))
 
   it.effect("freezing settles a requested transition's update at once, without starting one", () =>

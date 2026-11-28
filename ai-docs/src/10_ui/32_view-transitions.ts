@@ -148,10 +148,10 @@ export const TransitionApp = Html.component({
 //     animation-duration: 250ms;
 //   }
 //
-// Where the browser lacks the API, or the user prefers reduced motion, the
-// same updates commit at once without animation. The first render never
-// animates, and nor does a host without a document, such as `TestHost`, so
-// tests and server renders are unaffected. While the browser prepares the
-// transition, about a frame, the update waits: its DOM patch, the head, the
-// Router's scroll and focus, and messages that arrive meanwhile all commit
-// together when it calls back.
+// Without the API, or with reduced motion enabled, updates commit without
+// animation. `BrowserRouter` also suppresses new transitions for history
+// traversals with `hasUAVisualTransition: true`. The first render and hosts
+// without a document, such as `TestHost`, never animate. While the browser
+// prepares the transition, about a frame, the update waits: its DOM patch,
+// the head, the Router's scroll and focus, and messages that arrive meanwhile
+// all commit together when it calls back.

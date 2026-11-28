@@ -1043,6 +1043,7 @@ export const headOf = (root: Root): unknown => {
 
 const unmoved: Kernel.Transitions = {
   request: () => {},
+  still: () => {},
   waits: () => true,
   wait: () => {},
   hold: () => false,

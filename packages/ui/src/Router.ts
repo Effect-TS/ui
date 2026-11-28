@@ -1145,8 +1145,10 @@ export class PrefetchEntryNotWatched
  *
  * `go` moves through the entries and, synchronously or later, reports the
  * entry it landed on to the listener given to `listen`, as the browser's
- * `popstate` does. `state` is opaque to the history; the Router stores the
- * entry's index and its history-restore snapshot in it.
+ * `popstate` does. Pass `true` as the callback's third argument when the
+ * host already animated the traversal to suppress a second view transition.
+ * `state` is opaque to the history; the Router stores the entry's index and
+ * its history-restore snapshot in it.
  *
  * @stability experimental
  * @category models
@@ -1158,7 +1160,9 @@ export interface History {
   readonly replace: (url: string, state: unknown) => void
   readonly go: (delta: number) => void
   readonly load: (href: string) => void
-  readonly listen: (popped: (url: string, state: unknown) => void) => () => void
+  readonly listen: (
+    popped: (url: string, state: unknown, animated?: boolean) => void
+  ) => () => void
 }
 
 /**
@@ -1660,21 +1664,36 @@ const build = (
     const publishQueue: Array<{
       readonly location: Location
       readonly targets: ReadonlyArray<(location: Location) => void>
+      readonly animated: boolean
     }> = []
     let publishing = false
-    const publish = (next: Location) => {
-      publishQueue.push({ location: next, targets: Array.from(listeners) })
+    const publish = (next: Location, animated: boolean = false) => {
+      publishQueue.push({
+        location: next,
+        targets: Array.from(listeners),
+        animated
+      })
       if (publishing) return
       publishing = true
       try {
         while (publishQueue.length > 0) {
-          const { location, targets } = publishQueue.shift()!
-          for (const listener of targets) {
-            if (listeners.has(listener)) listener(location)
+          const { animated, location, targets } = publishQueue.shift()!
+          const marked = animated ? Array.from(roots) : undefined
+          if (marked !== undefined) {
+            for (const root of marked) root.still(true)
           }
-          while (wakes.length > 0) {
-            const batch = wakes.splice(0)
-            for (const wake of batch) wake()
+          try {
+            for (const listener of targets) {
+              if (listeners.has(listener)) listener(location)
+            }
+            while (wakes.length > 0) {
+              const batch = wakes.splice(0)
+              for (const wake of batch) wake()
+            }
+          } finally {
+            if (marked !== undefined) {
+              for (const root of marked) root.still(false)
+            }
           }
         }
       } finally {
@@ -1749,6 +1768,7 @@ const build = (
       mode: {
         readonly quiet: boolean
         readonly scroll: boolean
+        readonly animated?: boolean | undefined
         readonly blocks?: ReadonlyArray<string> | undefined
       },
       saved?: Record<string, unknown> | undefined
@@ -1786,7 +1806,7 @@ const build = (
           blocks: blocked
         }
       }
-      publish(next)
+      publish(next, mode.animated === true)
     }
 
     /** Writes `url` as a new or the current entry, and moves to it. */
@@ -1912,7 +1932,7 @@ const build = (
       return "navigated"
     }
 
-    const popped = (href: string, state: unknown) => {
+    const popped = (href: string, state: unknown, animated?: boolean) => {
       // The host has already moved to another entry, which a queued replace would overwrite.
       const left = queued
       queued = undefined
@@ -1968,7 +1988,8 @@ const build = (
         seq: current.seq + 1
       }, {
         quiet,
-        scroll: true
+        scroll: true,
+        animated: animated === true
       }, saved)
     }
     const unlisten = history.listen(popped)
