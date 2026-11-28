@@ -600,12 +600,12 @@ const makeSession = (
       last = entry.seq
       const resolve = (seq: number) => entries.get(seq)
       let transient = false
-      if (!("instance" in entry)) coalesced.clear()
-      else if (
-        entry.excluded === true || isExcluded?.(entry, resolve) === true
+      if ("instance" in entry) newest = Math.max(newest, entry.instance)
+      if (
+        "instance" in entry &&
+        (entry.excluded === true || isExcluded?.(entry, resolve) === true)
       ) {
         const instance = entry.instance
-        newest = Math.max(newest, instance)
         hidden.add(entry.seq)
         const state = entry._tag === "Update" || entry._tag === "Mounted" ||
           entry._tag === "Waiting"
@@ -628,7 +628,7 @@ const makeSession = (
         // rest only changes the instance's records: apply it, keep nothing.
         else if (fleeting || entry._tag !== "Unmounted") transient = true
       } else {
-        newest = Math.max(newest, entry.instance)
+        // Any shown entry, a fetch too, ends the interval stopped ones coalesce in.
         settled = newest
         coalesced.clear()
       }

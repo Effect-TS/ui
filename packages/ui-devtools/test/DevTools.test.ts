@@ -639,7 +639,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       )
     }).pipe(Effect.scoped))
 
-  it.live("paints a stopped child at the shown update that mounted it, after the child updated", () =>
+  it.live("paints a stopped child at the shown update that mounted it, after it updated or a stopped update unmounted it", () =>
     Effect.gen(function*() {
       const ItemMessage = UiSchema.TaggedEnum({ Bumped: {} })
       const Item = Html.component({
@@ -655,17 +655,18 @@ describe("DevTools overlay", { concurrent: false }, () => {
             h.button.on("click", ItemMessage.Bumped()).children("Bump")
           )
       })
-      const ShelfMessage = UiSchema.TaggedEnum({ Added: {} })
+      const ShelfMessage = UiSchema.TaggedEnum({ Added: {}, Removed: {} })
       const Shelf = Html.component({
         name: "Shelf",
         model: Schema.Boolean,
         message: ShelfMessage
       }).make({
         init: () => false,
-        update: { Added: () => true },
+        update: { Added: () => true, Removed: () => false },
         view: (h, added) =>
           h.main(
             h.button.on("click", ShelfMessage.Added()).children("Add"),
+            h.button.on("click", ShelfMessage.Removed()).children("Remove"),
             added ? Item(h, { key: "i", props: {} }) : null
           )
       })
@@ -674,7 +675,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       const app = document.body.appendChild(document.createElement("div"))
       yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
       yield* Layer.build(
-        DevTools.layer({ exclude: [{ component: "Item" }] })
+        DevTools.layer({ exclude: [{ component: "Item" }, "Removed"] })
       ).pipe(
         Effect.flatMap((services) =>
           BrowserHost.mountEffect(Shelf, {}, app).pipe(Effect.provide(services))
@@ -694,9 +695,25 @@ describe("DevTools overlay", { concurrent: false }, () => {
         "0"
       )
       assert.isNull(root.querySelector(".pause-note"))
+      const resume = HtmlLocator.getByRole(root, "button", {
+        name: "Resume the live page"
+      })
+      yield* click(resume)
+
+      // Clear folds the bumped Item into the baseline, so its stopped unmount
+      // has to apply there, or the next Item would be painted from it.
+      yield* click(HtmlLocator.getByRole(root, "button", { name: "Clear" }))
+      yield* click(HtmlLocator.getByRole(app, "button", { name: "Remove" }))
+      yield* click(HtmlLocator.getByRole(app, "button", { name: "Add" }))
+      yield* click(entry(root, /Update Added$/)[0]!)
       yield* click(
-        HtmlLocator.getByRole(root, "button", { name: "Resume the live page" })
+        HtmlLocator.getByRole(root, "button", { name: "Time travel" })
       )
+      assert.strictEqual(
+        app.nextElementSibling?.querySelector("[data-item]")?.textContent,
+        "0"
+      )
+      yield* click(resume)
     }).pipe(Effect.scoped))
 
   it.live("shows the page at an earlier entry beside the live tree, and Resume brings the live tree back", () =>

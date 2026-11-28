@@ -94,15 +94,23 @@ const isDirty = (dirty: ReadonlySet<string>, path: string) => {
   return false
 }
 
-// A mount a shown entry caused keeps its own slot: Time travel at that entry
-// paints it, whatever the instance does next.
-const keyOf = (entry: Entry, shownSeq: number): string | undefined => {
+// The first mount at a path that a shown entry caused keeps its own slot:
+// Time travel at that entry paints it, whatever the instance does next.
+// Time travel can't use a later one at the same path.
+const keyOf = (
+  entry: Entry,
+  shownSeq: number,
+  painting: Set<string>
+): string | undefined => {
   switch (entry._tag) {
     case "Waiting":
     case "Mounted":
-      return entry.causedBy !== undefined && entry.causedBy <= shownSeq
-        ? entry._tag
-        : "state"
+      if (
+        entry.causedBy === undefined || entry.causedBy > shownSeq ||
+        painting.has(entry.path)
+      ) return "state"
+      painting.add(entry.path)
+      return entry._tag
     case "Update":
       return "state"
     case "PropsChanged":
@@ -152,6 +160,7 @@ const makeSession = (size: number) => {
   let newest = -1
   let settled = -1
   let shownSeq = -Infinity
+  const painting = new Set<string>()
   const drop = () => {
     const oldest = entries.shift()!
     floor = oldest.seq
@@ -172,8 +181,8 @@ const makeSession = (size: number) => {
     let kept = coalesced.get(entry.instance)
     if (entry._tag === "Unmounted") {
       // An instance that came and went between shown entries leaves no trace,
-      // but for a mount a shown entry caused.
-      if (entry.instance > settled) {
+      // but for a mount a shown entry caused or one Clear folded into `base`.
+      if (entry.instance > settled && !base.has(entry.instance)) {
         let painted = false
         for (const [key, replaced] of kept ?? []) {
           if (key === "Mounted" || key === "Waiting") painted = true
@@ -185,7 +194,7 @@ const makeSession = (size: number) => {
       entries.push(entry)
       return
     }
-    const key = keyOf(entry, shownSeq)
+    const key = keyOf(entry, shownSeq, painting)
     if (key === undefined) return
     if (kept === undefined) coalesced.set(entry.instance, kept = new Map())
     const replaced = kept.get(key)
@@ -216,6 +225,7 @@ const makeSession = (size: number) => {
         if (entry.excluded === true) return exclude(entry)
       }
       coalesced.clear()
+      painting.clear()
       settled = newest
       shownSeq = entry.seq
       entries.push(entry)

@@ -574,12 +574,45 @@ describe("DevToolsServer", { concurrent: false }, () => {
             { _tag: "PropsChanged", ...at, seq: 5, props: {} },
             update(6, { a: 3, b: 4 }),
             update(7),
-            { _tag: "Unmounted", ...stopped, seq: 8 }
+            { _tag: "Unmounted", ...stopped, seq: 8 },
+            // A shown fetch ends the interval a stopped child mounted in, so
+            // its unmount is kept for a late viewer.
+            {
+              _tag: "Mounted",
+              ...stopped,
+              path: "/App/Child",
+              instance: 2,
+              seq: 9,
+              props: {},
+              model: 0,
+              commands: [],
+              events: [],
+              adopted: false
+            },
+            {
+              _tag: "FetchStarted",
+              session: "s",
+              at: 0,
+              seq: 10,
+              query: "q",
+              logKey: "q",
+              trigger: "get",
+              restart: false,
+              inWindow: true,
+              stored: false
+            },
+            {
+              _tag: "Unmounted",
+              ...stopped,
+              path: "/App/Child",
+              instance: 2,
+              seq: 11
+            }
           ]
         ) socket.send(JSON.stringify(frame))
 
         const state = yield* agent.call<any>("get_state", { instance: 1 }).pipe(
-          Effect.filterOrFail((state) => state.at === 8),
+          Effect.filterOrFail((state) => state.at === 11),
           Effect.retry(Schedule.spaced("10 millis")),
           Effect.timeout("5 seconds")
         )
@@ -594,10 +627,11 @@ describe("DevToolsServer", { concurrent: false }, () => {
           const frame = JSON.parse(String(event.data))
           if (frame._tag !== "Held") frames.push(frame)
         })
-        yield* until(() => frames.some((frame) => frame.seq === 8))
+        yield* until(() => frames.some((frame) => frame.seq === 11))
         const viewer = Inspector.make()
         viewer.ingest(frames)
         assert.strictEqual(viewer.sessions()[0]!.summary(1)?.unmounted, 8)
+        assert.strictEqual(viewer.sessions()[0]!.summary(2)?.unmounted, 11)
       }).pipe(Effect.scoped),
     30_000
   )
