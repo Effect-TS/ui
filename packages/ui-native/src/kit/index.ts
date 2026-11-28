@@ -1,9 +1,9 @@
 /**
  * React Native controls and APIs beyond the core vocabulary.
  *
- * Components are exported by name (`import { Switch } from "@effect/ui-native/kit"`,
- * called as `Switch(h, { ... })`) and re-exported from their own subpath
- * (`@effect/ui-native/kit/Switch`). Non-component modules are exported as
+ * Components are exported by name (`import { Modal } from "@effect/ui-native/kit"`,
+ * called as `Modal(h, { ... })`) and re-exported from their own subpath
+ * (`@effect/ui-native/kit/Modal`). Non-component modules are exported as
  * namespaces (e.g. `Keyboard.dismiss`).
  *
  * @stability experimental
@@ -15,4 +15,8 @@
 // with `export * as`, in alphabetical order.
 
 export * as Css from "./Css.ts"
+export * from "./Drawer.ts"
+export * from "./InputAccessory.ts"
+export * from "./Modal.ts"
 export * from "./RefreshControl.ts"
+export * from "./SafeArea.ts"
