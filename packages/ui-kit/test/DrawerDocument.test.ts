@@ -112,6 +112,20 @@ const Page = Html.component({
                 h.p.attr("id", "handle").children("Handle"),
                 drawer.content(h.div.attr("id", "content")).children("Text"),
                 h.button.attr("id", "button").children("Go"),
+                h.div.attr("role", "menuitem").children(
+                  h.span.attr("id", "menuitem").children("Action")
+                ),
+                h.div.attrs({
+                  id: "menuitemcheckbox",
+                  role: "menuitemcheckbox"
+                }).children("Toggle"),
+                h.div.attrs({
+                  id: "menuitemradio",
+                  role: "menuitemradio"
+                }).children("Choice"),
+                h.div.attrs({ id: "option", role: "option" }).children(
+                  "Option"
+                ),
                 h.input.attr("id", "field"),
                 props.scroll
                   ? h.div.attrs({ id: "scroller", style: "overflow-y:auto" })
@@ -307,14 +321,24 @@ describe("Drawer in a document", { concurrent: false }, () => {
   const places = { "": container, ", in an iframe": inIframe }
   for (const [where, into] of Object.entries(places)) {
     it.effect(
-      "starts nothing from the content, a button or an ignored element" + where,
+      "starts nothing from the content, interactive controls or an ignored element" +
+        where,
       () =>
         Effect.gen(function*() {
           const app = yield* into
           const root = yield* mount({}, app)
           const doc = app.ownerDocument
           sized(popup(doc), 300, 200)
-          for (const id of ["content", "button"]) {
+          for (
+            const id of [
+              "content",
+              "button",
+              "menuitem",
+              "menuitemcheckbox",
+              "menuitemradio",
+              "option"
+            ]
+          ) {
             drag(doc.getElementById(id)!, [10, 10], [10, 150])
             pointer(doc, "pointerup", 10, 150, 0)
           }
