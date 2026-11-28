@@ -530,8 +530,11 @@ const listen = (ui: UIManager) => {
       // Strip Fabric's "top" prefix: topLayout -> layout.
       const name = type[3]!.toLowerCase() + type.slice(4)
       // Native sends these to the deepest view under the pointer.
-      const n = bubbles.test(type) ? nearest(handle, name) : handle
-      return n !== undefined && fire(n, name, payload)
+      return fire(
+        bubbles.test(type) ? nearest(handle, name) : handle,
+        name,
+        payload
+      )
     }
     hook(handle, payload, handle.host)
     // After the microtask render, restore rejected controlled edits if still mounted.

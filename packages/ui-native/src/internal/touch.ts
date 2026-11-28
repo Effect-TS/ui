@@ -149,14 +149,14 @@ export const within = (
  * @internal
  */
 export const fire = (
-  n: NativeNode,
+  n: NativeNode | undefined,
   event: string,
   payload: unknown,
   onMessage?: (() => void) | undefined
 ): boolean => {
-  const handler = n.events?.handlers[event]
+  const handler = n?.events?.handlers[event]
   return handler !== undefined &&
-    n.events!.dispatch(event, handler, payload, onMessage)
+    n!.events!.dispatch(event, handler, payload, onMessage)
 }
 
 // When each scroll view stopped coasting, or `Infinity` while it coasts.
