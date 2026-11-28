@@ -18,12 +18,13 @@
  */
 import type * as Renderer from "@effect/ui/Renderer"
 import type * as Context from "effect/Context"
-import { focus } from "./internal/focus.ts"
+import { focus, trackKeyboard } from "./internal/focus.ts"
 import {
   commits,
-  flushInputs,
   kinds,
   layouts,
+  listeners,
+  precommits,
   props
 } from "./internal/kinds.ts"
 import {
@@ -99,7 +100,10 @@ export interface Options {
   readonly ui: UIManager
   /** The surface the host renders into, as native passes it to `runApplication`. */
   readonly rootTag: number
-  /** The device the surface is on, for its `os`, colours and native modules. */
+  /**
+   * The device the surface is on, for its `os`, colours, native modules and
+   * keyboard events.
+   */
   readonly device: Native.Device
   /** Called after every `commit`, whether or not it changed anything. */
   readonly onCommit?: (() => void) | undefined
@@ -197,6 +201,7 @@ export const make = (options: Options): {
   const cloneBoth = ui.cloneNodeWithNewChildrenAndProps
   const appendChild = ui.appendChild
   listen(ui)
+  trackKeyboard(device)
   const colors = new Map<string, unknown>()
   const color = (value: unknown) => {
     if (typeof value !== "string") return processColor(value)
@@ -242,7 +247,7 @@ export const make = (options: Options): {
   // The LayoutAnimation config for the next commit that changes the tree.
   let layout: object | undefined
   const commit = () => {
-    flushInputs(view)
+    for (const hook of precommits) hook(view)
     if (root.dirty) {
       root.dirty = false
       root.kidsChanged = false
@@ -522,6 +527,7 @@ const listen = (ui: UIManager) => {
   ui.registerEventHandler((handle, type, payload) => {
     if (!(handle instanceof NativeNode)) return
     route(handle, type, payload)
+    for (const f of listeners) f(handle, type, payload)
     // Native sends these whether or not the input has a handler.
     if (type === "topFocus") focus.node = handle
     else if (type === "topBlur" && focus.node === handle) focus.node = undefined

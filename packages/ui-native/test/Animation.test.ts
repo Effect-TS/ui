@@ -4,13 +4,17 @@ import { RefreshControl } from "@effect/ui-native/kit/RefreshControl"
 import * as Native from "@effect/ui-native/Native"
 import * as Renderer from "@effect/ui/Renderer"
 import * as UiSchema from "@effect/ui/UiSchema"
-import { pipe } from "effect/Function"
+import { identity, pipe } from "effect/Function"
 import * as Schema from "effect/Schema"
 import { assert, describe, it } from "vitest"
 import * as FakeAnimated from "./utils/FakeAnimated.ts"
 import * as FakeFabric from "./utils/FakeFabric.ts"
 
-const animated = FakeAnimated.make()
+// Native's value reports, as the device sends them.
+const reports = new Set<(payload: unknown) => void>()
+const animated = FakeAnimated.make((event, payload) => {
+  if (event === "onAnimatedValueUpdate") { for (const f of reports) f(payload) }
+})
 
 // Mounts on a device with the native driver.
 const mount = <A>(
@@ -20,7 +24,12 @@ const mount = <A>(
   FakeFabric.mount(mount, {
     os,
     module: (name) =>
-      name === "NativeAnimatedModule" ? animated.module : undefined
+      name === "NativeAnimatedModule" ? animated.module : undefined,
+    on: (event, f) => {
+      if (event !== "onAnimatedValueUpdate") return () => {}
+      reports.add(f)
+      return () => reports.delete(f)
+    }
   })
 
 const Sticky = Native.component({
@@ -169,6 +178,108 @@ const Pull = Native.component({
   }
 })
 
+const Headers = Native.component({
+  name: "Headers",
+  model: Schema.Struct({
+    sticky: Schema.Boolean,
+    hiddenOnScroll: Schema.Boolean,
+    inverted: Schema.Boolean,
+    inset: Schema.Number,
+    presses: Schema.Number
+  }),
+  message: UiSchema.TaggedEnum({
+    Set: {
+      sticky: Schema.Boolean,
+      hiddenOnScroll: Schema.Boolean,
+      inverted: Schema.Boolean
+    },
+    Inset: { top: Schema.Number },
+    Pressed: {}
+  })
+}).make({
+  init: () => ({
+    sticky: true,
+    hiddenOnScroll: false,
+    inverted: false,
+    inset: 0,
+    presses: 0
+  }),
+  update: {
+    Set: ($, options) => $.evolve({ ...options }),
+    Inset: ($, { top }) => $.evolve({ inset: () => top }),
+    Pressed: ($) => $.evolve({ presses: (n) => n + 1 })
+  },
+  view: (h, model) =>
+    pipe(
+      h.scroll.prop("contentInset", { top: model.inset }),
+      model.sticky
+        ? Animation.stickyHeaders([0, 2], {
+          hiddenOnScroll: model.hiddenOnScroll,
+          inverted: model.inverted
+        })
+        : identity
+    ).children(
+      // Not a child native counts.
+      RefreshControl(h),
+      h.view.style({
+        height: 50,
+        zIndex: 3,
+        transform: [{ scale: model.presses > 1 ? 3 : 2 }]
+      }).on("press", { _tag: "Pressed" }).children(
+        h.text("A " + model.presses)
+      ),
+      h.view.style({ height: 300 }),
+      h.view.style({ height: 40 }).children(h.text("B")),
+      h.view.style({ height: 600 })
+    )
+})
+
+// A header that is a scroll view with a header of its own.
+const Nested = Native.component({
+  name: "Nested",
+  model: Schema.Struct({ inner: Schema.Boolean }),
+  message: UiSchema.TaggedEnum({ Flip: {} })
+}).make({
+  init: () => ({ inner: true }),
+  update: { Flip: ($) => $.evolve({ inner: (inner) => !inner }) },
+  view: (h, model) =>
+    pipe(h.scroll, Animation.stickyHeaders([0])).children(
+      pipe(
+        h.scroll.style({ height: 50, zIndex: 3 }),
+        model.inner ? Animation.stickyHeaders([0]) : identity
+      ).children(h.view.style({ height: 20 })),
+      h.view.style({ height: 600 })
+    )
+})
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+const headers = async (os: string) => {
+  const mounted = await mount(
+    (root) => Renderer.mount(Headers, {}, root),
+    os
+  )
+  const { fabric, find } = mounted
+  const a = () => find((n) => n.props.height === 50)
+  const b = () => find((n) => n.props.height === 40)
+  const scroller = () => find(FakeFabric.byName("RCTScrollView"))
+  const content = () => find(FakeFabric.byName("RCTScrollContentView"))
+  // Where native lays them out, inside the content view at y 10.
+  const place = (ya: number, yb: number) => {
+    fabric.place(scroller(), [0, 0, 390, 500])
+    fabric.place(content(), [0, 10, 390, 1000])
+    fabric.place(a(), [0, 10 + ya, 390, 50])
+    fabric.place(b(), [0, 10 + yb, 390, 40])
+  }
+  const shown = (n: { readonly tag: number }) =>
+    (animated.view(n.tag)?.transform as any)?.[0].translateY
+  const scroll = (y: number) => {
+    animated.scroll(scroller().tag, { y })
+    fabric.emit(scroller(), "topScroll", { contentOffset: { y } })
+  }
+  return { ...mounted, a, b, scroller, place, shown, scroll }
+}
+
 // Like React Native's, the fake animated module is shared by every surface,
 // so tests that count its nodes run one at a time.
 const Panel = Native.component({
@@ -243,6 +354,163 @@ describe("Animation", { concurrent: false }, () => {
     const reused = find((n) => n.props.width === 1)
     assert.isUndefined(reused.props.transform)
     assert.isUndefined(animated.view(reused.tag))
+    await close()
+  })
+
+  for (const os of ["ios", "android"]) {
+    it(`docks sticky headers on the native driver, one pushing the other, on ${os}`, async () => {
+      animated.ios(os === "ios")
+      const before = { nodes: animated.nodes(), events: animated.events() }
+      try {
+        const t = await headers(os)
+        const rows = t.find((n) => n.props.height === 300)
+        assert.strictEqual(t.a().props.zIndex, 10)
+        assert.isUndefined(rows.props.zIndex)
+        // Not laid out yet: the headers scroll with the rows.
+        t.scroll(100)
+        assert.strictEqual(t.shown(t.a()), 0)
+
+        t.place(0, 350)
+        t.root.send({ _tag: "Pressed" })
+        await t.settle()
+        assert.strictEqual(t.shown(t.a()), 100)
+        assert.strictEqual(t.shown(t.b()), 0)
+        // B pushes A up as it reaches it.
+        t.scroll(320)
+        assert.strictEqual(t.shown(t.a()), 300)
+        // Native moves B up without a commit, and reports its layout: B
+        // docks, pushing A further.
+        assert.strictEqual(t.b().props.onLayout, true)
+        t.place(0, 200)
+        t.fabric.emit(t.b(), "topLayout", {})
+        assert.strictEqual(t.shown(t.a()), 150)
+        assert.strictEqual(t.shown(t.b()), 120)
+
+        // Once the scroll pauses, Fabric gets where they are shown, which
+        // JS may not have seen.
+        t.scroll(100)
+        animated.scroll(t.scroller().tag, { y: 120 })
+        await sleep(100)
+        assert.deepStrictEqual(t.a().props.transform, [{ translateY: 120 }])
+        // Its own style changes, but the header keeps its own.
+        t.root.send({ _tag: "Pressed" })
+        await t.settle()
+        assert.strictEqual(t.a().props.zIndex, 10)
+        assert.deepStrictEqual(t.a().props.transform, [{ translateY: 120 }])
+
+        const sticky = async (sticky: boolean) => {
+          t.root.send({
+            _tag: "Set",
+            sticky,
+            hiddenOnScroll: false,
+            inverted: false
+          })
+          await t.settle()
+        }
+        await sticky(false)
+        // Its own style shows again, as it changed while it was a header,
+        // and the driver no longer moves it.
+        assert.strictEqual(t.a().props.zIndex, 3)
+        assert.deepStrictEqual(t.a().props.transform, [{ scale: 3 }])
+        assert.isUndefined(t.a().props.onLayout)
+        assert.isUndefined(animated.view(t.a().tag))
+        // Only the list's scroll value is left, still following native.
+        assert.strictEqual(animated.nodes(), before.nodes + 1)
+        // The new view is laid out where the old one was.
+        t.place(0, 350)
+        await sticky(true)
+        // From where the list rests, which JS never saw.
+        assert.strictEqual(t.shown(t.a()), 120)
+        // Or from where native scrolled it while it had no headers.
+        await sticky(false)
+        animated.scroll(t.scroller().tag, { y: 140 })
+        t.place(0, 350)
+        await sticky(true)
+        assert.strictEqual(t.shown(t.a()), 140)
+        t.scroll(60)
+        assert.strictEqual(t.shown(t.a()), 60)
+        await t.close()
+        assert.deepStrictEqual(
+          { nodes: animated.nodes(), events: animated.events() },
+          before
+        )
+      } finally {
+        animated.ios(false)
+      }
+    })
+  }
+
+  it("hides a docked header while scrolling down, docks inverted headers at the bottom, and below a top inset", async () => {
+    animated.ios(true)
+    const before = { nodes: animated.nodes(), events: animated.events() }
+    try {
+      const t = await headers("ios")
+      t.place(0, 350)
+      const set = async (hiddenOnScroll: boolean, inverted: boolean) => {
+        t.root.send({ _tag: "Set", sticky: true, hiddenOnScroll, inverted })
+        await t.settle()
+      }
+      await set(true, false)
+      // Where A shows on screen: its place, scrolled, and translated.
+      const top = (y: number) => {
+        t.scroll(y)
+        return t.shown(t.a()) - y
+      }
+      // Docked, it moves up by as much as the list scrolls down, up to its
+      // height, and scrolling up brings it back as far.
+      assert.strictEqual(top(30), -30)
+      assert.strictEqual(top(100), -50)
+      assert.strictEqual(top(80), -30)
+      assert.strictEqual(top(20), 0)
+
+      // Inverted, a header docks at the bottom of the 500 tall scroll view
+      // once it's below it, from 150.
+      t.scroll(0)
+      t.place(600, 900)
+      await set(false, true)
+      t.scroll(200)
+      assert.strictEqual(t.shown(t.a()), 50)
+      // B, 300 below, pushes it at 350.
+      t.scroll(400)
+      assert.strictEqual(t.shown(t.a()), 200)
+
+      // Below a top inset, which iOS reports as a negative offset at rest.
+      t.place(0, 350)
+      await set(false, false)
+      t.root.send({ _tag: "Inset", top: 20 })
+      await t.settle()
+      t.scroll(100)
+      assert.strictEqual(t.shown(t.a()), 120)
+      await t.close()
+      assert.deepStrictEqual(
+        { nodes: animated.nodes(), events: animated.events() },
+        before
+      )
+    } finally {
+      animated.ios(false)
+    }
+  })
+
+  it("keeps a scroll view a header of the one around it when its own headers go", async () => {
+    const { close, fabric, find, root, settle } = await mount((root) =>
+      Renderer.mount(Nested, {}, root)
+    )
+    const inner = () => find((n) => n.props.height === 50)
+    const outer = find(FakeFabric.byName("RCTScrollView"))
+    const content = find(FakeFabric.byName("RCTScrollContentView"))
+    root.send({ _tag: "Flip" })
+    await settle()
+    assert.strictEqual(inner().props.zIndex, 10)
+    assert.strictEqual(inner().props.onLayout, true)
+    // It still follows layouts native makes.
+    fabric.place(outer, [0, 0, 390, 500])
+    fabric.place(content, [0, 0, 390, 1000])
+    fabric.place(inner(), [0, 100, 390, 50])
+    fabric.emit(inner(), "topLayout", {})
+    animated.scroll(outer.tag, { y: 150 })
+    assert.deepStrictEqual(animated.view(inner().tag)?.transform, [{
+      translateY: 50
+    }])
     await close()
   })
 

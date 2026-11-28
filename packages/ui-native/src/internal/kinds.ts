@@ -4,6 +4,13 @@ import type { NativeNode } from "../NativeHost.ts"
 const horizontal = (n: NativeNode, host: ViewHost): boolean =>
   host.os === "android" && n.props.horizontal === true
 
+/**
+ * Each scroll view's `keyboardShouldPersistTaps`, which only JS reads.
+ *
+ * @internal
+ */
+export const persistTaps = new WeakMap<NativeNode, unknown>()
+
 // Retain the previous content style so updates can remove omitted properties.
 const contentStyles = new WeakMap<NativeNode, Readonly<Record<string, any>>>()
 
@@ -75,6 +82,7 @@ const scroll: ViewKind = {
       for (const key in style) host.set(n.inner!, key, style[key])
       direction(n, host)
     },
+    keyboardShouldPersistTaps: (n, value) => persistTaps.set(n, value),
     onMomentumScrollBegin: momentum("onMomentumScrollBegin"),
     onMomentumScrollEnd: momentum("onMomentumScrollEnd"),
     // React Native reports the size the content view is laid out at.
@@ -120,13 +128,10 @@ const setText = (n: NativeNode, value: unknown, host: ViewHost) => {
   host.command(n, "setTextAndSelection", [n.eventCount, value, -1, -1])
 }
 
-/**
- * Applies deferred `defaultValue` updates once all props for a render are set,
- * so `value` and `defaultValue` produce the same text in either prop order.
- *
- * @internal
- */
-export const flushInputs = (host: ViewHost) => {
+// Applies deferred `defaultValue` updates once all props for a render are
+// set, so `value` and `defaultValue` produce the same text in either prop
+// order.
+const flushInputs = (host: ViewHost) => {
   const set = pendingText.get(host)
   if (set === undefined) return
   pendingText.delete(host)
@@ -197,6 +202,14 @@ export const props = new Map<
 
 /** Called after every commit, by kit modules that follow nodes. @internal */
 export const commits = new Set<(host: ViewHost) => void>()
+
+/** Called with every native event, by kit modules. @internal */
+export const listeners = new Set<
+  (node: NativeNode, type: string, payload: any) => void
+>()
+
+/** Called before every commit, to set props it should carry. @internal */
+export const precommits = new Set<(host: ViewHost) => void>([flushInputs])
 
 /** `LayoutAnimation` configs by view transition type. @internal */
 export const layouts = new Map<string, object>()

@@ -3,6 +3,7 @@ import { isColor, markDirty, mounted } from "../../internal/node.ts"
 import {
   fire,
   pointOf,
+  pressed,
   type Recognizer,
   rectOf,
   under,
@@ -10,7 +11,6 @@ import {
 } from "../../internal/touch.ts"
 import type { ViewStyle } from "../../Native.ts"
 import type { NativeNode } from "../../NativeHost.ts"
-import { pressed } from "./view.ts"
 
 /**
  * How `Pressable` presses, stored as the options of its `pressIn` handler.
