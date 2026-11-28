@@ -4,7 +4,6 @@ import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
-import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
 import { afterAll, assert, describe, it, vi } from "vitest"
 import * as FakeFabric from "./utils/FakeFabric.ts"
@@ -34,7 +33,8 @@ const native = vi.hoisted(() => {
     modules: {
       DeviceEventManager: {
         invokeDefaultBackPressHandler: () => state.backPresses++
-      }
+      },
+      NativeMicrotasksCxx: { queueMicrotask }
     } as Record<string, unknown>
   }
   return state
@@ -115,6 +115,9 @@ describe("NativeApp", { concurrent: false }, () => {
   })
 
   it("mounts the app on each surface native starts, until native stops it", async () => {
+    // React Native has no queueMicrotask until `register` installs native's.
+    const { queueMicrotask } = global
+    delete global.queueMicrotask
     NativeApp.register(
       NativeApp.mount(
         Greeting,
@@ -130,6 +133,7 @@ describe("NativeApp", { concurrent: false }, () => {
       "HMRClient"
     ])
     assert.isFunction(global.performance.now)
+    assert.strictEqual(global.queueMicrotask, queueMicrotask)
 
     global.RN$AppRegistry.runApplication("main", {
       rootTag: 11,
@@ -268,42 +272,5 @@ describe("NativeApp", { concurrent: false }, () => {
     native.emitter.addListener("hardwareBackPress", () => {})
     native.emitter.emit("hardwareBackPress")
     assert.strictEqual(native.backPresses, 1)
-  })
-
-  it("installs queueMicrotask when missing", async () => {
-    const original = global.queueMicrotask
-    const installWithout = async (
-      microtasks?: { readonly queueMicrotask: (task: () => void) => void }
-    ) => {
-      vi.resetModules()
-      const Fresh = await import("@effect/ui-native/NativeApp")
-      if (microtasks === undefined) delete native.modules.NativeMicrotasksCxx
-      else native.modules.NativeMicrotasksCxx = microtasks
-      delete global.queueMicrotask
-      Fresh.register(Layer.empty)
-      const installed = global.queueMicrotask as (task: () => void) => void
-      global.queueMicrotask = original
-      return installed
-    }
-    try {
-      const nativeQueue = () => {}
-      const installed = await installWithout({ queueMicrotask: nativeQueue })
-      assert.strictEqual(installed, nativeQueue)
-
-      const fallback = await installWithout()
-      assert.isFunction(fallback)
-      const order: Array<string> = []
-      await new Promise<void>((resolve) => {
-        fallback(() => {
-          order.push("microtask")
-          resolve()
-        })
-        order.push("sync")
-      })
-      assert.deepStrictEqual(order, ["sync", "microtask"])
-    } finally {
-      global.queueMicrotask = original
-      delete native.modules.NativeMicrotasksCxx
-    }
   })
 })
