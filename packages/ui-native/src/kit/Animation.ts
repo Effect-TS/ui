@@ -430,25 +430,28 @@ export const set = (
   if (e === undefined) {
     const shown = plain.get(n)
     if (shown === undefined) return
-    for (const key in shown) {
-      const value = style[key as keyof Style]
-      if (value === undefined) continue
-      // As with the driver, a transform's item sets only at the index and
-      // with the name the element animates.
-      n.host.set(
-        n,
-        key,
-        key === "transform"
-          ? (n.props.transform as Transforms).map((item, i) => {
-            for (const k in item) {
-              const v = (value as Transforms)[i]?.[k as TransformKey]
-              if (v !== undefined) return { [k]: v }
-            }
-            return item
-          })
-          : value
-      )
-    }
+    // As with the driver, only the numeric leaves of the element's style
+    // are set, by their place in it. Fabric shows a transform flattened, one
+    // item per leaf.
+    const was = n.props.transform as ReadonlyArray<object> | undefined
+    let flat: Array<object> | undefined
+    let i = 0
+    leaves(shown, (path, value) => {
+      const [key, item, k] = path.split(".") as [keyof Style, string, string]
+      if (k === undefined) {
+        const v = style[key]
+        if (typeof value === "number" && v !== undefined) n.host.set(n, key, v)
+        return
+      }
+      const v = (style.transform as Transforms | undefined)?.[+item]?.[
+        k as TransformKey
+      ]
+      if (typeof value === "number" && v !== undefined) {
+        ;(flat ??= [...was!])[i] = { [k]: v }
+      }
+      i++
+    })
+    if (flat !== undefined) n.host.set(n, "transform", flat)
     n.host.commit()
     if (transition !== undefined) n.host.fire(n, "animationEnd", {})
     return

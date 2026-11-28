@@ -61,19 +61,26 @@ describe("Animation without a native driver", { concurrent: false }, () => {
     assert.isUndefined(panel().props.opacity)
   })
 
-  it.each([
-    [{ opacity: 1 }, { opacity: 0.5 }],
-    [{ transform: [{ translateX: 0 }] }, { transform: [{ translateX: 40 }] }]
-  ])("sets only what the element animates: %j", async (style, shown) => {
+  const both = { opacity: 0.5, transform: [{ translateX: 40 }, { scale: 2 }] }
+  it.each<[Animation.Style, Animation.Style<number>, object]>([
+    [{ opacity: 1 }, both, { opacity: 0.5 }],
+    [{ transform: [{ translateX: 0 }] }, both, {
+      transform: [{ translateX: 40 }]
+    }],
+    // A value from an expression isn't a target.
+    [{ opacity: Animation.scroll("list", "y") }, { opacity: 0.75 }, {
+      opacity: 0
+    }],
+    [{ transform: [{ translateX: 0, scale: 1 }] }, {
+      transform: [{ scale: 2 }]
+    }, { transform: [{ translateX: 0 }, { scale: 2 }] }]
+  ])("sets only what the element animates: %j", async (style, set, shown) => {
     const { Box, name } = makeBox(style)
     const { close, find, settle } = await FakeFabric.mount((root) =>
       Renderer.mount(Box, {}, root)
     )
     const box = () => find((n) => n.props.height === 10)
-    Animation.set(name(), {
-      opacity: 0.5,
-      transform: [{ translateX: 40 }, { scale: 2 }]
-    })
+    Animation.set(name(), set)
     await settle()
     assert.deepStrictEqual(
       { opacity: box().props.opacity, transform: box().props.transform },
