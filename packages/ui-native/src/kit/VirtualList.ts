@@ -189,6 +189,7 @@ const Message = UiSchema.TaggedEnum({
   },
   Requested: { scrollTo: Virtualizer.ScrollTo },
   Resolved: {},
+  Fixed: {},
   DragBegan: {},
   DragEnded: {},
   MomentumBegan: {},
@@ -279,7 +280,7 @@ const startOf = (
 ): number => {
   const { placed } = model
   const fallback = offset - originOf(model, props)
-  // Fixed rows report no placement, and native lays them out as planned.
+  // Native lays fixed rows out as planned, also before `Fixed` arrives.
   if (placed === null || props.measure === false) return fallback
   const plan = given ?? Virtualizer.plan(model, props)
   const [from, to] = plan.window
@@ -301,15 +302,10 @@ const startOf = (
 // offset is from before native moved the scroll, so the item stays the one
 // the viewport starts at until the next scroll event.
 const moved = (
-  given: Model,
+  model: Model,
   props: VirtualListProps,
   kept = false
 ): Virtualizer.Updated<Model> => {
-  // Fixed rows report no placement, so one from before would be stale once
-  // rows are measured again.
-  const model = props.measure === false && given.placed !== null
-    ? { ...given, placed: null }
-    : given
   if (model.viewport === 0) return { model, events: [] }
   const origin = originOf(model, props)
   return Virtualizer.update(
@@ -539,6 +535,8 @@ export const VirtualList = Native.component({
         )
       case "Resolved":
         return finish($, props, { model, events: [] })
+      case "Fixed":
+        return $.set({ ...model, placed: null })
       case "DragBegan": {
         const dropped = Virtualizer.update(
           model,
@@ -590,6 +588,15 @@ export const VirtualList = Native.component({
         "VirtualList.resolved",
         String(target),
         () => Stream.make(Message.Resolved())
+      ),
+      // Fixed rows report no placement, and native can move them without a
+      // scroll or a new content size, so the last placement is dropped as
+      // the props switch to fixed sizes.
+      props.measure === false && model.placed !== null &&
+      Subscription.make(
+        "VirtualList.fixed",
+        "",
+        () => Stream.make(Message.Fixed())
       )
     ]
   },

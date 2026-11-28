@@ -275,26 +275,24 @@ describe("VirtualList", () => {
     await list.close()
   })
 
-  it("drops where native placed a row once the rows take fixed sizes, also after measuring again", async () => {
-    const list = await setup({ count: 1000, itemSize: 40 })
+  it("drops where native placed a row on switching to fixed sizes, before any native event", async () => {
+    const sizes = Array.from({ length: 1000 }, (_, i) => i === 900 ? 120 : 40)
+    const list = await setup({ count: 1000, itemSize: 40, sizes })
     await list.layOut()
-    await list.scrollTo(2020)
+    await list.scrollTo(2020, 40100)
     await list.measure(47, 1900, 40)
-    await list.setProps({ count: 1000, itemSize: 80, measure: false })
-    await list.scrollTo(4020, 80020)
-    assert.strictEqual(list.events[list.events.length - 1]!.first, 50)
-    // Back to 40-point rows below an 80-point reserve, so row 47 moved to
-    // 1980 without reporting it.
+    // Swapping rows 0 and 900 moves row 47 down 80 points, but keeps the
+    // content's length, so native sends nothing while the rows are fixed.
+    const swapped = sizes.map((_, i) => i === 0 ? 120 : 40)
     await list.setProps({
       count: 1000,
       itemSize: 40,
-      measure: false,
-      reserveStart: 80
+      sizes: swapped,
+      measure: false
     })
-    await list.scrollTo(2100, 40100)
-    await list.setProps({ count: 1000, itemSize: 40, reserveStart: 80 })
-    await list.scrollTo(2140, 40100)
-    assert.strictEqual(list.events[list.events.length - 1]!.first, 51)
+    await list.setProps({ count: 1000, itemSize: 40, sizes: swapped })
+    await list.scrollTo(2060, 40100)
+    assert.strictEqual(list.events[list.events.length - 1]!.first, 49)
     await list.close()
   })
 
