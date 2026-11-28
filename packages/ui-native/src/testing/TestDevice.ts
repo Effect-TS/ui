@@ -84,7 +84,7 @@ import type * as AccessibilityInfo from "../kit/AccessibilityInfo.ts"
 import type * as Alert from "../kit/Alert.ts"
 import type * as Appearance from "../kit/Appearance.ts"
 import type * as AppState from "../kit/AppState.ts"
-import { settings } from "../kit/internal/accessibility.ts"
+import { entry, settings } from "../kit/internal/accessibility.ts"
 import { androidButtons, buttonsOf } from "../kit/internal/alert.ts"
 import type * as Linking from "../kit/Linking.ts"
 import type * as PermissionsAndroid from "../kit/PermissionsAndroid.ts"
@@ -129,11 +129,9 @@ export interface Choice<
 > {
   readonly buttons: Buttons
   /** One of `buttons`' ids, or `"ok"` for the button a dialog without any shows. */
-  readonly id:
-    | Buttons[number]["id"]
-    | (Buttons extends readonly [Alert.Button, ...ReadonlyArray<Alert.Button>]
-      ? never
-      : "ok")
+  readonly id: Alert.Pressed<
+    { readonly title: string; readonly buttons: Buttons }
+  >
 }
 
 /**
@@ -286,10 +284,19 @@ export interface TestDevice {
 export const TestDevice: Context.Service<TestDevice, TestDevice> = Context
   .Service<TestDevice>("@effect/ui-native/testing/TestDevice")
 
-// An open alert, prompt or share sheet.
+type Dialog = "Alert" | "Prompt" | "Share"
+
+const labels: Record<Dialog, string> = {
+  Alert: "alert",
+  Prompt: "prompt",
+  Share: "share sheet"
+}
+
+// An open alert, prompt or share sheet, with the button texts native got.
 interface Open {
-  readonly entry: Entry
-  readonly answer: (index: number, text?: string, login?: string) => void
+  readonly entry: Entry & { readonly _tag: Dialog }
+  readonly buttons: ReadonlyArray<string>
+  readonly answer: (...args: Array<any>) => void
   readonly dismiss?: (() => void) | undefined
 }
 
@@ -346,9 +353,13 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
   })
 
   const colorScheme = () => override ?? scheme
-  const changeScheme = (change: () => void) => {
+  const setScheme = (
+    system: Appearance.ColorScheme,
+    app: Appearance.ColorScheme | undefined
+  ) => {
     const before = colorScheme()
-    change()
+    scheme = system
+    override = app
     if (colorScheme() !== before) {
       emit("appearanceChanged", { colorScheme: colorScheme() }, "Appearance")
     }
@@ -398,81 +409,88 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
     log(o.entry)
     open.push(o)
   }
-  const first = (tag: Entry["_tag"], what: string) => {
-    const o = open.find((o) => o.entry._tag === tag)
+  const close = (o: Open | undefined, what: string) => {
     if (o === undefined) throw new Error(`No ${what} is open`)
+    open.splice(open.indexOf(o), 1)
     return o
   }
-  const close = (o: Open) => {
-    open.splice(open.indexOf(o), 1)
+  const take = (tag: Dialog) =>
+    close(open.find((o) => o.entry._tag === tag), labels[tag])
+  const dismiss = (tag: Dialog, refused: string) => {
+    const o = open.find((o) => o.entry._tag === tag)
+    if (o !== undefined && o.dismiss === undefined) throw new Error(refused)
+    close(o, labels[tag]).dismiss!()
   }
-  const textsOf = (o: Open) =>
-    (o.entry as { readonly buttons: ReadonlyArray<string> }).buttons
-  // The kit's buttons in the order native got them, as `Alert` sends them.
-  const shown = (buttons: ReadonlyArray<Alert.Button>) =>
-    ios ? buttons : androidButtons(buttons).filter((b) => b !== undefined)
+  const sameTexts = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) =>
+    a.length === b.length && a.every((text, i) => text === b[i])
+  // The open dialog `button` picks, and the index of its button there.
   const pick = (tag: "Alert" | "Prompt", button: string | Choice) => {
-    const what = tag.toLowerCase()
+    const what = labels[tag]
     if (typeof button === "string") {
-      const o = first(tag, what)
-      const texts = textsOf(o)
-      const index = texts.indexOf(button)
-      if (index < 0) {
+      const o = open.find((o) => o.entry._tag === tag)
+      const index = o?.buttons.indexOf(button) ?? -1
+      if (o !== undefined && index < 0) {
         throw new Error(
-          `The ${what} has no button "${button}", only ${JSON.stringify(texts)}`
+          `The ${what} has no button "${button}", only ${
+            JSON.stringify(o.buttons)
+          }`
         )
       }
-      if (texts.lastIndexOf(button) !== index) {
+      if (o !== undefined && o.buttons.lastIndexOf(button) !== index) {
         throw new Error(
           `The ${what} has several "${button}" buttons: pick one by id`
         )
       }
-      return [o, index] as const
+      return [close(o, what), index] as const
     }
+    // The kit's buttons in the order native got them, as `Alert` sends them.
     const buttons = buttonsOf(button.buttons)
-    const native = shown(buttons)
-    const texts = JSON.stringify(native.map((b) => b.text))
+    const shown = ios
+      ? buttons
+      : androidButtons(buttons).filter((b) => b !== undefined)
+    const texts = shown.map((b) => b.text)
     const o = open.find((o) =>
-      o.entry._tag === tag && JSON.stringify(textsOf(o)) === texts
+      o.entry._tag === tag && sameTexts(o.buttons, texts)
     )
-    if (o === undefined) throw new Error(`No ${what} with ${texts} is open`)
-    const index = native.findIndex((b) => b.id === button.id)
-    if (index < 0) {
+    const index = shown.findIndex((b) => b.id === button.id)
+    if (o !== undefined && index < 0) {
       throw new Error(
         buttons.some((b) => b.id === button.id)
           ? `Android shows only the last three buttons, not "${button.id}"`
           : `The ${what} has no button with id "${button.id}"`
       )
     }
-    return [o, index] as const
+    return [close(o, `${what} with ${JSON.stringify(texts)}`), index] as const
   }
   const press = (
     tag: "Alert" | "Prompt",
     button: string | Choice,
-    value?: string,
+    text?: string,
     login?: string
   ) => {
     const [o, index] = pick(tag, button)
-    close(o)
-    o.answer(index, value, login)
+    o.answer(index, text, login)
   }
 
   const status = (permission: string) => permissions.get(permission) ?? "denied"
   const enabled = (setting: AccessibilityInfo.Setting) =>
     accessibility.get(setting) ?? false
   const getters = (
-    index: 0 | 1,
     answer: (setting: AccessibilityInfo.Setting, args: Array<any>) => void
   ) =>
     Object.fromEntries(
-      Object.entries(settings).flatMap(([setting, entry]) => {
-        const getter = entry[index]?.[0]
-        return getter === undefined
-          ? []
-          : [[getter, (...args: Array<any>) =>
-            answer(setting as AccessibilityInfo.Setting, args)]]
-      })
+      (Object.keys(settings) as Array<AccessibilityInfo.Setting>).flatMap(
+        (setting) => {
+          const getter = entry(platform, setting)?.[0]
+          return getter === undefined
+            ? []
+            : [[getter, (...args: Array<any>) => answer(setting, args)]]
+        }
+      )
     )
+  const announce = (announcement: string) =>
+    log({ _tag: "Announce", announcement })
+  const vibrate = (duration: number) => log({ _tag: "Vibrate", duration })
 
   const linking = {
     openURL: async (url: string) => {
@@ -492,9 +510,7 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
       getColorScheme: colorScheme,
       setColorScheme: (value: Appearance.ColorScheme | "auto") => {
         log({ _tag: "SetColorScheme", colorScheme: value })
-        changeScheme(() => {
-          override = value === "auto" ? undefined : value
-        })
+        setScheme(scheme, value === "auto" ? undefined : value)
       },
       ...emitter("Appearance")
     },
@@ -519,11 +535,9 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
     ? {
       ...shared,
       AccessibilityManager: {
-        ...getters(1, (setting, [success]) => success(enabled(setting))),
-        announceForAccessibility: (announcement: string) =>
-          log({ _tag: "Announce", announcement }),
-        announceForAccessibilityWithOptions: (announcement: string) =>
-          log({ _tag: "Announce", announcement })
+        ...getters((setting, [success]) => success(enabled(setting))),
+        announceForAccessibility: announce,
+        announceForAccessibilityWithOptions: announce
       },
       ActionSheetManager: {
         showShareActionSheetWithOptions: (
@@ -538,7 +552,9 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
               url: options.url,
               subject: options.subject
             }),
-            answer: (_, activityType) => success(true, activityType ?? null),
+            buttons: [],
+            answer: (activityType?: string) =>
+              success(true, activityType ?? null),
             dismiss: () => success(false, null)
           })
       },
@@ -556,22 +572,16 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
           const buttons = args.buttons.map((button) => Object.values(button)[0])
           const { type } = args
           show({
-            entry: type === undefined
-              ? defined({
-                _tag: "Alert",
-                title: args.title,
-                message: args.message,
-                buttons
-              })
-              : defined({
-                _tag: "Prompt",
-                title: args.title,
-                message: args.message,
-                buttons,
-                type,
-                defaultValue: args.defaultValue
-              }),
-            answer: (index, text = "", login) =>
+            entry: defined({
+              _tag: type === undefined ? "Alert" : "Prompt",
+              title: args.title,
+              message: args.message,
+              buttons,
+              type,
+              defaultValue: args.defaultValue
+            }) as Open["entry"],
+            buttons,
+            answer: (index: number, text = "", login?: string) =>
               callback(
                 String(index),
                 type === "login-password"
@@ -582,22 +592,19 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
         }
       },
       LinkingManager: { ...linking, ...emitter("LinkingManager") },
-      Vibration: {
-        vibrate: (duration: number) => log({ _tag: "Vibrate", duration })
-      }
+      Vibration: { vibrate }
     }
     : {
       ...shared,
       AccessibilityInfo: {
         // Android's bridge rejects a call with another number of arguments.
-        ...getters(0, (setting, args) => {
+        ...getters((setting, args) => {
           if (args.length !== 1) {
             throw new Error(`Takes 1 argument, got ${args.length}`)
           }
           args[0](enabled(setting))
         }),
-        announceForAccessibility: (announcement: string) =>
-          log({ _tag: "Announce", announcement }),
+        announceForAccessibility: announce,
         getRecommendedTimeoutMillis: (
           ms: number,
           success: (ms: number) => void
@@ -631,14 +638,17 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
             [config.buttonNegative, -2],
             [config.buttonPositive, -1]
           ] as const).filter(([text]) => text !== undefined)
+          const buttons = keys.map(([text]) => text!)
           show({
             entry: defined({
               _tag: "Alert",
               title: config.title,
               message: config.message || undefined,
-              buttons: keys.map(([text]) => text!)
+              buttons
             }),
-            answer: (index) => onAction("buttonClicked", keys[index][1]),
+            buttons,
+            answer: (index: number) =>
+              onAction("buttonClicked", keys[index][1]),
             dismiss: config.cancelable ? () => onAction("dismissed") : undefined
           })
         }
@@ -682,13 +692,14 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
                 message: content.message,
                 dialogTitle
               }),
+              buttons: [],
               answer: () => resolve({ action: "sharedAction" }),
               dismiss: () => resolve({ action: "dismissedAction" })
             })
           )
       },
       Vibration: {
-        vibrate: (duration: number) => log({ _tag: "Vibrate", duration }),
+        vibrate,
         vibrateByPattern: (pattern: ReadonlyArray<number>, repeat: number) =>
           log({ _tag: "VibratePattern", pattern, repeat: repeat >= 0 }),
         cancel: () => log({ _tag: "CancelVibration" })
@@ -717,10 +728,7 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
       if (listeners.get("hardwareBackPress")?.size) emit("hardwareBackPress")
       else log({ _tag: "Exit" })
     },
-    setColorScheme: (value) =>
-      changeScheme(() => {
-        scheme = value
-      }),
+    setColorScheme: (value) => setScheme(value, override),
     setAppState: (state) => {
       if (state === appState) return
       appState = state
@@ -757,36 +765,23 @@ export const make = (platform: Platform): Native.Device & TestDevice => {
       canOpen = f
     },
     answerAlert: (button) => press("Alert", button),
-    dismissAlert: () => {
-      const o = first("Alert", "alert")
-      if (o.dismiss === undefined) {
-        throw new Error(
-          ios
-            ? "An iOS alert closes only with a button"
-            : "The alert isn't cancelable"
-        )
-      }
-      close(o)
-      o.dismiss()
-    },
+    dismissAlert: () =>
+      dismiss(
+        "Alert",
+        ios
+          ? "An iOS alert closes only with a button"
+          : "The alert isn't cancelable"
+      ),
     answerPrompt: (button, text, login) => press("Prompt", button, text, login),
-    answerShare: (activityType) => {
-      const o = first("Share", "share sheet")
-      close(o)
-      o.answer(0, activityType)
-    },
-    dismissShare: () => {
-      const o = first("Share", "share sheet")
-      close(o)
-      o.dismiss!()
-    },
+    answerShare: (activityType) => take("Share").answer(activityType),
+    dismissShare: () => dismiss("Share", "The share sheet can't be dismissed"),
     setPermission: (permission, value) => {
       permissions.set(permission, value)
     },
     setAccessibility: (setting, value) => {
       if (value === enabled(setting)) return
       accessibility.set(setting, value)
-      const event = settings[setting][ios ? 1 : 0]?.[1]
+      const event = entry(platform, setting)?.[1]
       if (event !== undefined) emit(event, value)
     },
     log: () => entries.slice()

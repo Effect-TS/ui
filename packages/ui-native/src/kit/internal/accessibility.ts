@@ -46,3 +46,15 @@ export const settings: Record<
     "accessibilityServiceDidChange"
   ]]
 }
+
+/**
+ * The getter and event of `setting` on `os`, or `undefined` when it lacks
+ * the setting.
+ *
+ * @internal
+ */
+export const entry = (
+  os: string,
+  setting: Setting
+): readonly [getter: string, event: string] | undefined =>
+  settings[setting][os === "android" ? 0 : 1]

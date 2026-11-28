@@ -50,7 +50,7 @@ import * as Schema from "effect/Schema"
 import type * as Stream from "effect/Stream"
 import * as Native from "../Native.ts"
 import type { NativeNode } from "../NativeHost.ts"
-import { settings } from "./internal/accessibility.ts"
+import { entry } from "./internal/accessibility.ts"
 import * as device from "./internal/device.ts"
 
 /**
@@ -88,15 +88,12 @@ const android = (d: Native.Device) => d.os === "android"
 const nameOf = (d: Native.Device) =>
   android(d) ? "AccessibilityInfo" : "AccessibilityManager"
 
-const entry = (d: Native.Device, setting: Setting) =>
-  settings[setting][android(d) ? 0 : 1]
-
 const read = (
   d: Native.Device,
   setting: Setting,
   answer: (enabled: boolean) => void
 ) => {
-  const getter = entry(d, setting)?.[0]
+  const getter = entry(d.os, setting)?.[0]
   const method = getter && d.module(nameOf(d))?.[getter]
   if (method === undefined) return answer(false)
   const yes = (enabled: boolean) => answer(enabled === true)
@@ -125,7 +122,7 @@ const listen = (setting: Setting) =>
   d: Native.Device,
   listener: (enabled: boolean) => void
 ) => {
-  const event = entry(d, setting)?.[1]
+  const event = entry(d.os, setting)?.[1]
   if (event === undefined) return () => {}
   return device.observe(d, nameOf(d), event, listener)
 }
