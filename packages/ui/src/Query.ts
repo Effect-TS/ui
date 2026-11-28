@@ -5611,8 +5611,7 @@ const buildCache = (
     }
     // A stream still open closes: its successor waits for its cleanup.
     if (entry.live !== undefined) dropFetch(entry)
-    // Reopened stream queries stay independent roots so long-lived streams
-    // don't stretch a Command's trace waterfall.
+    // A stream's span lasts as long as the stream, so it never joins a Command's trace.
     const effectiveParent = entry.def.live === undefined ? parent : undefined
     const fetch: FetchRec = {
       trigger,

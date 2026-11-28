@@ -969,20 +969,21 @@ const noSpan: SpanContext = {
   sampled: false
 }
 
-/** Calls a mapping with the span the work ran in, or an unsampled placeholder outside any trace. */
+/** The span the work runs in, or an unsampled placeholder outside any trace. */
+const currentSpan: Effect.Effect<SpanContext> = Effect.map(
+  Effect.context<never>(),
+  (context) => {
+    const span = Context.getOrUndefined(context, Tracer.ParentSpan)
+    return span === undefined
+      ? noSpan
+      : { traceId: span.traceId, spanId: span.spanId, sampled: span.sampled }
+  }
+)
+
 const withSpan = <A>(
   value: A,
   f: (value: A, span: SpanContext) => unknown
-): Effect.Effect<unknown> =>
-  Effect.map(Effect.context<never>(), (context) => {
-    const span = Context.getOrUndefined(context, Tracer.ParentSpan)
-    return f(
-      value,
-      span === undefined
-        ? noSpan
-        : { traceId: span.traceId, spanId: span.spanId, sampled: span.sampled }
-    )
-  })
+): Effect.Effect<unknown> => Effect.map(currentSpan, (span) => f(value, span))
 
 /** `effect` and `stream` are the work with `resolve` and `reject` applied. An unmatched Command keeps its failure. */
 const makeIssued = (fields: Fields, unmatched = false): any => {
@@ -1002,10 +1003,14 @@ const makeIssued = (fields: Fields, unmatched = false): any => {
   } else {
     const mapped = resolve === identity
       ? work as Stream.Stream<any, any, any>
-      : Stream.mapEffect(
-        work as Stream.Stream<any, any, any>,
-        (value) => withSpan(value, resolve)
-      )
+      : Stream.unwrap(Effect.map(
+        currentSpan,
+        (span) =>
+          Stream.map(
+            work as Stream.Stream<any, any, any>,
+            (value) => resolve(value, span)
+          )
+      ))
     stream = reject === undefined
       ? mapped
       : Stream.catch(
