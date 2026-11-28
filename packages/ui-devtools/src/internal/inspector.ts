@@ -508,6 +508,14 @@ const makeSession = (
       else forward.set(named.seq, kept)
     }
     back.delete(seq)
+    // A hidden end kept for the run this entry issued or started goes with it.
+    for (const naming of forward.get(seq)?.slice() ?? []) {
+      const end = entries.get(naming.seq)
+      if (
+        end !== undefined && hidden.has(naming.seq) && ended.has(naming.seq) &&
+        !endsHeld(naming.seq)
+      ) evict(naming.seq, end)
+    }
     for (const record of ended.get(seq) ?? []) {
       const owner = instances.get(record.instance)!
       owner.records.splice(owner.records.indexOf(record), 1)

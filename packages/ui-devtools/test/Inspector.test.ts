@@ -549,6 +549,33 @@ describe("Inspector", () => {
       late.sessions()[0].instances().map((instance) => instance.path),
       ["/A", "/B"]
     )
+
+    // A stopped tick's run ends with nothing left to replay it for once the
+    // next tick replaces the tick that issued it.
+    const ticking = Inspector.make({ size: 2 })
+    ticking.ingest([mounted(1, 1, "/A", "A", 0)])
+    for (let seq = 2; seq < 300; seq += 3) {
+      const issued = { seq, index: 0 }
+      const run = {
+        ...base(1, "/A", "A"),
+        at: seq,
+        excluded: true,
+        name: "Load",
+        issued,
+        spanId: "a",
+        traceId: "b"
+      }
+      ticking.ingest([
+        {
+          ...update(seq, 1, "/A", "A", "Ticked", seq) as Update,
+          excluded: true,
+          commands: [{ _tag: "Effect", name: "Load", group: null, args: null }]
+        } as Entry,
+        { ...run, _tag: "CommandStarted", seq: seq + 1 } as Entry,
+        { ...run, _tag: "CommandEnded", seq: seq + 2, silent: false } as Entry
+      ])
+    }
+    assert.lengthOf(ticking.sessions()[0].records(1), 1)
   })
 
   it("summarizes instances as entries arrive and leave", () => {
