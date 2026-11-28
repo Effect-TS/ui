@@ -11,6 +11,7 @@ const Mode = Schema.Literals(["default", "never", "handled", "always"])
 
 const Message = UiSchema.TaggedEnum({
   Pressed: {},
+  Outer: {},
   Panned: {},
   Removed: {},
   Switched: { mode: Mode }
@@ -21,32 +22,43 @@ const Form = Native.component({
   model: Schema.Struct({
     mode: Mode,
     presses: Schema.Number,
+    outer: Schema.Number,
     pans: Schema.Number,
     row: Schema.Boolean
   }),
   message: Message
 }).make({
-  init: () => ({ mode: "default" as const, presses: 0, pans: 0, row: true }),
+  init: () => ({
+    mode: "default" as const,
+    presses: 0,
+    outer: 0,
+    pans: 0,
+    row: true
+  }),
   update: {
     Pressed: ($) => $.evolve({ presses: (n) => n + 1 }),
+    Outer: ($) => $.evolve({ outer: (n) => n + 1 }),
     Panned: ($) => $.evolve({ pans: (n) => n + 1 }),
     Removed: ($) => $.evolve({ row: () => false }),
     Switched: ($, { mode }) => $.evolve({ mode: () => mode })
   },
   view: (h, model) =>
-    (model.mode === "default"
-      ? h.scroll
-      : h.scroll.keyboardShouldPersistTaps(model.mode)).children(
-        h.input.placeholder("Name"),
-        model.row &&
-          h.view.style({ padding: 8 }).on("press", Message.Pressed()).children(
-            h.text("Row")
-          ),
-        h.text("Plain"),
-        Pan(h, { onStart: Message.Panned(), props: { axis: "y" } }).children(
-          h.text("Pan")
+    h.view.on("press", Message.Outer()).children(
+      (model.mode === "default"
+        ? h.scroll
+        : h.scroll.keyboardShouldPersistTaps(model.mode)).children(
+          h.input.placeholder("Name"),
+          model.row &&
+            h.view.style({ padding: 8 }).on("press", Message.Pressed())
+              .children(
+                h.text("Row")
+              ),
+          h.text("Plain"),
+          Pan(h, { onStart: Message.Panned(), props: { axis: "y" } }).children(
+            h.text("Pan")
+          )
         )
-      )
+    )
 })
 
 const shown = { endCoordinates: { screenY: 544, height: 300 } }
@@ -169,8 +181,13 @@ describe("scroll keyboardShouldPersistTaps", { concurrent: false }, () => {
       t.focus()
       t.emit("keyboardDidShow", shown)
       await t.mode("handled")
+      const counts = () => {
+        const { outer, pans } = t.root.model()!
+        return [pans, outer, t.blurs()]
+      }
+      // The scroll view takes the tap from the view around it.
       await t.tap(t.pan)
-      assert.deepStrictEqual([t.root.model()!.pans, t.blurs()], [0, 1])
+      assert.deepStrictEqual(counts(), [0, 0, 1])
       t.blurred()
       t.focus()
       const at = (y: number, down = true) => {
@@ -181,7 +198,7 @@ describe("scroll keyboardShouldPersistTaps", { concurrent: false }, () => {
       t.fabric.emit(t.pan, "topTouchMove", at(40))
       t.fabric.emit(t.pan, "topTouchEnd", at(40, false))
       await t.settle()
-      assert.deepStrictEqual([t.root.model()!.pans, t.blurs()], [1, 1])
+      assert.deepStrictEqual(counts(), [1, 0, 1])
       t.emit("keyboardDidHide", {})
       await t.close()
     })

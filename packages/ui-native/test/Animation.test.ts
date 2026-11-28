@@ -229,7 +229,11 @@ const Headers = Native.component({
     ).children(
       // Not a child native counts.
       RefreshControl(h),
-      h.view.style({ height: 50 }).on("press", { _tag: "Pressed" }).children(
+      h.view.style({
+        height: 50,
+        zIndex: 3,
+        transform: [{ scale: model.presses > 1 ? 3 : 2 }]
+      }).on("press", { _tag: "Pressed" }).children(
         h.text("A " + model.presses)
       ),
       h.view.style({ height: 300 }),
@@ -352,6 +356,11 @@ describe("Animation", { concurrent: false }, () => {
         await sleep(100)
         assert.deepStrictEqual(t.a().props.transform, [{ translateY: 120 }])
         assert.deepStrictEqual(t.b().props.transform, [{ translateY: 0 }])
+        // Its own style changes, but the header keeps its own.
+        t.root.send({ _tag: "Pressed" })
+        await t.settle()
+        assert.strictEqual(t.a().props.zIndex, 10)
+        assert.deepStrictEqual(t.a().props.transform, [{ translateY: 120 }])
 
         // Without sticky headers, they get new views that the driver doesn't move.
         const tag = t.a().tag
@@ -363,8 +372,9 @@ describe("Animation", { concurrent: false }, () => {
         })
         await t.settle()
         assert.notStrictEqual(t.a().tag, tag)
-        assert.isUndefined(t.a().props.zIndex)
-        assert.isUndefined(t.a().props.transform)
+        // Its own style shows again, as it changed while it was a header.
+        assert.strictEqual(t.a().props.zIndex, 3)
+        assert.deepStrictEqual(t.a().props.transform, [{ scale: 3 }])
         assert.isUndefined(animated.view(t.a().tag))
         assert.deepStrictEqual(
           { nodes: animated.nodes(), events: animated.events() },

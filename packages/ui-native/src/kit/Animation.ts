@@ -332,7 +332,7 @@ export const style: {
     transition?: Transition,
     from?: Style<number>
   ): B
-} = dual(
+} = /* @__PURE__ */ dual(
   (args) => View.isElementBuilder(args[0]),
   (
     self: Native.Element<unknown>,
@@ -380,10 +380,13 @@ export const source: {
     self: B,
     name: string
   ): B
-} = dual(2, (self: Native.ViewElement<unknown>, name: string) => {
-  install()
-  return self.prop("animationSource", name)
-})
+} = /* @__PURE__ */ dual(
+  2,
+  (self: Native.ViewElement<unknown>, name: string) => {
+    install()
+    return self.prop("animationSource", name)
+  }
+)
 
 /**
  * Docks children of the scroll view at the top while it scrolls past them,
@@ -400,7 +403,8 @@ export const source: {
  * The native driver moves each header, so docking follows the scroll on the
  * UI thread. Shortly after the scroll stops, the position native reports is
  * committed, so a press on a docked header lands on it. A header shows
- * above the rows (`zIndex` 10), and its `transform` is the driver's.
+ * above the rows (`zIndex` 10), and its `transform` is the driver's. Its
+ * own `zIndex` and `transform` show again once it stops being a header.
  * Headers dock below a `contentInset` top.
  *
  * **Gotchas**
@@ -423,7 +427,7 @@ export const stickyHeaders: {
     indices: ReadonlyArray<number>,
     options?: StickyOptions
   ): B
-} = dual(
+} = /* @__PURE__ */ dual(
   (args) => View.isElementBuilder(args[0]),
   (
     self: Native.ViewElement<unknown>,
@@ -580,13 +584,25 @@ const plain = new WeakMap<NativeNode, Spec>()
 // header, which replaces the spec's.
 const own = new WeakMap<NativeNode, Spec>()
 const stuck = new WeakMap<NativeNode, Layer>()
+// A header's own `zIndex` and `transform`, shown again once it isn't one.
+const base = new WeakMap<NativeNode, Record<string, unknown>>()
 // What a header does with its translation when native reports it, and the
 // header of each translation node native reports.
 const hearing = new WeakMap<NativeNode, (value: number) => void>()
 const heard = new Map<number, NativeNode>()
 let listening = false
-// Lays the sticky headers out before the driver updates.
-let measuring: ((d: Driver) => void) | undefined
+// The sticky headers' part of the driver, set by the first `stickyHeaders`
+// so that apps that dock no headers bundle none of it.
+let docking:
+  | {
+    /** Lays the headers out from the last commit. */
+    readonly measure: (d: Driver) => void
+    /** Whether native reports `n`'s translation to its header. */
+    readonly hears: (n: NativeNode) => boolean
+    readonly listen: (tag: number, n: NativeNode) => void
+    readonly unlisten: (tag: number) => void
+  }
+  | undefined
 let animated: AnimatedModule | null | undefined
 let installed = false
 let batching = false
@@ -603,16 +619,33 @@ const install = () => {
   commits.add(flush)
 }
 
-// Apps that dock no headers bundle none of this.
 const installSticky = () => {
-  if (measuring !== undefined) return
+  if (docking !== undefined) return
   install()
   props.set("stickyHeaders", setSticky)
+  props.set("zIndex", keep("zIndex"))
+  props.set("transform", keep("transform"))
   precommits.add(assign)
-  measuring = (d) => {
-    for (const [n, st] of d.sticky) if (mounted(n)) measure(d, n, st)
+  docking = {
+    measure: (d) => {
+      for (const [n, st] of d.sticky) if (mounted(n)) measure(d, n, st)
+    },
+    hears: (n) => hearing.has(n),
+    listen,
+    unlisten: (tag) => {
+      native().stopListeningToAnimatedNodeValue(tag)
+      heard.delete(tag)
+    }
   }
 }
+
+// Sets the style key, or keeps it for when a header stops being one.
+const keep =
+  (key: string) => (n: NativeNode, value: unknown, host: Native.ViewHost) => {
+    const own = base.get(n)
+    if (own === undefined) host.set(n, key, value)
+    else own[key] = value
+  }
 
 const driverOf = (host: Native.ViewHost): Driver | undefined => {
   // Bridgeless iOS registers the module under its TurboModule name.
@@ -742,14 +775,24 @@ const assign = (host: Native.ViewHost) => {
     st.kids = kids
     for (const h of st.headers.keys()) {
       if (kids.includes(h)) continue
+      const { zIndex, transform } = base.get(h)!
       st.headers.delete(h)
+      base.delete(h)
       stuck.delete(h)
       hearing.delete(h)
-      host.set(h, "zIndex", undefined)
       show(d, h, host)
+      host.set(h, "zIndex", zIndex)
+      if (own.get(h)?.transform === undefined) {
+        host.set(h, "transform", transform)
+      }
     }
     for (const h of kids) {
       if (h === undefined || st.headers.has(h)) continue
+      const { outer, props } = h
+      base.set(h, {
+        zIndex: props.zIndex ?? outer?.props.zIndex,
+        transform: props.transform ?? outer?.props.transform
+      })
       hearing.set(h, (value) => {
         st.headers.get(h)!.value = value
         commitLater(st, host)
@@ -973,7 +1016,7 @@ const native = (): AnimatedModule => {
 const flush = (host: Native.ViewHost) => {
   const d = drivers.get(host)
   if (d === undefined) return
-  measuring?.(d)
+  docking?.measure(d)
   for (const [n, e] of d.entries) {
     const top = rootOf(n).kind
     // A node outside a surface or a kept child's container has been dropped.
@@ -1164,7 +1207,7 @@ const rebuild = (
   let listened = 0
   leaves(spec, (path, value, _, from) => {
     const tag = lower(value, path, from)
-    if (path === "transform.0.translateY" && hearing.has(e.node)) {
+    if (path === "transform.0.translateY" && docking?.hears(e.node)) {
       listened = tag
     }
     const dot = path.lastIndexOf(".")
@@ -1194,7 +1237,7 @@ const rebuild = (
       view: 0
     })
   }
-  if (listened !== 0) listen(listened, e.node)
+  if (listened !== 0) docking!.listen(listened, e.node)
   e.graph = { props, nodes, edges, sources, listened }
   for (const [path, t] of e.targets) {
     if (kept.has(path)) continue
@@ -1263,10 +1306,7 @@ const release = (e: Entry) => {
   for (const c of g.props) {
     if (c.view !== 0) m.disconnectAnimatedNodeFromView(c.tag, c.view)
   }
-  if (g.listened !== 0) {
-    m.stopListeningToAnimatedNodeValue(g.listened)
-    heard.delete(g.listened)
-  }
+  if (g.listened !== 0) docking!.unlisten(g.listened)
   for (let i = 0; i < g.edges.length; i += 2) {
     m.disconnectAnimatedNodes(g.edges[i]!, g.edges[i + 1]!)
   }

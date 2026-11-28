@@ -54,6 +54,7 @@
  */
 import type * as View from "@effect/ui/View"
 import {
+  fenced,
   fire,
   own,
   pointOf,
@@ -243,7 +244,7 @@ const take = (
   ) return false
   const claim = () => {
     if (owner !== undefined) end("panCancel")
-    else touch.press(3, n, payload)
+    else if (!fenced) touch.press(3, n, payload)
     owner = n
     own()
     responder(n, true)
@@ -293,7 +294,7 @@ const pan: Recognizer = (phase, n, payload) => {
     g.moveY = y
     g.numberActiveTouches = count
     if (phase === 0) {
-      const press = pressed(n)
+      const press = fenced ? undefined : pressed(n)
       from = press ?? n
       ask(n, press, payload)
     } else if (owner === undefined) ask(from, undefined, payload)
@@ -311,5 +312,5 @@ const pan: Recognizer = (phase, n, payload) => {
       return end(phase === 2 ? "panEnd" : "panCancel")
     }
   }
-  return touch.press(phase, n, payload)
+  return fenced ? undefined : touch.press(phase, n, payload)
 }

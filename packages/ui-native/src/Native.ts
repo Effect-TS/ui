@@ -1531,8 +1531,9 @@ export class ScrollElement<
    * - `"never"`, the default: a tap that doesn't start on an `input` only
    *   dismisses the keyboard. Elements inside get the next tap.
    * - `"handled"`: a tap that nothing inside handles with `press` or a
-   *   `Pressable` dismisses the keyboard, unless a `Pan` inside takes it
-   *   as a drag. Others go through.
+   *   `Pressable` dismisses the keyboard and presses nothing around the
+   *   scroll view. A `Pan` inside can still take it as a drag, which keeps
+   *   the keyboard up. Others go through.
    * - `"always"`: taps go through and leave the keyboard up.
    *
    * A tap that scrolls the view leaves the keyboard up.

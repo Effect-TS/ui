@@ -156,6 +156,13 @@ const coasting = new WeakMap<NativeNode, number>()
 
 let target: NativeNode | undefined
 let taken = false
+/**
+ * Whether a `"handled"` scroll view takes the touch's press while leaving
+ * it to the pans, which press nothing then.
+ *
+ * @internal
+ */
+export let fenced = false
 // Whether the touch blurs the focused input when it ends: `1` unless a
 // scroll view around its target scrolls first, `2` regardless.
 let blur: 0 | 1 | 2 = 0
@@ -180,29 +187,31 @@ export const own = (): void => {
 
 /**
  * Applies `keyboardShouldPersistTaps` of the scroll views around a touch
- * that starts on `n`, returning whether one takes the touch, as React
- * Native's `ScrollView` does while the keyboard can be dismissed.
+ * that starts on `n`, as React Native's `ScrollView` does while the
+ * keyboard can be dismissed. Returns `1` when one takes the touch, and `2`
+ * when one takes only its press.
  *
  * A `"never"` scroll view takes a touch that doesn't start on an input. A
- * `"handled"` one takes it when nothing inside it handles a press, and
- * leaves it to a `Pan` inside. Either way the focused input is blurred
- * when the touch ends, unless the scroll view scrolls or the `Pan` takes
- * the touch. A keyboard of height 0, which doesn't cover the app, lets a
- * `"never"` scroll view's touch through to the elements and blurs when it
- * ends, as React Native's `ScrollView` does.
+ * `"handled"` one takes it when nothing inside it handles a press, but only
+ * its press when a `Pan` inside can take a drag. Either way the focused
+ * input is blurred when the touch ends, unless the scroll view scrolls or
+ * the `Pan` takes the touch. A keyboard of height 0, which doesn't cover
+ * the app, lets a `"never"` scroll view's touch through to the elements
+ * and blurs when it ends, as React Native's `ScrollView` does.
  */
-const persist = (n: NativeNode): boolean => {
+const persist = (n: NativeNode): 0 | 1 | 2 => {
   const input = kinds.get("input")
   const focused = focus.node
   if (
     focused === undefined || focused.kind !== input || !mounted(focused) ||
     (focus.keyboard === undefined && !focus.unreliable) || n === focused
-  ) return false
+  ) return 0
   const scroll = kinds.get("scroll")
   const detached = focus.keyboard === 0
   let handled = n.kind === input
   let pan = false
   let take = false
+  let fence = false
   for (let p: NativeNode | undefined = n; p !== undefined; p = p.parent) {
     if (p.kind === scroll) {
       const mode = persistTaps.get(p) ?? "never"
@@ -214,14 +223,15 @@ const persist = (n: NativeNode): boolean => {
         }
       } else if (mode === "handled" && !handled) {
         blur ||= 1
-        take ||= !pan
+        if (pan) fence = true
+        else take = true
         handled = true
       }
     }
     handled ||= claims(p)
     pan ||= p.events?.handlers.pan !== undefined
   }
-  return take
+  return take ? 1 : fence ? 2 : 0
 }
 
 const cancel = () => {
@@ -273,13 +283,17 @@ export const route = (n: NativeNode, type: string, payload: any): void => {
     for (let p: NativeNode | undefined = n; p !== undefined; p = p.parent) {
       if (now - coasting.get(p)! < 16) taken = true
     }
-    if (!taken) taken = persist(n)
+    if (!taken) {
+      const kept = persist(n)
+      taken = kept === 1
+      fenced = kept === 2
+    }
   } else return
   if (!taken) recognize(phase, n, payload)
   if (phase > 1) {
     if (phase === 2 && blur !== 0) blurFocused()
     target = undefined
-    taken = false
+    taken = fenced = false
     blur = 0
   }
 }
@@ -300,7 +314,7 @@ export const drop = (n: NativeNode) => {
     queueMicrotask(cancel)
   }
   target = undefined
-  taken = false
+  taken = fenced = false
   blur = 0
 }
 
