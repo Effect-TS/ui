@@ -369,7 +369,7 @@ describe("NativeHost", () => {
     ])
   })
 
-  it("renders a view another module defines, and sends its events only to it", () => {
+  it("renders a view another module defines, and bubbles only pointer events from it", () => {
     const fired: Array<unknown> = []
     Native.defineView(() => new Native.Element("toggle"), {
       viewName: (_, host) => host.os === "ios" ? "RCTSwitch" : "AndroidSwitch",
@@ -389,7 +389,12 @@ describe("NativeHost", () => {
     const box = host.createElement("view")
     const toggle = host.createElement("toggle")
     host.setProp(toggle, "checked", true)
-    host.setEvents(box, { valueChange: "box" }, dispatch, {})
+    host.setEvents(
+      box,
+      { valueChange: "box", pointerDown: "box", pointerEnter: "box" },
+      dispatch,
+      {}
+    )
     host.setEvents(toggle, { valueChange: "toggle" }, dispatch, {})
     host.insertBefore(root, box, undefined)
     host.insertBefore(box, toggle, undefined)
@@ -412,9 +417,13 @@ describe("NativeHost", () => {
     fabric.emit(shadow(), "topValueChange", { value: false })
     // The touch recognizer doesn't hide touches from a kind's hooks.
     fabric.emit(shadow(), "topTouchMove", { touches: [] })
+    // The toggle has been cloned since its first commit.
+    fabric.emit(shadow(), "topPointerDown", { pointerId: 1 })
+    fabric.emit(shadow(), "topPointerEnter", { pointerId: 1 })
     assert.deepStrictEqual(fired, [
       ["valueChange", "toggle", { value: false }],
-      ["hook", { touches: [] }]
+      ["hook", { touches: [] }],
+      ["pointerDown", "box", { pointerId: 1 }]
     ])
 
     host.setEvents(toggle, {}, dispatch, {})
@@ -429,7 +438,7 @@ describe("NativeHost", () => {
       value: true
     })
     fabric.emit(shadow(), "topValueChange", { value: true })
-    assert.strictEqual(fired.length, 2)
+    assert.strictEqual(fired.length, 3)
   })
 
   it("hands a wrapped node's layout from one wrapper kind to another", () => {

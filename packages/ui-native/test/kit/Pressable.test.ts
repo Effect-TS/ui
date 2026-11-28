@@ -38,6 +38,8 @@ const Rows = Native.component({
         onPressIn: got("in"),
         onPressOut: got("out"),
         onLongPress: got("long"),
+        onHoverIn: got("hover in"),
+        onHoverOut: got("hover out"),
         props: {
           delayLongPress: 30,
           pressedStyle: { opacity: 0.5 },
@@ -115,5 +117,16 @@ describe("Pressable", { concurrent: false }, () => {
     const off = find((n) => n.props.accessibilityState !== undefined)
     assert.deepStrictEqual(off.props.accessibilityState, { disabled: true })
     assert.include(FakeFabric.print([off]), "Off")
+  })
+
+  it("hovers in and out as a pointer enters and leaves", async () => {
+    const { fabric, find, root, settle } = await FakeFabric.mount((container) =>
+      Renderer.mount(Rows, {}, container)
+    )
+    const row = find((n) => n.props.padding === 2)
+    fabric.emit(row, "topPointerEnter", {})
+    fabric.emit(row, "topPointerLeave", {})
+    await settle()
+    assert.deepStrictEqual(root.model()!.log, ["hover in", "hover out"])
   })
 })

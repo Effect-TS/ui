@@ -81,6 +81,8 @@ Networking globals are opt-in, so apps that don't make requests don't bundle Rea
 
 The core host recognizes one touch at a time, from the first finger down to the last one lifted. Without the kit it sends `press` to the nearest element with a `press` handler, when the touch ends on that element or within 20 points of it. A scroll view takes the touch when it starts dragging under it, or when the touch starts while the scroll view is still moving. Either way no `press` is sent. Importing `Pressable` or `Pan` from the kit replaces this recognizer with one that also handles press timing and pans. A plain `.on("press")` keeps working with it.
 
+Views support W3C pointer events (`pointerDown`, `pointerUp`, `pointerMove`, `pointerCancel`, `pointerEnter`, `pointerLeave` and `click`) for touch, mouse and stylus input. `Pressable` adds `onHoverIn` and `onHoverOut`. Enable W3C pointer events at app launch: `RCTSetDispatchW3CPointerEvents(YES)` on iOS and `ReactFeatureFlags.dispatchPointerEvents = true` on Android. `examples/native/plugins/withPointerEvents.cjs` does this for an Expo app. Native sends a pointer event to the deepest view under the pointer, and the host passes it to the nearest element that handles it. `pointerEnter` and `pointerLeave` fire only on the element entered or left.
+
 ## Styles and props
 
 `.style()` takes React Native's style names and `.prop()` its other props, such as `testID`, `role`, `accessibilityLabel` or a `text`'s `numberOfLines`. Both are typed, and `.prop()` takes any value for a name without a type.
